@@ -1,0 +1,28 @@
+import type { Metadata } from "next"
+
+import { AnnouncementPageContent } from "@/components/announcement-page-content"
+import { SiteHeader } from "@/components/site-header"
+import { getAnnouncementPageData } from "@/lib/announcements"
+import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `${settings.siteName} - 站内公告`,
+    description: "查看社区最新公告、维护通知与运营消息。",
+  }
+}
+
+export default async function AnnouncementsPage() {
+  const data = await getAnnouncementPageData()
+
+  return (
+    <div className="min-h-screen bg-background">
+      <SiteHeader />
+      <main className="mx-auto max-w-[1200px] px-4 py-6">
+        <AnnouncementPageContent items={data.items} />
+      </main>
+    </div>
+  )
+}

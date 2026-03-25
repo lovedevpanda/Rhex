@@ -1,0 +1,45 @@
+import type { ReactNode } from "react"
+
+import { SettingsSidebarNav, type SettingsNavItem } from "@/components/settings-sidebar-nav"
+
+
+interface SettingsShellProps {
+  profile: {
+    displayName: string
+    username: string
+    avatarPath?: string | null
+    level: number
+    levelName?: string
+    points: number
+    inviteCount: number
+  }
+  pointName: string
+  children: ReactNode
+}
+
+const navItems: SettingsNavItem[] = [
+  { key: "profile", label: "资料设置", description: "维护头像、昵称、简介与邮箱。" },
+  { key: "password", label: "修改密码", description: "更新登录凭据，保持账户安全。" },
+  { key: "invite", label: "邀请中心", description: "查看邀请数据并管理邀请入口。" },
+  { key: "level", label: "我的等级", description: "查看成长进度、升级条件与当前等级。" },
+  { key: "badges", label: "勋章中心", description: "查看已达成状态并手动领取勋章。" },
+  { key: "points", label: "钻石明细", description: "查看当前钻石余额与全部变动记录。" },
+  { key: "favorites", label: "帖子收藏", description: "集中查看你收藏过的内容。" },
+  { key: "follows", label: "关注节点", description: "查看你已关注的节点列表。" },
+
+]
+
+export function SettingsShell({ children }: SettingsShellProps) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-5 lg:grid-cols-[220px,minmax(0,1fr)] xl:grid-cols-[236px,minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <SettingsSidebarNav items={navItems} />
+        </aside>
+
+        <section className="min-w-0">{children}</section>
+      </div>
+    </div>
+  )
+}
+

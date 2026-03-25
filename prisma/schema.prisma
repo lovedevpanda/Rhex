@@ -1,0 +1,1030 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  MUTED
+  BANNED
+  INACTIVE
+}
+
+enum BoardStatus {
+  ACTIVE
+  HIDDEN
+  DISABLED
+}
+
+enum PostStatus {
+  NORMAL
+  PENDING
+  DELETED
+  LOCKED
+  OFFLINE
+}
+
+enum PostType {
+  NORMAL
+  BOUNTY
+  POLL
+  LOTTERY
+}
+
+enum LotteryTriggerMode {
+  MANUAL
+  AUTO_PARTICIPANT_COUNT
+}
+
+enum LotteryConditionType {
+  REPLY_CONTENT_LENGTH
+  REPLY_KEYWORD
+  LIKE_POST
+  FAVORITE_POST
+  REGISTER_DAYS
+  USER_LEVEL
+  VIP_LEVEL
+  USER_POINTS
+}
+
+enum LotteryConditionOperator {
+  GTE
+  EQ
+}
+
+enum LotteryStatus {
+  DRAFT
+  ACTIVE
+  LOCKED
+  DRAWN
+  CANCELLED
+}
+
+enum CommentStatus {
+  NORMAL
+  HIDDEN
+  DELETED
+  PENDING
+}
+
+enum NotificationType {
+  REPLY_POST
+  REPLY_COMMENT
+  LIKE
+  MENTION
+  SYSTEM
+  REPORT_RESULT
+}
+
+enum RelatedType {
+  POST
+  COMMENT
+  REPORT
+  ANNOUNCEMENT
+}
+
+enum TargetType {
+  POST
+  COMMENT
+  USER
+}
+
+enum ReportStatus {
+  PENDING
+  PROCESSING
+  RESOLVED
+  REJECTED
+}
+
+enum ChangeType {
+  INCREASE
+  DECREASE
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  OFFLINE
+}
+
+enum FriendLinkStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DISABLED
+}
+
+enum BadgeRuleType {
+  REGISTER_DAYS
+  REGISTER_TIME_RANGE
+  POST_COUNT
+  COMMENT_COUNT
+  RECEIVED_LIKE_COUNT
+  INVITE_COUNT
+  USER_ID
+  LEVEL
+  CHECK_IN_DAYS
+  VIP_LEVEL
+}
+
+enum BadgeRuleOperator {
+  GT
+  GTE
+  EQ
+  LT
+  LTE
+  BETWEEN
+  BEFORE
+  AFTER
+}
+
+enum BadgeGrantSource {
+  SELF_CLAIM
+  ADMIN_GRANT
+}
+
+enum VerificationChannel {
+  EMAIL
+  PHONE
+}
+
+model User {
+  id                Int            @id @default(autoincrement())
+  username          String         @unique
+  email             String?        @unique
+  phone             String?        @unique
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  passwordHash      String
+  nickname          String?        @unique
+  avatarPath        String?
+  bio               String?
+  signature         String?
+  gender            String?
+  role              UserRole       @default(USER)
+  status            UserStatus     @default(ACTIVE)
+  points            Int            @default(0)
+  level             Int            @default(1)
+  vipLevel          Int            @default(0)
+  vipExpiresAt      DateTime?
+  postCount         Int            @default(0)
+  commentCount      Int            @default(0)
+  likeReceivedCount Int            @default(0)
+  inviteCount       Int            @default(0)
+  acceptedAnswerCount Int          @default(0)
+  inviterId         Int?
+  lastPostAt        DateTime?
+  lastCommentAt     DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  inviter           User?          @relation("UserInvites", fields: [inviterId], references: [id], onDelete: SetNull)
+  invitedUsers      User[]         @relation("UserInvites")
+  posts             Post[]
+  comments              Comment[]             @relation("commentAuthor")
+  repliesReceived       Comment[]             @relation("replyToUser")
+  lotteryParticipations LotteryParticipant[]
+  lotteryWins           LotteryWinner[]
+  notifications         Notification[]        @relation("notificationUser")
+  sentNotifications Notification[] @relation("notificationSender")
+  boardFollows      BoardFollow[]
+  favorites         Favorite[]
+  likes             Like[]
+  reports           Report[]       @relation("reporter")
+  handledReports    Report[]       @relation("handler")
+  pointLogs         PointLog[]
+  vipOrders         VipOrder[]
+  postTipsSent      PostTip[]      @relation("PostTipSender")
+  postTipsReceived  PostTip[]      @relation("PostTipReceiver")
+  checkInLogs       UserCheckInLog[]
+  pollVotes         PollVote[]
+  uploads           Upload[]
+  userBadges        UserBadge[]
+  adminLogs         AdminLog[]
+  announcements     Announcement[] @relation("announcementCreator")
+  loginLogs         UserLoginLog[]
+  messageParticipants ConversationParticipant[]
+  sentDirectMessages DirectMessage[]
+  levelProgress     UserLevelProgress?
+  generatedInviteCodes InviteCode[] @relation("InviteCodeCreator")
+  usedInviteCodes      InviteCode[] @relation("InviteCodeConsumer")
+  generatedRedeemCodes RedeemCode[] @relation("RedeemCodeCreator")
+  redeemedCodes        RedeemCode[] @relation("RedeemCodeConsumer")
+  verificationCodes    VerificationCode[]
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@index([inviterId])
+}
+
+model UserLevelProgress {
+  id                  String   @id @default(cuid())
+  userId              Int      @unique
+  checkInDays         Int      @default(0)
+  receivedPostLikes   Int      @default(0)
+  receivedCommentLikes Int     @default(0)
+  receivedLikeCount   Int      @default(0)
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LevelDefinition {
+  id                String   @id @default(cuid())
+  level             Int      @unique
+  name              String
+  color             String   @default("#64748b")
+  icon              String   @default("⭐")
+  requireCheckInDays Int     @default(0)
+  requirePostCount  Int      @default(0)
+  requireCommentCount Int    @default(0)
+  requireLikeCount  Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([level])
+}
+
+model Zone {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  slug                 String   @unique
+  description          String?
+  icon                 String?
+  sortOrder            Int      @default(0)
+  requirePostReview    Boolean  @default(false)
+  postPointDelta       Int      @default(0)
+  replyPointDelta      Int      @default(0)
+  postIntervalSeconds  Int      @default(120)
+  replyIntervalSeconds Int      @default(3)
+  allowedPostTypes     String?  @default("NORMAL,BOUNTY,POLL,LOTTERY")
+  minViewPoints        Int      @default(0)
+  minViewLevel         Int      @default(0)
+  minPostPoints        Int      @default(0)
+  minPostLevel         Int      @default(0)
+  minReplyPoints       Int      @default(0)
+  minReplyLevel        Int      @default(0)
+  minViewVipLevel      Int      @default(0)
+  minPostVipLevel      Int      @default(0)
+  minReplyVipLevel     Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  boards               Board[]
+
+  @@index([sortOrder])
+}
+
+
+model Board {
+  id                   String        @id @default(cuid())
+  zoneId               String?
+  name                 String        @unique
+  slug                 String        @unique
+  description          String?
+  iconPath             String?
+  coverPath            String?
+  sortOrder            Int           @default(0)
+  status               BoardStatus   @default(ACTIVE)
+  allowPost            Boolean       @default(true)
+  requirePostReview    Boolean?
+  postPointDelta       Int?
+  replyPointDelta      Int?
+  postIntervalSeconds  Int?
+  replyIntervalSeconds Int?
+  allowedPostTypes     String?
+  minViewPoints        Int?
+  minViewLevel         Int?
+  minPostPoints        Int?
+  minPostLevel         Int?
+  minReplyPoints       Int?
+  minReplyLevel        Int?
+  minViewVipLevel      Int?
+  minPostVipLevel      Int?
+  minReplyVipLevel     Int?
+  postCount            Int           @default(0)
+  followerCount        Int           @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  zone                 Zone?         @relation(fields: [zoneId], references: [id])
+  posts                Post[]
+  followers            BoardFollow[]
+
+  @@index([zoneId])
+  @@index([status])
+  @@index([sortOrder])
+}
+
+model BoardFollow {
+  id        String   @id @default(cuid())
+  userId    Int
+  boardId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boardId])
+}
+
+enum PinScope {
+  NONE
+  GLOBAL
+  ZONE
+  BOARD
+}
+
+model Post {
+  id                     String       @id @default(cuid())
+  boardId                String
+  authorId               Int
+  title                  String
+  slug                   String       @unique
+  summary                String?
+  content                String
+  coverPath              String?
+  type                   PostType     @default(NORMAL)
+  status                 PostStatus   @default(NORMAL)
+  reviewNote             String?
+  isPinned               Boolean      @default(false)
+  pinScope               PinScope     @default(NONE)
+  isFeatured             Boolean      @default(false)
+  isAnnouncement         Boolean      @default(false)
+  commentsVisibleToAuthorOnly Boolean @default(false)
+  minViewLevel           Int          @default(0)
+  viewCount              Int          @default(0)
+  commentCount           Int          @default(0)
+  likeCount              Int          @default(0)
+  favoriteCount          Int          @default(0)
+  score                  Float        @default(0)
+  tipCount               Int          @default(0)
+  tipTotalPoints         Int          @default(0)
+  bountyPoints           Int?
+  bountyAwardedAt        DateTime?
+  acceptedCommentId      String?      @unique
+  pollExpiresAt          DateTime?
+  lotteryStatus          LotteryStatus?
+  lotteryTriggerMode     LotteryTriggerMode?
+  lotteryStartsAt        DateTime?
+  lotteryEndsAt          DateTime?
+  lotteryParticipantGoal Int?
+  lotteryLockedAt        DateTime?
+  lotteryDrawnAt         DateTime?
+  lotteryAnnouncement    String?
+  editableUntil          DateTime?
+  appendedContent        String?
+  lastAppendedAt         DateTime?
+  lastCommentedAt        DateTime?
+  publishedAt            DateTime?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  board                  Board        @relation(fields: [boardId], references: [id])
+  author                 User         @relation(fields: [authorId], references: [id])
+  acceptedComment        Comment?     @relation("AcceptedBountyComment", fields: [acceptedCommentId], references: [id])
+  comments               Comment[]
+  favorites              Favorite[]
+  likes                  Like[]
+  tags                   PostTag[]
+  pollOptions            PollOption[]
+  pollVotes              PollVote[]
+  lotteryPrizes          LotteryPrize[]
+  lotteryConditions      LotteryCondition[]
+  lotteryParticipants    LotteryParticipant[]
+  lotteryWinners         LotteryWinner[]
+  appendices             PostAppendix[]
+  tips                   PostTip[]
+
+  @@index([boardId])
+  @@index([authorId])
+  @@index([status])
+  @@index([type])
+  @@index([score])
+  @@index([pinScope, createdAt])
+  @@index([boardId, status, createdAt])
+  @@index([boardId, status, lastCommentedAt])
+  @@index([status, createdAt])
+  @@index([status, lastCommentedAt])
+  @@index([status, score, createdAt])
+  @@index([status, likeCount, commentCount, createdAt])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  posts     PostTag[]
+}
+
+model PostTag {
+  id     String @id @default(cuid())
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, tagId])
+}
+
+model PostAppendix {
+  id        String   @id @default(cuid())
+  postId    String
+  content   String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+}
+
+model Comment {
+  id                    String        @id @default(cuid())
+  postId                String
+  userId                Int
+  parentId              String?
+  replyToUserId         Int?
+  content               String
+  status                CommentStatus @default(NORMAL)
+  likeCount             Int           @default(0)
+  isAcceptedAnswer      Boolean       @default(false)
+  isPinnedByAuthor      Boolean       @default(false)
+  acceptedAt            DateTime?
+  bountyAcceptedForPost Post?         @relation("AcceptedBountyComment")
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  post                  Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user                  User          @relation("commentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  parent                Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies               Comment[]     @relation("CommentReplies")
+  replyToUser           User?         @relation("replyToUser", fields: [replyToUserId], references: [id])
+  likes                 Like[]
+  pollVotes             PollVote[]
+  lotteryParticipants   LotteryParticipant[]
+
+  @@index([postId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([postId, status, createdAt])
+  @@index([postId, status, parentId, createdAt])
+}
+
+model Like {
+  id         String     @id @default(cuid())
+  userId     Int
+  targetType TargetType
+  targetId   String
+  postId     String?
+  commentId  String?
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post       Post?      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comment?   @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    Int
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model PollOption {
+  id        String     @id @default(cuid())
+  postId    String
+  content   String
+  sortOrder Int        @default(0)
+  voteCount Int        @default(0)
+  createdAt DateTime   @default(now())
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+
+  @@index([postId])
+}
+
+model PollVote {
+  id        String     @id @default(cuid())
+  postId    String
+  optionId  String
+  userId    Int
+  commentId String?
+  createdAt DateTime   @default(now())
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment?   @relation(fields: [commentId], references: [id], onDelete: SetNull)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([optionId])
+  @@index([userId])
+}
+
+model LotteryPrize {
+  id          String          @id @default(cuid())
+  postId      String
+  title       String
+  description String
+  quantity    Int
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  post        Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  winners     LotteryWinner[]
+
+  @@index([postId, sortOrder])
+}
+
+model LotteryCondition {
+  id          String                   @id @default(cuid())
+  postId      String
+  type        LotteryConditionType
+  operator    LotteryConditionOperator @default(GTE)
+  value       String
+  description String?
+  groupKey    String                   @default("default")
+  sortOrder   Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  post        Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+  @@index([postId, groupKey])
+}
+
+model LotteryParticipant {
+  id               String   @id @default(cuid())
+  postId           String
+  userId           Int
+  sourceCommentId  String?
+  joinedAt         DateTime @default(now())
+  lockedAt         DateTime?
+  lockVersion      Int      @default(0)
+  isEligible       Boolean  @default(true)
+  ineligibleReason String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceComment    Comment? @relation(fields: [sourceCommentId], references: [id], onDelete: SetNull)
+  winnings         LotteryWinner[]
+
+  @@unique([postId, userId])
+  @@index([postId, joinedAt])
+  @@index([postId, isEligible])
+}
+
+model LotteryWinner {
+  id            String             @id @default(cuid())
+  postId        String
+  prizeId       String
+  participantId String
+  userId        Int
+  drawnAt       DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  post          Post               @relation(fields: [postId], references: [id], onDelete: Cascade)
+  prize         LotteryPrize       @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  participant   LotteryParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, prizeId, participantId])
+  @@unique([postId, userId, prizeId])
+  @@index([postId, drawnAt])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      Int
+  type        NotificationType
+  senderId    Int?
+  relatedType RelatedType
+  relatedId   String
+  title       String
+  content     String
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  user        User             @relation("notificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  sender      User?            @relation("notificationSender", fields: [senderId], references: [id])
+
+  @@index([userId])
+  @@index([userId, isRead, createdAt])
+}
+
+model Conversation {
+  id             String                    @id @default(cuid())
+  lastMessageAt  DateTime                  @default(now())
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  participants   ConversationParticipant[]
+  messages       DirectMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id                String        @id @default(cuid())
+  conversationId    String
+  userId            Int
+  unreadCount       Int           @default(0)
+  lastReadMessageId String?
+  joinedAt          DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  conversation      Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessage   DirectMessage? @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, userId])
+  @@index([userId, updatedAt])
+  @@index([conversationId, unreadCount])
+}
+
+model DirectMessage {
+  id             String                     @id @default(cuid())
+  conversationId String
+  senderId       Int
+  body           String
+  createdAt      DateTime                   @default(now())
+  conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User                       @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  readByParticipants ConversationParticipant[] @relation("LastReadMessage")
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   Int
+  targetType   TargetType
+  targetId     String
+  reasonType   String
+  reasonDetail String?
+  status       ReportStatus @default(PENDING)
+  handledBy    Int?
+  handledNote  String?
+  handledAt    DateTime?
+  createdAt    DateTime     @default(now())
+  reporter     User         @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  handler      User?        @relation("handler", fields: [handledBy], references: [id])
+
+  @@index([reporterId])
+  @@index([status])
+  @@index([targetType, targetId])
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  description String?
+  iconPath    String?
+  iconText    String?     @default("🏅")
+  color       String      @default("#f59e0b")
+  imageUrl    String?
+  category    String?     @default("社区成就")
+  sortOrder   Int         @default(0)
+  status      Boolean     @default(true)
+  isHidden    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  users       UserBadge[]
+  rules       BadgeRule[]
+
+  @@index([status, sortOrder])
+}
+
+model BadgeRule {
+  id         String            @id @default(cuid())
+  badgeId    String
+  ruleType   BadgeRuleType
+  operator   BadgeRuleOperator
+  value      String
+  extraValue String?
+  sortOrder  Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  badge      Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@index([badgeId, sortOrder])
+}
+
+model UserBadge {
+  id             String            @id @default(cuid())
+  userId         Int
+  badgeId        String
+  grantedAt      DateTime          @default(now())
+  grantedBy      Int?
+  grantSource    BadgeGrantSource  @default(SELF_CLAIM)
+  grantSnapshot  String?
+  isDisplayed    Boolean           @default(false)
+  displayOrder   Int               @default(0)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge          Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId, grantedAt])
+  @@index([userId, isDisplayed, displayOrder])
+  @@index([badgeId, grantedAt])
+}
+
+model PointLog {
+  id          String       @id @default(cuid())
+  userId      Int
+  changeType  ChangeType
+  changeValue Int
+  reason      String
+  relatedType RelatedType?
+  relatedId   String?
+  createdAt   DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model VipOrder {
+  id         String   @id @default(cuid())
+  userId      Int
+  orderType   String
+  amount      Int?
+  pointsCost  Int?
+  days        Int
+  vipLevel    Int     @default(1)
+  expiresAt   DateTime?
+  remark      String?
+  createdAt   DateTime @default(now())
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Upload {
+  id           String   @id @default(cuid())
+  userId       Int
+  bucketType   String
+  originalName String
+  fileName     String
+  fileExt      String
+  mimeType     String
+  fileSize     Int
+  storagePath  String
+  urlPath      String
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FriendLink {
+  id            String           @id @default(cuid())
+  name          String
+  url           String           @unique
+  logoPath      String?
+  description   String?
+  contact       String?
+  sortOrder     Int              @default(0)
+  clickCount    Int              @default(0)
+  status        FriendLinkStatus @default(PENDING)
+  reviewNote    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status, sortOrder, createdAt])
+  @@index([createdAt])
+}
+
+model Announcement {
+  id          String             @id @default(cuid())
+  title       String
+  content     String
+  status      AnnouncementStatus @default(DRAFT)
+  isPinned    Boolean            @default(false)
+  publishedAt DateTime?
+  createdBy   Int
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  creator     User               @relation("announcementCreator", fields: [createdBy], references: [id])
+}
+
+model SensitiveWord {
+  id         String   @id @default(cuid())
+  word       String   @unique
+  matchType  String
+  actionType String
+  status     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AdminLog {
+  id         String   @id @default(cuid())
+  adminId    Int
+  action     String
+  targetType String
+  targetId   String?
+  detail     String?
+  ip         String?
+  createdAt  DateTime @default(now())
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([targetType])
+  @@index([createdAt])
+}
+
+model SiteSetting {
+  id                            String   @id @default(cuid())
+  siteName                      String
+  siteSlogan                    String
+  siteDescription               String
+  siteLogoText                  String
+  siteLogoPath                  String?
+  siteSeoKeywords               String?  @default("")
+  pointName                     String   @default("积分")
+  analyticsCode                 String?
+  friendLinksEnabled            Boolean  @default(true)
+  friendLinkApplicationEnabled  Boolean  @default(true)
+  friendLinkAnnouncement        String   @default("欢迎与本站交换友情链接，请先添加我方链接后再提交申请，我们会在 1-3 个工作日内完成审核。")
+  checkInEnabled                Boolean  @default(true)
+  checkInReward                 Int      @default(5)
+  checkInMakeUpCardPrice        Int      @default(0)
+  checkInVipMakeUpCardPrice     Int      @default(0)
+  inviteRewardInviter           Int      @default(0)
+  inviteRewardInvitee           Int      @default(0)
+  registrationEnabled           Boolean  @default(true)
+  registrationRequireInviteCode Boolean  @default(false)
+  registerInviteCodeEnabled     Boolean  @default(true)
+  inviteCodePurchaseEnabled     Boolean  @default(false)
+  inviteCodePrice               Int      @default(0)
+  registerCaptchaMode           String   @default("OFF")
+  loginCaptchaMode              String   @default("OFF")
+  turnstileSiteKey              String?
+  nicknameChangePointCost       Int      @default(0)
+  tippingEnabled                Boolean  @default(false)
+  tippingDailyLimit             Int      @default(3)
+  tippingPerPostLimit           Int      @default(1)
+  tippingAmounts                String   @default("10,30,50,100")
+  heatViewWeight                Int      @default(1)
+  heatCommentWeight             Int      @default(8)
+  heatLikeWeight                Int      @default(6)
+  heatTipCountWeight            Int      @default(10)
+  heatTipPointsWeight           Int      @default(1)
+  heatStageThresholds           String   @default("0,80,180,320,520,780,1100,1500,2000")
+  heatStageColors               String   @default("#4A4A4A,#808080,#9B8F7F,#B87333,#C4A777,#E8C547,#FFA500,#D96C3B,#C41E3A")
+  registerEmailEnabled          Boolean  @default(false)
+  registerEmailRequired         Boolean  @default(false)
+  registerEmailVerification     Boolean  @default(false)
+  registerPhoneEnabled          Boolean  @default(false)
+  registerPhoneRequired         Boolean  @default(false)
+  registerPhoneVerification     Boolean  @default(false)
+  registerNicknameEnabled       Boolean  @default(true)
+  registerNicknameRequired      Boolean  @default(false)
+  registerGenderEnabled         Boolean  @default(false)
+  registerGenderRequired        Boolean  @default(false)
+  registerInviterEnabled        Boolean  @default(true)
+  smtpEnabled                   Boolean  @default(false)
+  smtpHost                      String?
+  smtpPort                      Int?
+  smtpUser                      String?
+  smtpPass                      String?
+  smtpFrom                      String?
+  smtpSecure                    Boolean  @default(false)
+  vipMonthlyPrice               Int      @default(30)
+  vipQuarterlyPrice             Int      @default(88)
+  vipYearlyPrice                Int      @default(288)
+  uploadProvider                String   @default("local")
+  uploadLocalPath               String   @default("uploads")
+  uploadBaseUrl                 String?
+  uploadOssBucket               String?
+  uploadOssRegion               String?
+  uploadOssEndpoint             String?
+  uploadRequireLogin            Boolean  @default(true)
+  uploadAllowedImageTypes       String   @default("jpg,jpeg,png,gif,webp")
+  uploadMaxFileSizeMb           Int      @default(5)
+  uploadAvatarMaxFileSizeMb     Int      @default(2)
+  pluginStateJson               String?  @default("{}")
+  footerLinksJson               String?  @default("[{\"label\":\"关于\",\"href\":\"/about\"},{\"label\":\"小黑屋\",\"href\":\"/prison\"},{\"label\":\"帮助文档\",\"href\":\"/help\"},{\"label\":\"FAQ\",\"href\":\"/faq\"},{\"label\":\"协议\",\"href\":\"/terms\"}]")
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
+model PostTip {
+  id         String   @id @default(cuid())
+  postId      String
+  senderId    Int
+  receiverId  Int
+  amount      Int
+  createdAt   DateTime @default(now())
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender      User     @relation("PostTipSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("PostTipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([postId, senderId, createdAt])
+}
+
+model InviteCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  createdById Int?
+  usedById    Int?
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User?    @relation("InviteCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  usedBy      User?    @relation("InviteCodeConsumer", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+  @@index([usedById])
+  @@index([createdAt])
+}
+
+model RedeemCode {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  points       Int
+  createdById  Int?
+  redeemedById Int?
+  redeemedAt   DateTime?
+  expiresAt    DateTime?
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    User?    @relation("RedeemCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  redeemedBy   User?    @relation("RedeemCodeConsumer", fields: [redeemedById], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+  @@index([redeemedById])
+  @@index([createdAt])
+}
+
+model VerificationCode {
+  id          String              @id @default(cuid())
+  channel     VerificationChannel
+  target      String
+  codeHash    String
+  purpose     String
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  sentByIp    String?
+  userAgent   String?
+  userId      Int?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([channel, target, purpose])
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model UserCheckInLog {
+  id          String   @id @default(cuid())
+  userId      Int
+  reward      Int
+  checkedInOn String
+  isMakeUp    Boolean  @default(false)
+  makeUpCost  Int      @default(0)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, checkedInOn])
+  @@index([userId])
+  @@index([checkedInOn])
+}
+
+model UserLoginLog {
+  id        String   @id @default(cuid())
+  userId    Int
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}

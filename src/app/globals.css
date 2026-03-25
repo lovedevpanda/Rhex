@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "katex/dist/katex.min.css";
+
+:root {
+  --background: 35 33% 98%;
+  --foreground: 222.2 47.4% 11.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47.4% 11.2%;
+  --primary: 24 95% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 32 57% 94%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 30 25% 94%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 28 100% 95%;
+  --accent-foreground: 24 95% 25%;
+  --border: 28 20% 88%;
+  --ring: 24 95% 53%;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: 228 22% 8%;
+  --foreground: 36 33% 96%;
+  --card: 228 20% 12%;
+  --card-foreground: 36 33% 96%;
+  --primary: 27 96% 61%;
+  --primary-foreground: 228 22% 10%;
+  --secondary: 228 16% 18%;
+  --secondary-foreground: 36 33% 96%;
+  --muted: 228 16% 16%;
+  --muted-foreground: 220 12% 70%;
+  --accent: 224 24% 20%;
+  --accent-foreground: 36 33% 96%;
+  --border: 224 16% 24%;
+  --ring: 27 96% 61%;
+}
+
+* {
+  @apply border-border;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply min-h-screen bg-background text-foreground antialiased;
+  font-family: "Consolas", "Panic Sans", "Bitstream Vera Sans Mono", "Menlo", "Microsoft Yahei", monospace;
+}
+
+a {
+  @apply text-inherit no-underline;
+}
+
+.markdown-body .katex-display {
+  @apply my-5 overflow-x-auto overflow-y-hidden py-1;
+}
+
+.markdown-body .katex {
+  font-size: 1.02em;
+}
+
+.markdown-body .task-list-item {
+  list-style: none;
+}
+
+.markdown-body .contains-task-list {
+  padding-left: 0;
+}
+
+.markdown-body .md-heading-anchor {
+  @apply ml-2 inline-flex text-primary opacity-0 transition-opacity duration-150;
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6):hover .md-heading-anchor,
+.markdown-body :is(h1, h2, h3, h4, h5, h6):focus-within .md-heading-anchor {
+  @apply opacity-100;
+}
+
+.markdown-body .md-copy-button {
+  @apply ml-auto rounded-full border border-border bg-background/80 px-3 py-1 text-[11px] font-semibold tracking-normal text-muted-foreground transition hover:bg-accent hover:text-foreground;
+}
+
+.markdown-body .md-mermaid {
+  @apply my-5 overflow-x-auto rounded-2xl border border-border bg-card p-4 shadow-sm;
+}
+
+.markdown-body .md-mermaid svg {
+  @apply mx-auto h-auto max-w-full;
+}
+
+.markdown-body .md-mermaid-loading {
+  @apply text-sm text-muted-foreground;
+}
+
+.markdown-body .md-mermaid-source {
+  @apply mb-3;
+}
+
+.markdown-body .md-callout-info {
+  @apply border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-900/80 dark:bg-sky-950/30 dark:text-sky-100;
+}
+
+.markdown-body .md-callout-tip,
+.markdown-body .md-callout-success {
+  @apply border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/80 dark:bg-emerald-950/30 dark:text-emerald-100;
+}
+
+.markdown-body .md-callout-warning {
+  @apply border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900/80 dark:bg-amber-950/30 dark:text-amber-100;
+}
+
+.markdown-body .md-callout-danger {
+  @apply border-rose-200 bg-rose-50/80 text-rose-950 dark:border-rose-900/80 dark:bg-rose-950/30 dark:text-rose-100;
+}
+
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote {
+  @apply text-slate-500 dark:text-slate-400;
+}
+
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-name,
+.markdown-body .hljs-strong,
+.markdown-body .hljs-symbol {
+  @apply text-sky-700 dark:text-sky-300;
+}
+
+.markdown-body .hljs-attr,
+.markdown-body .hljs-link,
+.markdown-body .hljs-string,
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-type,
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-bullet,
+.markdown-body .hljs-addition,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-template-variable {
+  @apply text-emerald-700 dark:text-emerald-300;
+}
+
+.markdown-body .hljs-number,
+.markdown-body .hljs-meta,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-tag,
+.markdown-body .hljs-regexp {
+  @apply text-amber-700 dark:text-amber-300;
+}
+
+.markdown-body .hljs-title.class_,
+.markdown-body .hljs-class .hljs-title,
+.markdown-body .hljs-function .hljs-title,
+.markdown-body .hljs-property {
+  @apply text-fuchsia-700 dark:text-fuchsia-300;
+}
+
+.sidebar-user-card-header {
+  background: radial-gradient(circle at top, rgba(251, 191, 36, 0.22), transparent 42%), linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 248, 235, 0.96));
+}
+
+html.dark .sidebar-user-card-header {
+  background: transparent;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
