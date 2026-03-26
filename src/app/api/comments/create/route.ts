@@ -9,6 +9,7 @@ import { ContentSafetyError, enforceSensitiveText } from "@/lib/content-safety"
 import { hasDatabaseUrl } from "@/lib/db-status"
 import { evaluateUserLevelProgress } from "@/lib/level-system"
 import { enrollUserInLotteryPool } from "@/lib/lottery"
+import { tryClaimPostRedPacket } from "@/lib/post-red-packets"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validateCommentPayload } from "@/lib/validators"
 
@@ -110,11 +111,16 @@ export async function POST(request: Request) {
 
     await evaluateUserLevelProgress(user.id)
 
-    await enrollUserInLotteryPool({ postId, userId: user.id, replyCommentId: created.id }).catch(() => null)
+    const [redPacketClaim] = await Promise.all([
+      tryClaimPostRedPacket({ postId, userId: user.id, triggerType: "REPLY", triggerCommentId: created.id }).catch(() => null),
+      enrollUserInLotteryPool({ postId, userId: user.id, replyCommentId: created.id }).catch(() => null),
+    ])
+
+    const redPacketMessage = redPacketClaim?.claimed ? `，并领取了 ${redPacketClaim.amount} ${redPacketClaim.pointName} 红包` : ""
 
     return NextResponse.json({
       code: 0,
-      message: contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : normalizedReplyToUserName ? `已回复 @${normalizedReplyToUserName}` : "success",
+      message: contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : normalizedReplyToUserName ? `已回复 @${normalizedReplyToUserName}${redPacketMessage}` : `回复成功${redPacketMessage}`,
       data: {
         id: created.id,
         navigation: {

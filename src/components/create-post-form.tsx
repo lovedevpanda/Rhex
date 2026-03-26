@@ -302,8 +302,18 @@ interface CreatePostFormProps {
       prizes?: Array<{ title: string; quantity: number; description: string }>
       conditions?: Array<{ type: string; value: string; operator?: string; description?: string; groupKey?: string }>
     }
+    redPacketConfig?: {
+      enabled?: boolean
+      grantMode?: "FIXED" | "RANDOM"
+      triggerType?: "REPLY" | "LIKE" | "FAVORITE"
+      totalPoints?: number | null
+      unitPoints?: number | null
+      packetCount?: number | null
+    }
+
   }
 }
+
 
 
 
@@ -363,8 +373,17 @@ export function CreatePostForm({ boardOptions, pointName, markdownEmojiMap, curr
   const [purchasePrice, setPurchasePrice] = useState(String(initialValues?.purchasePrice ?? 20))
   const [minViewLevel, setMinViewLevel] = useState(String(initialValues?.minViewLevel ?? 0))
   const [boardSlug, setBoardSlug] = useState(initialValues?.boardSlug ?? boardOptions[0]?.items[0]?.value ?? "")
+  const [redPacketEnabled, setRedPacketEnabled] = useState(Boolean(initialValues?.redPacketConfig?.enabled))
+  const [redPacketGrantMode, setRedPacketGrantMode] = useState(initialValues?.redPacketConfig?.grantMode ?? "FIXED")
+  const [redPacketTriggerType, setRedPacketTriggerType] = useState(initialValues?.redPacketConfig?.triggerType ?? "REPLY")
+  const [redPacketUnitPoints, setRedPacketUnitPoints] = useState(String(initialValues?.redPacketConfig?.unitPoints ?? initialValues?.redPacketConfig?.totalPoints ?? 10))
+  const [redPacketTotalPoints, setRedPacketTotalPoints] = useState(String(initialValues?.redPacketConfig?.totalPoints ?? 10))
+  const [redPacketPacketCount, setRedPacketPacketCount] = useState(String(initialValues?.redPacketConfig?.packetCount ?? 1))
+
+
 
   const [postType, setPostType] = useState<LocalPostType>(initialValues?.postType ?? DEFAULT_POST_TYPE)
+
   const [bountyPoints, setBountyPoints] = useState(String(initialValues?.bountyPoints ?? 100))
   const [pollOptions, setPollOptions] = useState(initialValues?.pollOptions && initialValues.pollOptions.length > 0 ? initialValues.pollOptions : ["", ""])
   const [pollExpiresAt, setPollExpiresAt] = useState(initialValues?.pollExpiresAt ?? "")
@@ -469,7 +488,17 @@ export function CreatePostForm({ boardOptions, pointName, markdownEmojiMap, curr
           conditions: normalizedLotteryConditions,
         }
       : undefined
+    const redPacketConfig = redPacketEnabled
+      ? {
+          enabled: true,
+          grantMode: redPacketGrantMode,
+          triggerType: redPacketTriggerType,
+          totalPoints: Number(redPacketTotalPoints),
+          packetCount: Number(redPacketPacketCount),
+        }
+      : undefined
     const payload = mode === "edit"
+
 
       ? {
           postId,
@@ -503,7 +532,9 @@ export function CreatePostForm({ boardOptions, pointName, markdownEmojiMap, curr
           pollOptions: postType === "POLL" ? normalizedPollOptions : undefined,
           pollExpiresAt,
           lotteryConfig,
+          redPacketConfig,
         }
+
 
 
 
@@ -878,8 +909,58 @@ export function CreatePostForm({ boardOptions, pointName, markdownEmojiMap, curr
               onClick={() => setActiveModal("view-level")}
               onClear={() => setMinViewLevel("0")}
             />
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={redPacketEnabled}
+                  onChange={(event) => setRedPacketEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-border"
+                  disabled={mode === "edit"}
+                />
+                <span>帖子红包</span>
+              </label>
+              <span className={redPacketEnabled ? "rounded-full bg-rose-500 px-2 py-0.5 text-[11px] text-white" : "rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground"}>
+                {redPacketEnabled ? "已开启" : "未开启"}
+              </span>
+            </div>
           </div>
+          {redPacketEnabled ? (
+            <div className="mt-4 grid gap-3 rounded-[20px] border border-rose-200 bg-rose-50/80 p-4 md:grid-cols-2 xl:grid-cols-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">发放方式</p>
+                <select value={redPacketGrantMode} onChange={(event) => setRedPacketGrantMode(event.target.value as "FIXED" | "RANDOM")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" disabled={mode === "edit"}>
+
+                  <option value="FIXED">固定红包</option>
+                  <option value="RANDOM">拼手气红包</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">领取条件</p>
+                <select value={redPacketTriggerType} onChange={(event) => setRedPacketTriggerType(event.target.value as "REPLY" | "LIKE" | "FAVORITE")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" disabled={mode === "edit"}>
+
+                  <option value="REPLY">回复帖子</option>
+                  <option value="LIKE">点赞帖子</option>
+                  <option value="FAVORITE">收藏帖子</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{redPacketGrantMode === "FIXED" ? `单个红包 ${pointName}` : `红包总 ${pointName}`}</p>
+                <input value={redPacketGrantMode === "FIXED" ? redPacketUnitPoints : redPacketTotalPoints} onChange={(event) => redPacketGrantMode === "FIXED" ? setRedPacketUnitPoints(event.target.value) : setRedPacketTotalPoints(event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" placeholder={redPacketGrantMode === "FIXED" ? "如 10" : "如 100"} disabled={mode === "edit"} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">红包份数</p>
+                <input value={redPacketPacketCount} onChange={(event) => setRedPacketPacketCount(event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" placeholder="如 10" disabled={mode === "edit"} />
+              </div>
+              <div className="md:col-span-2 xl:col-span-4 rounded-[16px] bg-background/80 px-4 py-3 text-xs leading-6 text-muted-foreground">
+                <p>领取行为满足后自动发放；所有红包均按整数分配，每人至少 1 {pointName}。</p>
+                <p>{redPacketGrantMode === "FIXED" ? `当前总计需要 ${Math.max(0, (Number(redPacketUnitPoints) || 0) * (Number(redPacketPacketCount) || 0))} ${pointName}。` : "拼手气红包要求总积分不小于份数。"}</p>
+              </div>
+
+            </div>
+          ) : null}
         </div>
+
 
         <Button disabled={loading || !canPostInBoard}>{loading ? (mode === "edit" ? "保存中..." : "发布中...") : (mode === "edit" ? "保存帖子" : "发布帖子")}</Button>
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}

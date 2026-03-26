@@ -50,6 +50,9 @@ export interface SiteSettingsData {
   tippingDailyLimit: number
   tippingPerPostLimit: number
   tippingAmounts: number[]
+  postRedPacketEnabled: boolean
+  postRedPacketMaxPoints: number
+  postRedPacketDailyLimit: number
   heatViewWeight: number
   heatCommentWeight: number
   heatLikeWeight: number
@@ -127,6 +130,9 @@ function mapSiteSettings(record: {
   tippingDailyLimit: number
   tippingPerPostLimit: number
   tippingAmounts: string
+  postRedPacketEnabled: boolean
+  postRedPacketMaxPoints: number
+  postRedPacketDailyLimit: number
   heatViewWeight: number
   heatCommentWeight: number
   heatLikeWeight: number
@@ -207,6 +213,9 @@ function mapSiteSettings(record: {
     tippingDailyLimit: record.tippingDailyLimit,
     tippingPerPostLimit: record.tippingPerPostLimit,
     tippingAmounts: parseTippingAmounts(record.tippingAmounts),
+    postRedPacketEnabled: record.postRedPacketEnabled,
+    postRedPacketMaxPoints: record.postRedPacketMaxPoints,
+    postRedPacketDailyLimit: record.postRedPacketDailyLimit,
     heatViewWeight: record.heatViewWeight,
     heatCommentWeight: record.heatCommentWeight,
     heatLikeWeight: record.heatLikeWeight,

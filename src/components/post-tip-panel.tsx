@@ -126,77 +126,84 @@ export function PostTipPanel({ postId, enabled, pointName, currentUserPoints, al
          {tipCount > 0 ? tipCount : ""}
       </button>
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+12px)] z-40 w-[360px] rounded-[28px] border border-border bg-background p-5 shadow-2xl">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h4 className="text-base font-semibold">打赏</h4>
-              <p className="mt-1 text-sm text-muted-foreground">{pointName} {points}</p>
-            </div>
-            <div className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">已有 {tipCount} 次 {pointName} 打赏</div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-4 gap-2">
-            {allowedAmounts.map((amount) => (
-              <button
-                key={amount}
-                type="button"
-                className={cn(
-                  "rounded-2xl border px-3 py-3 text-sm font-medium transition-colors",
-                  selectedAmount === amount ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-accent/60",
-                )}
-                onClick={() => setSelectedAmount(amount)}
-              >
-                {amount}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-[20px] bg-secondary/40 px-4 py-3 text-xs leading-6 text-muted-foreground">
-            <p>{helperText}</p>
-            <p>本帖累计获得 {tipTotalPoints} {pointName}</p>
-          </div>
-
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <Button type="button" onClick={handleTip} disabled={!canTip || isPending} className="h-10 rounded-xl px-5">
-              {isPending ? "打赏中..." : selectedAmount > 0 ? `打赏 ${selectedAmount} ${pointName}` : "选择金额"}
-            </Button>
-            {points <= 0 ? (
-              <Link href="/points" className="text-sm text-primary hover:opacity-80">
-                去充值 / 兑换
-              </Link>
-            ) : (
-              <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
-                关闭
-              </button>
-            )}
-          </div>
-
-
-
-          <div className="mt-5 space-y-3">
-            {supporters.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                暂无打赏记录
+        <>
+          <button
+            type="button"
+            aria-label="关闭打赏弹层遮罩"
+            className="fixed inset-0 z-30 bg-black/40 sm:hidden"
+            onClick={() => setOpen(false)}
+          />
+          <div className="fixed inset-x-3 bottom-3 top-auto z-40 max-h-[85vh] overflow-y-auto rounded-[28px] border border-border bg-background p-4 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:top-[calc(100%+12px)] sm:right-0 sm:w-[360px] sm:max-h-[70vh] sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold">打赏</h4>
+                <p className="mt-1 text-sm text-muted-foreground">{pointName} {points}</p>
               </div>
-            ) : (
-              <div className="flex flex-wrap gap-2.5">
-                {supporters.map((supporter) => (
-                  <div key={supporter.userId} className="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-2">
-                    <UserAvatar name={supporter.nickname ?? supporter.username} avatarPath={supporter.avatarPath} size="sm" />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium leading-5">{supporter.nickname ?? supporter.username}</p>
-                      <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
-                        <Zap className="h-3.5 w-3.5 fill-current" />
-                        +{supporter.totalAmount}
+              <div className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">已有 {tipCount} 次 {pointName} 打赏</div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {allowedAmounts.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  className={cn(
+                    "rounded-2xl border px-3 py-3 text-sm font-medium transition-colors",
+                    selectedAmount === amount ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-accent/60",
+                  )}
+                  onClick={() => setSelectedAmount(amount)}
+                >
+                  {amount}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 rounded-[20px] bg-secondary/40 px-4 py-3 text-xs leading-6 text-muted-foreground">
+              <p>{helperText}</p>
+              <p>本帖累计获得 {tipTotalPoints} {pointName}</p>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <Button type="button" onClick={handleTip} disabled={!canTip || isPending} className="h-10 rounded-xl px-5">
+                {isPending ? "打赏中..." : selectedAmount > 0 ? `打赏 ${selectedAmount} ${pointName}` : "选择金额"}
+              </Button>
+              {points <= 0 ? (
+                <Link href="/points" className="text-sm text-primary hover:opacity-80">
+                  去充值 / 兑换
+                </Link>
+              ) : (
+                <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
+                  关闭
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {supporters.length === 0 ? (
+                <div className="rounded-[20px] border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  暂无打赏记录
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2.5">
+                  {supporters.map((supporter) => (
+                    <div key={supporter.userId} className="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-2">
+                      <UserAvatar name={supporter.nickname ?? supporter.username} avatarPath={supporter.avatarPath} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium leading-5">{supporter.nickname ?? supporter.username}</p>
+                        <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
+                          <Zap className="h-3.5 w-3.5 fill-current" />
+                          +{supporter.totalAmount}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
+
     </div>
   )
 }

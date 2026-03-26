@@ -6,33 +6,42 @@ export type FeedQuerySort = "latest" | "new" | "hot" | "weekly"
 export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelationInput[] {
   switch (sort) {
     case "new":
-      return [{ pinScope: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ createdAt: "desc" as const }, { id: "desc" as const }]
     case "hot":
-      return [{ pinScope: "desc" as const }, { score: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ score: "desc" as const }, { commentCount: "desc" as const }, { likeCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
     case "weekly":
-      return [{ pinScope: "desc" as const }, { likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
     case "latest":
     default:
-      return [{ pinScope: "desc" as const }, { lastCommentedAt: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ lastCommentedAt: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
   }
 }
 
-function buildFeedWhere(): Prisma.PostWhereInput {
+
+function buildFeedWhere(excludedPostIds: string[] = []): Prisma.PostWhereInput {
   return {
     status: "NORMAL",
+    id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
   }
 }
 
-export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQuerySort) {
+export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQuerySort, excludedPostIds: string[] = []) {
   return prisma.post.findMany({
-    where: buildFeedWhere(),
+    where: buildFeedWhere(excludedPostIds),
+
     include: {
       board: {
         select: { name: true, slug: true, iconPath: true },
       },
 
       author: true,
+      redPacket: {
+        select: {
+          id: true,
+        },
+      },
       comments: {
+
         where: { status: "NORMAL" },
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -42,7 +51,9 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
           },
         },
       },
+
     },
+
     orderBy: getFeedOrderBy(sort),
     skip: (page - 1) * pageSize,
     take: pageSize,

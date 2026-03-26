@@ -214,6 +214,9 @@ export async function POST(request: Request) {
     const tippingDailyLimit = Math.max(1, Number(body.tippingDailyLimit ?? 1) || 1)
     const tippingPerPostLimit = Math.max(1, Number(body.tippingPerPostLimit ?? 1) || 1)
     const tippingAmounts = normalizeTippingAmounts(body.tippingAmounts)
+    const postRedPacketEnabled = Boolean(body.postRedPacketEnabled)
+    const postRedPacketMaxPoints = Math.max(1, Number(body.postRedPacketMaxPoints ?? 1) || 1)
+    const postRedPacketDailyLimit = Math.max(1, Number(body.postRedPacketDailyLimit ?? 1) || 1)
     const heatViewWeight = Math.max(0, Number(body.heatViewWeight ?? 0) || 0)
     const heatCommentWeight = Math.max(0, Number(body.heatCommentWeight ?? 0) || 0)
     const heatLikeWeight = Math.max(0, Number(body.heatLikeWeight ?? 0) || 0)
@@ -224,6 +227,10 @@ export async function POST(request: Request) {
 
     if (tippingEnabled && tippingAmounts.length === 0) {
       return NextResponse.json({ code: 400, message: "开启打赏后，至少配置一个固定打赏金额" }, { status: 400 })
+    }
+
+    if (postRedPacketEnabled && postRedPacketDailyLimit < postRedPacketMaxPoints) {
+      return NextResponse.json({ code: 400, message: "每日发红包积分上限不能小于单个红包上限" }, { status: 400 })
     }
 
     if (heatStageThresholds.length !== 9) {
@@ -241,6 +248,9 @@ export async function POST(request: Request) {
         tippingDailyLimit,
         tippingPerPostLimit,
         tippingAmounts: tippingAmounts.join(","),
+        postRedPacketEnabled,
+        postRedPacketMaxPoints,
+        postRedPacketDailyLimit,
         heatViewWeight,
         heatCommentWeight,
         heatLikeWeight,

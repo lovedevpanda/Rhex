@@ -81,8 +81,18 @@ export async function POST(request: Request) {
 
   const canEditOriginal = Boolean(post.editableUntil && new Date(post.editableUntil).getTime() > Date.now()) || isAdmin
   const isAppendRequest = Boolean(appendedContent)
+  const isOriginalEditRequest = Boolean(title || content || replyUnlockContent || purchaseUnlockContent)
+
+  if (isOriginalEditRequest && !canEditOriginal) {
+    return NextResponse.json({ code: 400, message: "该帖子已超过 10 分钟编辑窗口，请使用附言追加功能" }, { status: 400 })
+  }
+
+  if (isAppendRequest && canEditOriginal) {
+    return NextResponse.json({ code: 400, message: "帖子仍在编辑窗口内，请使用编辑功能修改原文" }, { status: 400 })
+  }
 
   if (!isAppendRequest && canEditOriginal) {
+
     if (!title || !content) {
       return NextResponse.json({ code: 400, message: "标题和正文不能为空" }, { status: 400 })
     }

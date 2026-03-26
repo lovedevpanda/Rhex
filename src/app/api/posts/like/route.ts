@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { hasDatabaseUrl } from "@/lib/db-status"
 import { syncUserReceivedLikes } from "@/lib/level-system"
 import { enrollUserInLotteryPool } from "@/lib/lottery"
+import { tryClaimPostRedPacket } from "@/lib/post-red-packets"
 
 
 export async function POST(request: Request) {
@@ -31,18 +32,22 @@ export async function POST(request: Request) {
     senderName: user.nickname ?? user.username,
   })
 
+  let redPacketClaim: Awaited<ReturnType<typeof tryClaimPostRedPacket>> | null = null
+
   if (result.liked && result.targetUserId) {
-    await Promise.all([
+    const settled = await Promise.all([
       syncUserReceivedLikes(result.targetUserId),
       enrollUserInLotteryPool({ postId, userId: user.id }).catch(() => null),
+      tryClaimPostRedPacket({ postId, userId: user.id, triggerType: "LIKE" }).catch(() => null),
     ])
+    redPacketClaim = settled[2] ?? null
   } else if (result.targetUserId) {
     await syncUserReceivedLikes(result.targetUserId)
   }
 
   return NextResponse.json({
     code: 0,
-    message: result.liked ? "点赞成功" : "已取消点赞",
+    message: result.liked ? (redPacketClaim?.claimed ? `点赞成功，并领取了 ${redPacketClaim.amount} ${redPacketClaim.pointName} 红包` : "点赞成功") : "已取消点赞",
     data: { liked: result.liked },
   })
 

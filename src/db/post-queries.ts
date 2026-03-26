@@ -63,6 +63,7 @@ export async function findEditablePostBySlug(slug: string) {
           sortOrder: "asc",
         },
       },
+      redPacket: true,
     },
   })
 }

@@ -9,8 +9,10 @@ import { hasDatabaseUrl } from "@/lib/db-status"
 import { evaluateUserLevelProgress } from "@/lib/level-system"
 import { determineLotteryTriggerMode, normalizeLotteryConfig } from "@/lib/lottery"
 import { buildPostContentDocument, getAllPostContentText, serializePostContentDocument } from "@/lib/post-content"
+import { createPostRedPacketAfterPostCreated, normalizePostRedPacketConfig } from "@/lib/post-red-packets"
 
 import { syncPostTaxonomy } from "@/lib/post-editor"
+
 import { prisma } from "@/db/client"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validatePostPayload } from "@/lib/validators"
@@ -52,13 +54,25 @@ export async function POST(request: Request) {
   try {
     const { title, content, boardSlug, postType, bountyPoints, pollOptions, commentsVisibleToAuthorOnly, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, lotteryConfig } = validated.data
 
+    const redPacketConfig = body && typeof body === "object" && !Array.isArray(body) && (body as Record<string, unknown>).redPacketConfig && typeof (body as Record<string, unknown>).redPacketConfig === "object" && !Array.isArray((body as Record<string, unknown>).redPacketConfig)
+      ? ((body as Record<string, unknown>).redPacketConfig as Record<string, unknown>)
+      : null
     const pollExpiresAt = typeof body.pollExpiresAt === "string" && body.pollExpiresAt.trim() ? new Date(body.pollExpiresAt) : null
     const normalizedLottery = postType === "LOTTERY" ? normalizeLotteryConfig(lotteryConfig) : null
+    const normalizedRedPacket = await normalizePostRedPacketConfig(redPacketConfig)
+    const redPacketTotalPoints = normalizedRedPacket.data?.enabled ? normalizedRedPacket.data.totalPoints : 0
+
+
     if (postType === "LOTTERY" && (!normalizedLottery?.success || !normalizedLottery.data)) {
       return NextResponse.json({ code: 400, message: normalizedLottery?.message ?? "抽奖配置不合法" }, { status: 400 })
     }
 
+    if (!normalizedRedPacket.success) {
+      return NextResponse.json({ code: 400, message: normalizedRedPacket.message ?? "红包配置不合法" }, { status: 400 })
+    }
+
     const titleSafety = await enforceSensitiveText({ scene: "post.title", text: title })
+
     const contentSafety = await enforceSensitiveText({ scene: "post.content", text: content })
     const replyUnlockSafety = replyUnlockContent ? await enforceSensitiveText({ scene: "post.content", text: replyUnlockContent }) : null
     const purchaseUnlockSafety = purchaseUnlockContent ? await enforceSensitiveText({ scene: "post.content", text: purchaseUnlockContent }) : null
@@ -185,8 +199,9 @@ export async function POST(request: Request) {
       })
 
       const pointDelta = boardContext.settings.postPointDelta ?? 0
-      const totalDeduction = Math.max(0, -pointDelta) + (postType === "BOUNTY" ? (bountyPoints ?? 0) : 0)
+      const totalDeduction = Math.max(0, -pointDelta) + (postType === "BOUNTY" ? (bountyPoints ?? 0) : 0) + redPacketTotalPoints
       const totalIncrease = Math.max(0, pointDelta)
+
       const userUpdateData: {
         postCount: { increment: number }
         lastPostAt: Date
@@ -239,7 +254,16 @@ export async function POST(request: Request) {
         })
       }
 
+      await createPostRedPacketAfterPostCreated({
+        tx,
+        postId: createdPost.id,
+        senderId: author.id,
+        config: normalizedRedPacket.data,
+        pointName: settings.pointName,
+      })
+
       await tx.board.update({
+
         where: { id: boardContext.board.id },
         data: {
           postCount: {

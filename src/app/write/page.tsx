@@ -147,6 +147,14 @@ export default async function WritePage({ searchParams }: WritePageProps) {
                     postType: editingPost.type,
                     bountyPoints: editingPost.bountyPoints,
                     pollOptions: editingPost.pollOptions.map((item) => item.content),
+                    redPacketConfig: editingPost.redPacket ? {
+                      enabled: true,
+                      grantMode: editingPost.redPacket.grantMode,
+                      triggerType: editingPost.redPacket.triggerType,
+                      totalPoints: editingPost.redPacket.totalPoints,
+                      unitPoints: editingPost.redPacket.grantMode === "FIXED" ? Math.floor(editingPost.redPacket.totalPoints / Math.max(1, editingPost.redPacket.packetCount)) : editingPost.redPacket.totalPoints,
+                      packetCount: editingPost.redPacket.packetCount,
+                    } : undefined,
                   }}
                 />
               )

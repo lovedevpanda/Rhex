@@ -38,6 +38,9 @@ interface AdminBasicSettingsFormProps {
     tippingDailyLimit: number
     tippingPerPostLimit: number
     tippingAmounts: number[]
+    postRedPacketEnabled: boolean
+    postRedPacketMaxPoints: number
+    postRedPacketDailyLimit: number
     heatViewWeight: number
     heatCommentWeight: number
     heatLikeWeight: number
@@ -110,6 +113,9 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
   const [tippingDailyLimit, setTippingDailyLimit] = useState(String(initialSettings.tippingDailyLimit))
   const [tippingPerPostLimit, setTippingPerPostLimit] = useState(String(initialSettings.tippingPerPostLimit))
   const [tippingAmounts, setTippingAmounts] = useState(initialSettings.tippingAmounts.join(","))
+  const [postRedPacketEnabled, setPostRedPacketEnabled] = useState(initialSettings.postRedPacketEnabled)
+  const [postRedPacketMaxPoints, setPostRedPacketMaxPoints] = useState(String(initialSettings.postRedPacketMaxPoints))
+  const [postRedPacketDailyLimit, setPostRedPacketDailyLimit] = useState(String(initialSettings.postRedPacketDailyLimit))
   const [heatViewWeight, setHeatViewWeight] = useState(String(initialSettings.heatViewWeight))
   const [heatCommentWeight, setHeatCommentWeight] = useState(String(initialSettings.heatCommentWeight))
   const [heatLikeWeight, setHeatLikeWeight] = useState(String(initialSettings.heatLikeWeight))
@@ -260,6 +266,9 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
       tippingDailyLimit: Number(tippingDailyLimit),
       tippingPerPostLimit: Number(tippingPerPostLimit),
       tippingAmounts,
+      postRedPacketEnabled,
+      postRedPacketMaxPoints: Number(postRedPacketMaxPoints),
+      postRedPacketDailyLimit: Number(postRedPacketDailyLimit),
       heatViewWeight: Number(heatViewWeight),
       heatCommentWeight: Number(heatCommentWeight),
       heatLikeWeight: Number(heatLikeWeight),
@@ -453,6 +462,18 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
               <Field label="每日可打赏次数" value={tippingDailyLimit} onChange={setTippingDailyLimit} placeholder="如 3" />
               <Field label="单帖可打赏次数" value={tippingPerPostLimit} onChange={setTippingPerPostLimit} placeholder="如 1" />
               <Field label="固定打赏金额" value={tippingAmounts} onChange={setTippingAmounts} placeholder="如 10,30,50,100" />
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-border p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">帖子红包</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制帖子红包功能开关、单个红包最大积分，以及用户每日可发红包积分上限。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <SwitchField label="开启帖子红包" checked={postRedPacketEnabled} onChange={setPostRedPacketEnabled} />
+              <Field label="单个红包最大积分" value={postRedPacketMaxPoints} onChange={setPostRedPacketMaxPoints} placeholder="如 100" />
+              <Field label="每日发红包积分上限" value={postRedPacketDailyLimit} onChange={setPostRedPacketDailyLimit} placeholder="如 300" />
             </div>
           </div>
 

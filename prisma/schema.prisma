@@ -62,6 +62,24 @@ enum LotteryConditionOperator {
   EQ
 }
 
+enum PostRedPacketGrantMode {
+  FIXED
+  RANDOM
+}
+
+enum PostRedPacketTriggerType {
+  REPLY
+  LIKE
+  FAVORITE
+}
+
+enum PostRedPacketStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
 enum LotteryStatus {
   DRAFT
   ACTIVE
@@ -225,6 +243,8 @@ model User {
   vipOrders         VipOrder[]
   postTipsSent      PostTip[]      @relation("PostTipSender")
   postTipsReceived  PostTip[]      @relation("PostTipReceiver")
+  redPacketsSent    PostRedPacket[]
+  redPacketClaims   PostRedPacketClaim[] @relation("PostRedPacketClaimUser")
   checkInLogs       UserCheckInLog[]
   pollVotes         PollVote[]
   uploads           Upload[]
@@ -474,6 +494,8 @@ model Post {
   lotteryWinners         LotteryWinner[]
   appendices             PostAppendix[]
   tips                   PostTip[]
+  redPacket              PostRedPacket?
+  redPacketClaims        PostRedPacketClaim[]
 
   @@index([boardId])
   @@index([authorId])
@@ -542,6 +564,7 @@ model Comment {
   likes                 Like[]
   pollVotes             PollVote[]
   lotteryParticipants   LotteryParticipant[]
+  redPacketClaims       PostRedPacketClaim[]
 
   @@index([postId])
   @@index([userId])
@@ -957,6 +980,9 @@ model SiteSetting {
   tippingDailyLimit             Int      @default(3)
   tippingPerPostLimit           Int      @default(1)
   tippingAmounts                String   @default("10,30,50,100")
+  postRedPacketEnabled          Boolean  @default(false)
+  postRedPacketMaxPoints        Int      @default(100)
+  postRedPacketDailyLimit       Int      @default(100)
   heatViewWeight                Int      @default(1)
   heatCommentWeight             Int      @default(8)
   heatLikeWeight                Int      @default(6)
@@ -1017,6 +1043,49 @@ model PostTip {
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
   @@index([postId, senderId, createdAt])
+}
+
+model PostRedPacket {
+  id             String                  @id @default(cuid())
+  postId          String                  @unique
+  senderId        Int
+  grantMode       PostRedPacketGrantMode
+  triggerType     PostRedPacketTriggerType
+  totalPoints     Int
+  packetCount     Int
+  remainingPoints Int
+  remainingCount  Int
+  status          PostRedPacketStatus     @default(ACTIVE)
+  claimedCount    Int                     @default(0)
+  claimedPoints   Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  post            Post                    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender          User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  claims          PostRedPacketClaim[]
+
+  @@index([senderId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PostRedPacketClaim {
+  id              String                   @id @default(cuid())
+  redPacketId      String
+  postId           String
+  userId           Int
+  triggerType      PostRedPacketTriggerType
+  triggerCommentId String?
+  amount           Int
+  createdAt        DateTime                 @default(now())
+  redPacket        PostRedPacket            @relation(fields: [redPacketId], references: [id], onDelete: Cascade)
+  post             Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user             User                     @relation("PostRedPacketClaimUser", fields: [userId], references: [id], onDelete: Cascade)
+  triggerComment   Comment?                 @relation(fields: [triggerCommentId], references: [id], onDelete: SetNull)
+
+  @@unique([redPacketId, userId])
+  @@index([postId, createdAt])
+  @@index([userId, createdAt])
+  @@index([redPacketId, createdAt])
 }
 
 model InviteCode {

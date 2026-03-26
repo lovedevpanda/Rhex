@@ -145,6 +145,8 @@ export function validatePostPayload(body: unknown): ValidationResult<{
     : null
 
 
+
+
   if (!title || !content || !boardSlug) {
     return { success: false, message: "缺少必要参数" }
   }

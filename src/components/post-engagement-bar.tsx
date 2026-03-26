@@ -4,8 +4,12 @@ import { Bookmark, Flag, ThumbsUp } from "lucide-react"
 import { useState, useTransition } from "react"
 
 import { PostAuthorInlineCard } from "@/components/post-author-inline-card"
+import { PostRedPacketPanel } from "@/components/post-red-packet-panel"
 import { PostTipPanel } from "@/components/post-tip-panel"
 import { ReportDialog } from "@/components/report-dialog"
+import type { PostRedPacketSummary } from "@/lib/post-red-packets"
+
+
 
 interface PostEngagementBarProps {
   postId: string
@@ -18,6 +22,9 @@ interface PostEngagementBarProps {
   initialFavored?: boolean
   canReport?: boolean
   reportLabel?: string
+  redPacket?: PostRedPacketSummary
+
+
   tipping?: {
     enabled: boolean
     pointName: string
@@ -39,7 +46,9 @@ interface PostEngagementBarProps {
   }
 }
 
-export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0, initialLiked = false, initialFavored = false, canReport = false, reportLabel = "当前帖子", tipping }: PostEngagementBarProps) {
+
+export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0, initialLiked = false, initialFavored = false, canReport = false, reportLabel = "当前帖子", redPacket, tipping }: PostEngagementBarProps) {
+
   const [likes, setLikes] = useState(likeCount)
   const [favorites, setFavorites] = useState(favoriteCount)
   const [liked, setLiked] = useState(initialLiked)
@@ -83,7 +92,9 @@ export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-4">
+            {redPacket?.enabled ? <PostRedPacketPanel pointName={redPacket.pointName} summary={redPacket} /> : null}
             <button
+
               type="button"
               title={liked ? "取消点赞" : "点赞"}
               aria-label={liked ? "取消点赞" : "点赞"}

@@ -186,6 +186,11 @@ export function findGlobalPinnedPosts(pageSize?: number) {
     include: {
       board: true,
       author: true,
+      redPacket: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: getZonePinnedOrderBy(),
     take: pageSize,

@@ -6,7 +6,9 @@ import type { LocalPostType } from "@/lib/post-types"
 import { mapLotteryView } from "@/lib/lottery"
 
 import { parsePostContentDocument } from "@/lib/post-content"
+import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 import type { PostTipSummary } from "@/lib/post-tips"
+
 import { prisma } from "@/db/client"
 import { findEditablePostBySlug, findPostDetailBySlug, findPostSeoBySlug } from "@/db/post-queries"
 import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
@@ -115,7 +117,9 @@ export interface SitePostItem {
     }>
   }
   lottery?: ReturnType<typeof mapLotteryView>
+  redPacket?: PostRedPacketSummary
   tipping?: {
+
     enabled: boolean
     pointName: string
     currentUserPoints: number
@@ -154,10 +158,12 @@ function mapDatabasePost(post: Post & { board: Board; author: User }): SitePostI
 function mapPostDetail(
   post: Post & PostDetailRelations,
   currentUserId?: number,
-  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary },
+  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary },
 ): SitePostItem {
   const totalVotes = post.pollOptions.reduce((sum, option) => sum + option.voteCount, 0)
   const tipSummary = options?.tipSummary
+  const redPacketSummary = options?.redPacketSummary
+
   const contentBlocks = parsePostContentDocument(post.content).blocks.map((block) => {
 
     const isOwner = Boolean(currentUserId && currentUserId === post.authorId)
@@ -226,7 +232,9 @@ function mapPostDetail(
         }
       : undefined,
     lottery: mapLotteryView(post, currentUserId),
+    redPacket: redPacketSummary,
     tipping: tipSummary ? {
+
       enabled: tipSummary.enabled,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
@@ -283,8 +291,9 @@ export async function getHomepagePosts(page = 1, pageSize = 20): Promise<SitePos
 export async function getPostDetailBySlug(
   slug: string,
   currentUserId?: number,
-  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary },
+  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary },
 ): Promise<SitePostItem | null> {
+
   try {
     const post = await findPostDetailBySlug(slug, currentUserId)
 

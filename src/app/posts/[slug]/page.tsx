@@ -31,8 +31,10 @@ import { resolveSidebarUser } from "@/lib/home-sidebar"
 import { getPostDetailBySlug, getPostSeoBySlug, incrementPostViewCount } from "@/lib/posts"
 
 import { getPostSidebarData } from "@/lib/post-sidebar"
+import { getPostRedPacketSummary } from "@/lib/post-red-packets"
 import { getPostTipSummary } from "@/lib/post-tips"
 import { getPostOfflineActionMeta } from "@/lib/post-offline"
+
 import { getPurchasedPostBlockIds } from "@/lib/post-unlock"
 
 import { buildArticleJsonLd, buildMetadataKeywords } from "@/lib/seo"
@@ -126,15 +128,19 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
   const userReplyCountPromise = canViewRestrictedPost ? getUserReplyCountByPost(basePost.id, currentUser?.id) : Promise.resolve(0)
   const purchasedBlockIdsPromise = canViewRestrictedPost ? getPurchasedPostBlockIds(basePost.id, currentUser?.id) : Promise.resolve(new Set<string>())
   const tipSummaryPromise = canViewRestrictedPost ? getPostTipSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
+  const redPacketSummaryPromise = canViewRestrictedPost ? getPostRedPacketSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
   const postOfflineMetaPromise = currentUser?.id === basePost.authorId ? getPostOfflineActionMeta(basePost.id) : Promise.resolve(null)
 
-  const [userReplyCount, purchasedBlockIds, tipSummary, postOfflineMeta, commentResult, sidebarData, boards, zones] = await Promise.all([
+  const [userReplyCount, purchasedBlockIds, tipSummary, redPacketSummary, postOfflineMeta, commentResult, sidebarData, boards, zones] = await Promise.all([
+
 
     userReplyCountPromise,
     purchasedBlockIdsPromise,
     tipSummaryPromise,
+    redPacketSummaryPromise,
     postOfflineMetaPromise,
     getCommentsByPostId(basePost.id, { sort: currentSort, page: currentPage, pageSize: 15 }, {
+
 
       userId: currentUser?.id,
       isAdmin,
@@ -152,7 +158,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
   }
 
   const displayPost = canViewRestrictedPost
-    ? { ...basePost, tipping: tipSummary ? {
+    ? { ...basePost, redPacket: redPacketSummary ?? basePost.redPacket, tipping: tipSummary ? {
       enabled: tipSummary.enabled,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
@@ -166,6 +172,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       topSupporters: tipSummary.topSupporters,
     } : basePost.tipping,
       contentBlocks: (basePost.contentBlocks ?? []).map((block) => {
+
         const replyUnlocked = isOwnerOrAdmin || userReplyCount >= (block.replyThreshold ?? 1)
 
         const visible = block.type === "PUBLIC"
@@ -215,43 +222,73 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
             ) : (
               <>
                 <Card>
-                  <CardContent className="p-8">
-                    <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                      <div className="flex min-w-0 items-start gap-4">
-                        <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("shrink-0", isRestrictedAuthor && "grayscale")}>
-                          <UserAvatar name={displayPost.author} avatarPath={displayPost.authorAvatarPath} size="lg" />
-                        </Link>
-                        <div className={cn("min-w-0 space-y-3", isRestrictedAuthor && "grayscale")}>
-                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                            <LevelIcon icon={displayPost.boardIcon} className="h-4 w-4 text-sm" svgClassName="[&>svg]:block" />
-                            <Link href={`/boards/${displayPost.boardSlug}`} className="hover:underline">
-
+                  <CardContent className="p-4 sm:p-6 md:p-8">
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="flex items-start justify-between gap-3 sm:hidden">
+                        <div className={cn("min-w-0 flex-1 space-y-2", isRestrictedAuthor && "grayscale")}>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                            <LevelIcon icon={displayPost.boardIcon} className="h-3.5 w-3.5 text-sm" svgClassName="[&>svg]:block" />
+                            <Link href={`/boards/${displayPost.boardSlug}`} className="truncate hover:underline">
                               {displayPost.board}
                             </Link>
                             <span>·</span>
-                            <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true })}>
+                            <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("truncate", getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true }))}>
                               {displayPost.author}
                             </Link>
                             <UserDisplayedBadges badges={displayPost.authorDisplayedBadges} compact />
                             {displayPost.authorIsVip ? <VipBadge level={displayPost.authorVipLevel} compact /> : null}
-
                             {isRestrictedAuthor ? <UserStatusBadge status={displayPost.authorStatus} compact /> : null}
                             <span>·</span>
                             <span>{displayPost.publishedAt}</span>
-                            {displayPost.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-3 py-1 text-xs">{displayPost.typeLabel}</span> : null}
-                            {displayPost.isPinned ? <span className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
-                            {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
+                            {displayPost.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px]">{displayPost.typeLabel}</span> : null}
+                            {displayPost.isPinned ? <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
+                            {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
                           </div>
-
-                          <h1 className={displayPost.isFeatured ? "text-lg font-semibold leading-snug text-emerald-700 sm:text-xl md:text-2xl dark:text-emerald-300" : displayPost.isPinned ? "text-lg font-semibold leading-snug text-orange-700 sm:text-xl md:text-2xl dark:text-orange-300" : "text-lg font-semibold leading-snug sm:text-xl md:text-2xl"}>{displayPost.title}</h1>
                         </div>
-                      </div>
 
-                      <div className="flex shrink-0 items-center justify-end text-sm text-muted-foreground md:pt-1">
-                        <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5">
-                          <Eye className="h-4 w-4" />
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary/60 px-2.5 py-1 text-[13px] text-muted-foreground">
+                          <Eye className="h-3.5 w-3.5" />
                           {displayPost.stats.views}
                         </span>
+                      </div>
+
+                      <h1 className={displayPost.isFeatured ? "text-base font-semibold leading-7 text-emerald-700 sm:hidden dark:text-emerald-300" : displayPost.isPinned ? "text-base font-semibold leading-7 text-orange-700 sm:hidden dark:text-orange-300" : "text-base font-semibold leading-7 sm:hidden"}>{displayPost.title}</h1>
+
+                      <div className="hidden sm:flex sm:flex-col sm:gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("shrink-0", isRestrictedAuthor && "grayscale")}>
+                            <UserAvatar name={displayPost.author} avatarPath={displayPost.authorAvatarPath} size="lg" />
+                          </Link>
+                          <div className={cn("min-w-0 flex-1 space-y-3", isRestrictedAuthor && "grayscale")}>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <LevelIcon icon={displayPost.boardIcon} className="h-4 w-4 text-sm" svgClassName="[&>svg]:block" />
+                              <Link href={`/boards/${displayPost.boardSlug}`} className="truncate hover:underline">
+                                {displayPost.board}
+                              </Link>
+                              <span>·</span>
+                              <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("truncate", getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true }))}>
+                                {displayPost.author}
+                              </Link>
+                              <UserDisplayedBadges badges={displayPost.authorDisplayedBadges} compact />
+                              {displayPost.authorIsVip ? <VipBadge level={displayPost.authorVipLevel} compact /> : null}
+                              {isRestrictedAuthor ? <UserStatusBadge status={displayPost.authorStatus} compact /> : null}
+                              <span>·</span>
+                              <span>{displayPost.publishedAt}</span>
+                              {displayPost.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-3 py-1 text-xs">{displayPost.typeLabel}</span> : null}
+                              {displayPost.isPinned ? <span className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
+                              {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
+                            </div>
+
+                            <h1 className={displayPost.isFeatured ? "text-lg font-semibold leading-snug text-emerald-700 sm:text-xl md:text-2xl dark:text-emerald-300" : displayPost.isPinned ? "text-lg font-semibold leading-snug text-orange-700 sm:text-xl md:text-2xl dark:text-orange-300" : "text-lg font-semibold leading-snug sm:text-xl md:text-2xl"}>{displayPost.title}</h1>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center justify-end text-sm text-muted-foreground md:pt-1">
+                          <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5">
+                            <Eye className="h-4 w-4" />
+                            {displayPost.stats.views}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -325,8 +362,10 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                       initialFavored={displayPost.viewerState?.favored}
                       canReport={Boolean(currentUser && currentUser.id !== displayPost.authorId)}
                       reportLabel={displayPost.title}
+                      redPacket={displayPost.redPacket}
                       tipping={displayPost.tipping}
                     />
+
 
 
                   </CardContent>
