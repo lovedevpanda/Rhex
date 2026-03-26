@@ -2,7 +2,6 @@ import Link from "next/link"
 
 import { LevelIcon } from "@/components/level-icon"
 
-
 interface SidebarZoneItem {
   id: string
   slug: string
@@ -47,6 +46,7 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
                 <span className="text-lg">🏠</span>
                 <span>首页</span>
               </Link>
+    
               {zones.map((zone) => {
                 const isActive = activeZoneSlug === zone.slug
 
@@ -87,4 +87,3 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
     </div>
   )
 }
-

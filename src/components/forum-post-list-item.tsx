@@ -16,6 +16,7 @@ interface ForumPostListItemProps {
     typeLabel: string
     type?: string
     pinScope?: string | null
+    pinLabel?: string | null
     minViewLevel?: number
     isFeatured: boolean
 
@@ -60,7 +61,7 @@ export function ForumPostListItem({ item, showBoard = true, compactFirstItem = f
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/posts/${item.slug}`} className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className={item.isFeatured ? "line-clamp-2 text-base font-semibold text-emerald-700 transition-colors hover:text-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200" : item.pinScope === "GLOBAL" || item.pinScope === "ZONE" || item.pinScope === "BOARD" ? "line-clamp-2 text-base font-semibold text-orange-700 transition-colors hover:text-orange-600 dark:text-orange-300 dark:hover:text-orange-200" : "line-clamp-2 text-base font-medium text-foreground transition-colors hover:text-primary"}>
+              <h2 className={item.isFeatured ? "line-clamp-2 text-base font-semibold text-emerald-700 transition-colors hover:text-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200" : item.pinLabel ? "line-clamp-2 text-base font-semibold text-orange-700 transition-colors hover:text-orange-600 dark:text-orange-300 dark:hover:text-orange-200" : "line-clamp-2 text-base font-medium text-foreground transition-colors hover:text-primary"}>
                 {item.title}
               </h2>
               {item.minViewLevel && item.minViewLevel > 0 ? (
@@ -72,9 +73,7 @@ export function ForumPostListItem({ item, showBoard = true, compactFirstItem = f
           </Link>
 
           {item.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">{item.typeLabel}</span> : null}
-          {item.pinScope === "GLOBAL" ? <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-200">全局置顶</span> : null}
-          {item.pinScope === "ZONE" ? <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">分区置顶</span> : null}
-          {item.pinScope === "BOARD" ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">节点置顶</span> : null}
+          {item.pinLabel ? <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">{item.pinLabel}</span> : null}
           {item.isFeatured ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
           <Link href={`/posts/${item.slug}#comments`} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-normal transition-colors hover:opacity-90" style={{ backgroundColor: `${item.commentAccentColor}14`, color: item.commentAccentColor }}>
             <MessageCircle className="h-3.5 w-3.5" />

@@ -4,16 +4,13 @@ import { countRootCommentsByPostId, createCommentWithRelations, findCommentAutho
 
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
-import { extractMentionUsernames, findMentionUsers } from "@/lib/comment-mentions"
+import { extractMentionTexts, findMentionUsers } from "@/lib/comment-mentions"
 import { ContentSafetyError, enforceSensitiveText } from "@/lib/content-safety"
 import { hasDatabaseUrl } from "@/lib/db-status"
 import { evaluateUserLevelProgress } from "@/lib/level-system"
 import { enrollUserInLotteryPool } from "@/lib/lottery"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validateCommentPayload } from "@/lib/validators"
-
-
-
 
 export async function POST(request: Request) {
   const user = await getCurrentUser()
@@ -40,16 +37,14 @@ export async function POST(request: Request) {
 
   try {
     const contentSafety = await enforceSensitiveText({ scene: "comment.content", text: content })
-    const mentionUsernames = extractMentionUsernames(contentSafety.sanitizedText)
+    const mentionTexts = extractMentionTexts(contentSafety.sanitizedText)
     const [postContext, dbUser, parentComment, mentionUsers, settings] = await Promise.all([
       getBoardAccessContextByPostId(postId),
       findCommentAuthorByUserId(user.id),
       parentId ? findCommentParentById(parentId) : Promise.resolve(null),
-      findMentionUsers(mentionUsernames),
+      findMentionUsers(mentionTexts),
       getSiteSettings(),
     ])
-
-
 
     if (!postContext || !dbUser || postContext.post.status !== "NORMAL") {
       return NextResponse.json({ code: 404, message: "帖子不存在或暂不可评论" }, { status: 404 })
@@ -71,7 +66,6 @@ export async function POST(request: Request) {
     if (dbUser.points < requiredPoints) {
       return NextResponse.json({ code: 400, message: `当前${settings.pointName}不足，无法在该节点回复` }, { status: 400 })
     }
-
 
     let normalizedParentId = ""
     let normalizedReplyToUserId: number | null = null
@@ -103,7 +97,6 @@ export async function POST(request: Request) {
       normalizedReplyToUserId,
     })
 
-
     const pageSize = 15
     const totalRootComments = normalizedParentId ? null : await countRootCommentsByPostId(postId)
     const targetPage = normalizedParentId
@@ -120,7 +113,6 @@ export async function POST(request: Request) {
     await enrollUserInLotteryPool({ postId, userId: user.id, replyCommentId: created.id }).catch(() => null)
 
     return NextResponse.json({
-
       code: 0,
       message: contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : normalizedReplyToUserName ? `已回复 @${normalizedReplyToUserName}` : "success",
       data: {
@@ -130,7 +122,6 @@ export async function POST(request: Request) {
           sort: "oldest",
           anchor: `comment-${created.id}`,
         },
-
       },
     })
   } catch (error) {
@@ -142,5 +133,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: 500, message }, { status: 500 })
   }
 }
-
-

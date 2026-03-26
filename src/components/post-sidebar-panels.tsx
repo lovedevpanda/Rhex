@@ -40,9 +40,14 @@ export function PostSidebarPanels({ currentUser, relatedTopics, tags }: PostSide
         </div>
 
         <div>
-          <div className="mb-3 flex items-center gap-2">
-            <Tag className="h-4 w-4" />
-            <h3 className="font-semibold">主题标签</h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />
+              <h3 className="font-semibold">主题标签</h3>
+            </div>
+            <Link href="/tags" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              全部标签
+            </Link>
           </div>
           <div className="flex flex-wrap gap-2">
             {tags.length === 0 ? <span className="text-sm text-muted-foreground">暂无标签</span> : null}

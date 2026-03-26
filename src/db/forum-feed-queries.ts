@@ -1,26 +1,31 @@
 import { prisma } from "@/db/client"
+import type { Prisma } from "@/db/types"
 
 export type FeedQuerySort = "latest" | "new" | "hot" | "weekly"
 
-export function getFeedOrderBy(sort: FeedQuerySort) {
+export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelationInput[] {
   switch (sort) {
     case "new":
-      return [{ createdAt: "desc" as const }]
+      return [{ pinScope: "desc" as const }, { createdAt: "desc" as const }]
     case "hot":
-      return [{ score: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ pinScope: "desc" as const }, { score: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
     case "weekly":
-      return [{ isPinned: "desc" as const }, { likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ pinScope: "desc" as const }, { likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }]
     case "latest":
     default:
-      return [{ lastCommentedAt: "desc" as const }, { createdAt: "desc" as const }]
+      return [{ pinScope: "desc" as const }, { lastCommentedAt: "desc" as const }, { createdAt: "desc" as const }]
+  }
+}
+
+function buildFeedWhere(): Prisma.PostWhereInput {
+  return {
+    status: "NORMAL",
   }
 }
 
 export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQuerySort) {
   return prisma.post.findMany({
-    where: {
-      status: "NORMAL",
-    },
+    where: buildFeedWhere(),
     include: {
       board: {
         select: { name: true, slug: true, iconPath: true },

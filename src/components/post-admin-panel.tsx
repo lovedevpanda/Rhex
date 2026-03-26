@@ -22,7 +22,7 @@ interface AdminQuickAction {
   extra?: Record<string, unknown>
 }
 
-export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postAuthorStatus, isPinned, pinScope, isFeatured }: PostAdminPanelProps) {
+export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postAuthorStatus, isPinned, isFeatured }: PostAdminPanelProps) {
   const [feedback, setFeedback] = useState("")
   const [pendingAction, startTransition] = useTransition()
 
@@ -55,11 +55,16 @@ export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postA
           { action: "user.ban", targetId: String(postAuthorId), label: "封禁此用户", tone: "danger" as const },
         ]
 
+  const pinActions: AdminQuickAction[] = isPinned
+    ? [{ action: "post.pin", targetId: postId, label: "取消置顶", extra: { scope: "NONE" } }]
+    : [
+        { action: "post.pin", targetId: postId, label: "节点置顶", extra: { scope: "BOARD" } },
+        { action: "post.pin", targetId: postId, label: "分区置顶", extra: { scope: "ZONE" } },
+        { action: "post.pin", targetId: postId, label: "全局置顶", extra: { scope: "GLOBAL" } },
+      ]
+
   const actions: AdminQuickAction[] = [
-    { action: "post.pin", targetId: postId, label: pinScope === "GLOBAL" ? "已设全局置顶" : "全局置顶", extra: { scope: "GLOBAL" } },
-    { action: "post.pin", targetId: postId, label: pinScope === "ZONE" ? "已设分区置顶" : "分区置顶", extra: { scope: "ZONE" } },
-    { action: "post.pin", targetId: postId, label: pinScope === "BOARD" ? "已设节点置顶" : "节点置顶", extra: { scope: "BOARD" } },
-    { action: "post.pin", targetId: postId, label: isPinned ? "取消置顶" : "取消置顶", extra: { scope: "NONE" } },
+    ...pinActions,
     { action: "post.feature", targetId: postId, label: isFeatured ? "取消精华" : "设为精华" },
     ...userActions,
     { action: "post.hide", targetId: postId, label: "下线帖子", tone: "danger" as const },

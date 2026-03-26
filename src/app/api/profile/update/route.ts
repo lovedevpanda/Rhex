@@ -8,6 +8,7 @@ import { prisma } from "@/db/client"
 import { getRequestIp } from "@/lib/request-ip"
 import { validateProfilePayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
+import { isPublicRouteError } from "@/lib/public-route-error"
 
 export async function POST(request: Request) {
   const currentUser = await getCurrentUser()
@@ -183,10 +184,13 @@ export async function POST(request: Request) {
       data: updated,
     })
   } catch (error) {
-    console.error(error)
     if (error instanceof ContentSafetyError) {
       return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
     }
+    if (isPublicRouteError(error)) {
+      return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
+    }
+    console.error("[api/profile/update] unexpected error", error)
     const message = error instanceof Error && error.message ? error.message : "保存资料失败"
     return NextResponse.json({ code: 500, message }, { status: 500 })
   }

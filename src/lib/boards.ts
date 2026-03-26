@@ -1,8 +1,9 @@
 import { cache } from "react"
 
 import { findBoardFollow } from "@/db/board-queries"
-import { resolvePagination } from "@/db/helpers"
+import { findBoardNormalPosts, findBoardPinnedPosts, findZoneBoardIdsById } from "@/db/taxonomy-queries"
 import { resolveBoardSettings } from "@/lib/board-settings"
+import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
 import { prisma } from "@/db/client"
 import { mapListPost } from "@/lib/post-map"
 
@@ -145,24 +146,21 @@ export async function getBoardPosts(slug: string, page = 1, pageSize = 30) {
     return []
   }
 
-  const pagination = resolvePagination({ page, pageSize }, Number.MAX_SAFE_INTEGER, [10, 20, 30, 50, 100], 30)
-  const posts = await prisma.post.findMany({
-    where: {
-      status: "NORMAL",
-      board: {
-        slug,
-      },
-    },
-    include: {
-      board: true,
-      author: true,
-    },
-    orderBy: [{ pinScope: "desc" }, { createdAt: "desc" }],
-    skip: pagination.skip,
-    take: pagination.pageSize,
-  })
+  const zone = board.zoneId ? await findZoneBoardIdsById(board.zoneId) : null
+  const zoneBoardIds = zone?.boards.map((item: (typeof zone.boards)[number]) => item.id) ?? [board.id]
+  const pinnedPosts = await findBoardPinnedPosts(board.id, zoneBoardIds)
 
-  return posts.map((post) => mapListPost(post))
+  if (page === 1) {
+    const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts)
+    const normalPosts = await findBoardNormalPosts(board.id, pinnedPostIds, 1, pageSize)
+
+    return [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))]
+  }
+
+  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
+  const normalPosts = await findBoardNormalPosts(board.id, excludedPostIds, page, pageSize)
+
+  return normalPosts.map((post) => mapListPost(post))
 }
 
 export async function isUserFollowingBoard(userId: number, boardId: string) {

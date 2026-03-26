@@ -1,5 +1,7 @@
 import crypto from "node:crypto"
 
+import { PublicRouteError } from "@/lib/public-route-error"
+
 export function hasBuiltinCaptchaSecret() {
   return Boolean(process.env.CAPTCHA_SECRET_KEY?.trim() || process.env.TURNSTILE_SECRET_KEY?.trim())
 }
@@ -37,26 +39,26 @@ export function createBuiltinCaptchaToken(text: string, expiresAt: number) {
 
 export function verifyBuiltinCaptchaToken(token: string | undefined, input: string) {
   if (!token) {
-    throw new Error("验证码已失效，请刷新后重试")
+    throw new PublicRouteError("验证码已失效，请刷新后重试")
   }
 
   const [encodedPayload, signature] = token.split(".")
   if (!encodedPayload || !signature) {
-    throw new Error("验证码已失效，请刷新后重试")
+    throw new PublicRouteError("验证码已失效，请刷新后重试")
   }
 
   const expectedSignature = crypto.createHmac("sha256", resolveSecret()).update(encodedPayload).digest("base64url")
   if (signature !== expectedSignature) {
-    throw new Error("验证码已失效，请刷新后重试")
+    throw new PublicRouteError("验证码已失效，请刷新后重试")
   }
 
   const payload = JSON.parse(base64UrlDecode(encodedPayload)) as { text?: string; expiresAt?: number }
   if (!payload.text || !payload.expiresAt || payload.expiresAt < Date.now()) {
-    throw new Error("验证码已失效，请刷新后重试")
+    throw new PublicRouteError("验证码已失效，请刷新后重试")
   }
 
   if (payload.text.toUpperCase() !== input.trim().toUpperCase()) {
-    throw new Error("验证码错误")
+    throw new PublicRouteError("验证码错误")
   }
 
   return true

@@ -8,6 +8,7 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { validateAuthPayload } from "@/lib/validators"
+import { isPublicRouteError } from "@/lib/public-route-error"
 
 export async function POST(request: Request) {
   const body = await request.json()
@@ -93,7 +94,10 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    console.error(error)
+    if (isPublicRouteError(error)) {
+      return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
+    }
+    console.error("[api/auth/login] unexpected error", error)
     return NextResponse.json({ code: 500, message: error instanceof Error ? error.message : "登录失败" }, { status: 500 })
   }
 }

@@ -43,37 +43,22 @@ export interface ForumFeedItem {
 
 
 
-function getPinScopeWeight(scope?: string | null) {
-  if (scope === "GLOBAL") return 3
-  if (scope === "ZONE") return 2
-  if (scope === "BOARD") return 1
+function getFeedPinPriority(scope?: string | null) {
+  if (scope === "GLOBAL") return 1
   return 0
 }
 
 export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "latest"): Promise<ForumFeedItem[]> {
-
   const posts = await findLatestFeedPosts(page, pageSize, sort)
 
+  const orderedPosts = [...posts].sort((left, right) => {
+    const pinDiff = getFeedPinPriority(right.pinScope ?? (right.isPinned ? "BOARD" : "NONE")) - getFeedPinPriority(left.pinScope ?? (left.isPinned ? "BOARD" : "NONE"))
+    if (pinDiff !== 0) {
+      return pinDiff
+    }
 
-  const orderedPosts = sort === "latest"
-    ? [...posts].sort((left, right) => {
-        const pinDiff = getPinScopeWeight(right.pinScope ?? (right.isPinned ? "BOARD" : "NONE")) - getPinScopeWeight(left.pinScope ?? (left.isPinned ? "BOARD" : "NONE"))
-        if (pinDiff !== 0) {
-          return pinDiff
-        }
-
-        const leftTime = new Date(left.lastCommentedAt ?? left.publishedAt ?? left.createdAt).getTime()
-        const rightTime = new Date(right.lastCommentedAt ?? right.publishedAt ?? right.createdAt).getTime()
-        return rightTime - leftTime
-      })
-    : [...posts].sort((left, right) => {
-        const pinDiff = getPinScopeWeight(right.pinScope ?? (right.isPinned ? "BOARD" : "NONE")) - getPinScopeWeight(left.pinScope ?? (left.isPinned ? "BOARD" : "NONE"))
-        if (pinDiff !== 0) {
-          return pinDiff
-        }
-        return 0
-      })
-
+    return 0
+  })
 
   return orderedPosts.map((post) => {
     const feedPost = post as typeof post & {

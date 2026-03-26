@@ -157,21 +157,23 @@ export async function POST(request: Request) {
     }
     case "post.pin": {
       const scope = String(body.scope ?? "BOARD").toUpperCase()
-      const post = await prisma.post.findUnique({ where: { id: targetId }, select: { id: true, isPinned: true } })
+      const normalizedScope = scope === "GLOBAL" || scope === "ZONE" || scope === "BOARD" ? scope : "NONE"
+      const post = await prisma.post.findUnique({ where: { id: targetId }, select: { id: true, isPinned: true, pinScope: true } })
       if (!post) {
         return NextResponse.json({ code: 404, message: "帖子不存在" }, { status: 404 })
       }
 
-      const nextPinned = scope === "NONE" ? false : !post.isPinned || scope !== "NONE"
+      const nextPinned = normalizedScope !== "NONE"
       await prisma.post.update({
         where: { id: targetId },
         data: {
           isPinned: nextPinned,
+          pinScope: normalizedScope,
         },
       })
-      await writeAdminLog(admin.id, action, "POST", targetId, message || `管理员设置帖子置顶范围为 ${scope}`, requestIp)
-      const scopeLabel = scope === "GLOBAL" ? "全局置顶" : scope === "ZONE" ? "分区置顶" : scope === "BOARD" ? "节点置顶" : "取消置顶"
-      return NextResponse.json({ code: 0, message: nextPinned ? scopeLabel : "取消置顶" })
+      await writeAdminLog(admin.id, action, "POST", targetId, message || `管理员设置帖子置顶范围为 ${normalizedScope}`, requestIp)
+      const scopeLabel = normalizedScope === "GLOBAL" ? "全局置顶" : normalizedScope === "ZONE" ? "分区置顶" : normalizedScope === "BOARD" ? "节点置顶" : "取消置顶"
+      return NextResponse.json({ code: 0, message: scopeLabel })
     }
     case "post.hide": {
       await prisma.post.update({ where: { id: targetId }, data: { status: PostStatus.OFFLINE } })

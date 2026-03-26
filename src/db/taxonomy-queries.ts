@@ -1,4 +1,5 @@
 import { prisma } from "@/db/client"
+import type { Prisma } from "@/db/types"
 import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
 
 export function findAllTags() {
@@ -52,6 +53,29 @@ export function findTagPostsBySlugOrName(normalized: string) {
     include: postListInclude,
     orderBy: pinnedPostOrderBy,
   })
+}
+
+export function findTagListPage(options: { page: number; pageSize: number; sort: "hot" | "new" }) {
+  const orderBy = options.sort === "new"
+    ? [{ createdAt: "desc" as const }, { name: "asc" as const }]
+    : [{ posts: { _count: "desc" as const } }, { createdAt: "desc" as const }, { name: "asc" as const }]
+
+  return prisma.tag.findMany({
+    include: {
+      _count: {
+        select: {
+          posts: true,
+        },
+      },
+    },
+    orderBy,
+    skip: (options.page - 1) * options.pageSize,
+    take: options.pageSize,
+  })
+}
+
+export function countTags() {
+  return prisma.tag.count()
 }
 
 export function findAllZonesWithBoards() {
@@ -134,10 +158,45 @@ export function findZoneBoardIdsBySlug(slug: string) {
   })
 }
 
-export function findZonePostsByBoardIds(boardIds: string[], page: number, pageSize: number) {
+export function findZoneBoardIdsById(zoneId: string) {
+  return prisma.zone.findUnique({
+    where: { id: zoneId },
+    include: {
+      boards: {
+        where: { status: "ACTIVE" },
+        select: { id: true },
+      },
+    },
+  })
+}
+
+function getZonePinnedOrderBy(): Prisma.PostOrderByWithRelationInput[] {
+  return [
+    { pinScope: "asc" },
+    { createdAt: "desc" },
+  ]
+}
+
+export function findGlobalPinnedPosts(pageSize?: number) {
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
+      pinScope: "GLOBAL",
+    },
+    include: {
+      board: true,
+      author: true,
+    },
+    orderBy: getZonePinnedOrderBy(),
+    take: pageSize,
+  })
+}
+
+export function findZonePinnedPosts(boardIds: string[], pageSize?: number) {
+  return prisma.post.findMany({
+    where: {
+      status: "NORMAL",
+      pinScope: "ZONE",
       boardId: {
         in: boardIds,
       },
@@ -146,8 +205,66 @@ export function findZonePostsByBoardIds(boardIds: string[], page: number, pageSi
       board: true,
       author: true,
     },
-    orderBy: [{ pinScope: "desc" }, { createdAt: "desc" }],
+    orderBy: getZonePinnedOrderBy(),
+    take: pageSize,
+  })
+}
+
+export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[], page: number, pageSize: number) {
+  return prisma.post.findMany({
+    where: {
+      status: "NORMAL",
+      boardId: {
+        in: boardIds,
+      },
+      id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    },
+    include: {
+      board: true,
+      author: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
     skip: (page - 1) * pageSize,
     take: pageSize,
   })
+}
+
+export function findBoardPinnedPosts(boardId: string, zoneBoardIds: string[], pageSize?: number) {
+  return prisma.post.findMany({
+    where: {
+      status: "NORMAL",
+      OR: [
+        { pinScope: "GLOBAL" },
+        { pinScope: "ZONE", boardId: { in: zoneBoardIds } },
+        { pinScope: "BOARD", boardId },
+      ],
+    },
+    include: {
+      board: true,
+      author: true,
+    },
+    orderBy: getZonePinnedOrderBy(),
+    take: pageSize,
+  })
+}
+
+export function findBoardNormalPosts(boardId: string, excludedPostIds: string[], page: number, pageSize: number) {
+  return prisma.post.findMany({
+    where: {
+      status: "NORMAL",
+      boardId,
+      id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    },
+    include: {
+      board: true,
+      author: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  })
+}
+
+export function findZonePostsByBoardIds(boardIds: string[], page: number, pageSize: number) {
+  return findZoneNormalPosts(boardIds, [], page, pageSize)
 }

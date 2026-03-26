@@ -136,7 +136,7 @@ export default async function ZonePage({ params, searchParams }: ZonePageProps) 
               ) : (
                 <>
 
-                  <ForumPostStream posts={posts} />
+                  <ForumPostStream posts={posts} visiblePinScopes={["GLOBAL", "ZONE"]} showPinnedDivider={currentPage === 1} />
 
                   {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前分区下还没有公开内容。</div> : null}
 

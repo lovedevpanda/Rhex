@@ -12,6 +12,7 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { validateAuthPayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
+import { isPublicRouteError } from "@/lib/public-route-error"
 
 export async function POST(request: Request) {
   try {
@@ -282,10 +283,13 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    console.error(error)
     if (error instanceof ContentSafetyError) {
       return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
     }
+    if (isPublicRouteError(error)) {
+      return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
+    }
+    console.error("[api/auth/register] unexpected error", error)
     const message = error instanceof Error && error.message ? error.message : "注册失败"
     return NextResponse.json({ code: 500, message }, { status: 500 })
   }

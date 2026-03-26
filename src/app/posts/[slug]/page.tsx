@@ -42,10 +42,7 @@ import { formatRelativeTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 
 import { getZones } from "@/lib/zones"
-
-
-
-
+import { getVipNameClass } from "@/lib/vip-status"
 
 interface PostPageProps {
   params: {
@@ -206,7 +203,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <SidebarNavigation zones={zones} boards={boards} activeBoardSlug={displayPost.boardSlug} />
 
-          <article className="space-y-6 lg:col-span-7">
+          <article className="space-y-6 lg:col-span-7 mt-6 mb-4">
             {displayPost.status === "PENDING" ? (
               <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
                 当前帖子处于<strong>待审核</strong>状态，仅作者和管理员可查看。{displayPost.reviewNote ? `审核备注：${displayPost.reviewNote}` : "管理员审核通过后才会对其他用户可见。"}
@@ -232,7 +229,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                               {displayPost.board}
                             </Link>
                             <span>·</span>
-                            <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={displayPost.authorIsVip ? "font-semibold text-violet-700 hover:underline dark:text-violet-300" : "font-semibold hover:underline"}>
+                            <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true })}>
                               {displayPost.author}
                             </Link>
                             <UserDisplayedBadges badges={displayPost.authorDisplayedBadges} compact />

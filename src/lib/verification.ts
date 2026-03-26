@@ -3,6 +3,7 @@ import { createHash, randomInt } from "crypto"
 import { VerificationChannel } from "@/db/types"
 
 import { consumeVerificationCode, createVerificationCodeRecord, expireActiveVerificationCodes, findLatestPendingVerificationCode, findRecentConsumedVerificationCode, updateVerificationAttempts } from "@/db/verification-queries"
+import { PublicRouteError } from "@/lib/public-route-error"
 
 
 const EXPIRE_MINUTES = 10
@@ -74,15 +75,15 @@ export async function verifyCode(input: {
 
 
   if (!record) {
-    throw new Error("请先获取验证码")
+    throw new PublicRouteError("请先获取验证码")
   }
 
   if (record.expiresAt.getTime() < Date.now()) {
-    throw new Error("验证码已过期，请重新获取")
+    throw new PublicRouteError("验证码已过期，请重新获取")
   }
 
   if (record.attempts >= record.maxAttempts) {
-    throw new Error("验证码尝试次数过多，请重新获取")
+    throw new PublicRouteError("验证码尝试次数过多，请重新获取")
   }
 
   const nextAttempts = record.attempts + 1
@@ -91,7 +92,7 @@ export async function verifyCode(input: {
   if (!matched) {
     await updateVerificationAttempts(record.id, nextAttempts)
 
-    throw new Error("验证码不正确")
+    throw new PublicRouteError("验证码错误")
   }
 
   const consumed = await consumeVerificationCode(record.id, nextAttempts, new Date())

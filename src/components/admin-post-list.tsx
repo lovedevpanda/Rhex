@@ -189,9 +189,15 @@ export function AdminPostList({ data }: AdminPostListProps) {
               ) : (
                 <>
                   <AdminPostActionButton action="post.feature" targetId={post.id} label={post.isFeatured ? "取消推" : "推荐"} className="h-7 rounded-full px-2.5 text-xs" />
-                  <AdminPostActionButton action="post.pin" targetId={post.id} label={post.isPinned ? "取消顶" : "节点顶"} payload={{ scope: post.isPinned ? "NONE" : "BOARD" }} className="h-7 rounded-full px-2.5 text-xs" />
-                  <AdminPostActionButton action="post.pin" targetId={post.id} label="分区顶" payload={{ scope: "ZONE" }} className="h-7 rounded-full px-2.5 text-xs" />
-                  <AdminPostActionButton action="post.pin" targetId={post.id} label="全局顶" payload={{ scope: "GLOBAL" }} className="h-7 rounded-full px-2.5 text-xs" />
+                  {post.isPinned ? (
+                    <AdminPostActionButton action="post.pin" targetId={post.id} label="取消顶" payload={{ scope: "NONE" }} className="h-7 rounded-full px-2.5 text-xs" />
+                  ) : (
+                    <>
+                      <AdminPostActionButton action="post.pin" targetId={post.id} label="节点顶" payload={{ scope: "BOARD" }} className="h-7 rounded-full px-2.5 text-xs" />
+                      <AdminPostActionButton action="post.pin" targetId={post.id} label="分区顶" payload={{ scope: "ZONE" }} className="h-7 rounded-full px-2.5 text-xs" />
+                      <AdminPostActionButton action="post.pin" targetId={post.id} label="全局顶" payload={{ scope: "GLOBAL" }} className="h-7 rounded-full px-2.5 text-xs" />
+                    </>
+                  )}
                   <AdminPostActionButton action="post.hide" targetId={post.id} label="下线" tone="danger" modalTitle="确认下线帖子" modalDescription={`帖子：${post.title}`} placeholder="填写下线原因（可选）" confirmText="确认下线" className="h-7 rounded-full bg-red-600 px-2.5 text-xs text-white hover:bg-red-500" />
                 </>
               )}

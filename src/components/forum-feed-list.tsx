@@ -5,6 +5,7 @@ import { ForumPostListItem } from "@/components/forum-post-list-item"
 import type { FeedSort, ForumFeedItem } from "@/lib/forum-feed"
 import { getSiteSettings } from "@/lib/site-settings"
 import { resolvePostHeatStyle } from "@/lib/post-heat"
+import { getVipNameClass, isVipActive } from "@/lib/vip-status"
 
 interface ForumFeedListProps {
   items: ForumFeedItem[]
@@ -17,22 +18,12 @@ const tabs: Array<{ key: Exclude<FeedSort, "weekly">; label: string; icon: typeo
   { key: "hot", label: "热门", icon: Flame },
 ]
 
-function getVipNameClass(level?: number | null, expiresAt?: string | null) {
-  const isActive = Boolean(expiresAt && new Date(expiresAt).getTime() > Date.now())
-
-  if (!isActive || !level || level <= 0) {
-    return "hover:underline"
+function getFeedPinLabel(pinScope?: string | null) {
+  if (pinScope === "GLOBAL") {
+    return "全局置顶"
   }
 
-  if (level >= 3) {
-    return "font-semibold text-amber-700 hover:underline"
-  }
-
-  if (level === 2) {
-    return "font-semibold text-rose-700 hover:underline"
-  }
-
-  return "font-semibold text-violet-700 hover:underline"
+  return null
 }
 
 export async function ForumFeedList({ items, currentSort }: ForumFeedListProps) {
@@ -78,6 +69,7 @@ export async function ForumFeedList({ items, currentSort }: ForumFeedListProps) 
                 type: item.type,
                 typeLabel: item.typeLabel,
                 pinScope: item.pinScope,
+                pinLabel: getFeedPinLabel(item.pinScope),
                 minViewLevel: item.minViewLevel ?? undefined,
                 isFeatured: item.isFeatured,
                 boardName: item.boardName,
@@ -87,7 +79,7 @@ export async function ForumFeedList({ items, currentSort }: ForumFeedListProps) 
                 authorUsername: item.authorUsername,
                 authorAvatarPath: item.authorAvatarPath,
                 authorStatus: item.authorStatus,
-                authorNameClassName: getVipNameClass(item.authorVipLevel, item.authorVipExpiresAt),
+                authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
                 metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
                 metaSecondary: currentSort === "latest" && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
                 commentCount: item.commentCount,

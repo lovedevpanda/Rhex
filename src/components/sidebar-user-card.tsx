@@ -336,7 +336,10 @@ export function SidebarUserCard({ user, createPostHref = "/write" }: { user: Sid
             {safeUser.checkInEnabled ? (
               <div className="mt-3 space-y-2.5">
  
-                <Button className="h-9 w-full rounded-lg gap-1.5 text-xs" onClick={() => setCalendarOpen(true)}>
+                <Button
+                  className={checkedInToday ? "h-9 w-full rounded-lg gap-1.5 text-xs bg-muted text-muted-foreground hover:bg-muted" : "h-9 w-full rounded-lg gap-1.5 text-xs"}
+                  onClick={() => setCalendarOpen(true)}
+                >
                   <CalendarDays className="h-4 w-4" />
                   {checkedInToday ? "今日已签到" : "签到"}
                 </Button>

@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
+import { createPortal } from "react-dom"
 
 import { renderMarkdownEmojiHtml, type MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
@@ -19,12 +21,18 @@ import markdownItSup from "markdown-it-sup"
 import markdownItTaskLists from "markdown-it-task-lists"
 import hljs from "highlight.js"
 import mermaid from "mermaid"
+import { X } from "lucide-react"
 
 interface MarkdownContentProps {
   content: string
   className?: string
   emptyText?: string
   markdownEmojiMap?: MarkdownEmojiItem[]
+}
+
+interface LightboxImage {
+  src: string
+  alt: string
 }
 
 interface MarkdownHeadingToken {
@@ -326,6 +334,69 @@ function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
     .replace(/<div class="md-callout-body">/g, '<div class="space-y-3 text-sm leading-7">')
 }
 
+function bindImageLightbox(container: HTMLElement, onOpenImage: (image: LightboxImage) => void) {
+  const cleanups: Array<() => void> = []
+
+  const handleContainerClick = (event: Event) => {
+    const target = event.target
+    if (!(target instanceof HTMLImageElement)) {
+      return
+    }
+
+    const src = target.getAttribute("src")?.trim()
+    if (!src) {
+      return
+    }
+
+    onOpenImage({
+      src,
+      alt: target.getAttribute("alt") ?? "",
+    })
+  }
+
+  const handleContainerKeyDown = (event: Event) => {
+    const keyboardEvent = event as KeyboardEvent
+    if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
+      return
+    }
+
+    const target = keyboardEvent.target
+    if (!(target instanceof HTMLImageElement)) {
+      return
+    }
+
+    const src = target.getAttribute("src")?.trim()
+    if (!src) {
+      return
+    }
+
+    keyboardEvent.preventDefault()
+    onOpenImage({
+      src,
+      alt: target.getAttribute("alt") ?? "",
+    })
+  }
+
+  for (const image of Array.from(container.querySelectorAll<HTMLImageElement>("img"))) {
+    image.classList.add("cursor-zoom-in", "transition-opacity", "hover:opacity-90")
+    image.setAttribute("role", "button")
+    image.setAttribute("tabindex", "0")
+    image.setAttribute("aria-label", image.getAttribute("alt")?.trim() || "点击放大图片")
+  }
+
+  container.addEventListener("click", handleContainerClick)
+  container.addEventListener("keydown", handleContainerKeyDown)
+
+  cleanups.push(() => {
+    container.removeEventListener("click", handleContainerClick)
+    container.removeEventListener("keydown", handleContainerKeyDown)
+  })
+
+  return () => {
+    cleanups.forEach((cleanup) => cleanup())
+  }
+}
+
 async function enhanceMarkdown(container: HTMLElement) {
   const headingSelectors = "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]"
   for (const heading of Array.from(container.querySelectorAll<HTMLElement>(headingSelectors))) {
@@ -409,6 +480,7 @@ async function enhanceMarkdown(container: HTMLElement) {
 
 export function MarkdownContent({ content, className, emptyText, markdownEmojiMap }: MarkdownContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null)
   const normalized = content.replace(/\r\n/g, "\n").trim()
   const resolvedMarkdownEmojiMap = useMarkdownEmojiMap(markdownEmojiMap)
   const html = useMemo(() => (normalized ? renderMarkdown(normalized, resolvedMarkdownEmojiMap) : ""), [normalized, resolvedMarkdownEmojiMap])
@@ -419,18 +491,79 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
       return
     }
 
-    void enhanceMarkdown(container)
+    let removeImageLightbox = () => {}
+    let cancelled = false
+
+    void enhanceMarkdown(container).then(() => {
+      if (cancelled) {
+        return
+      }
+
+      removeImageLightbox = bindImageLightbox(container, setLightboxImage)
+    })
+
+    return () => {
+      cancelled = true
+      removeImageLightbox()
+    }
   }, [html])
+
+  useEffect(() => {
+    if (!lightboxImage) {
+      return
+    }
+
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLightboxImage(null)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [lightboxImage])
 
   if (!normalized) {
     return emptyText ? <p className="text-sm text-muted-foreground">{emptyText}</p> : null
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={className ?? "markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1"}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className={className ?? "markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1"}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {lightboxImage ? createPortal(
+        <div key={lightboxImage.src} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxImage(null)}>
+          <button
+            type="button"
+            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white transition-opacity hover:opacity-80"
+            onClick={() => setLightboxImage(null)}
+            aria-label="关闭图片预览"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div className="relative h-[90vh] w-[90vw] max-w-[1400px]" onClick={(event) => event.stopPropagation()}>
+            <Image
+              src={lightboxImage.src}
+              alt={lightboxImage.alt}
+              fill
+              unoptimized
+              className="rounded-2xl object-contain shadow-2xl"
+              sizes="90vw"
+            />
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+    </>
   )
 }

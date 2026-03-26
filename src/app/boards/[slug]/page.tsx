@@ -153,7 +153,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
                 <>
          
 
-                  <ForumPostStream posts={posts} showBoard={false} />
+                  <ForumPostStream posts={posts} showBoard={false} showPinnedDivider={currentPage === 1} />
 
 
 

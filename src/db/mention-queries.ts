@@ -1,15 +1,26 @@
 import { prisma } from "@/db/client"
 
-export async function findUsersByUsernames(usernames: string[]) {
-  if (usernames.length === 0) {
+export async function findUsersByMentionTexts(mentionTexts: string[]) {
+  const normalizedMentionTexts = [...new Set(mentionTexts.map((item) => item.trim()).filter(Boolean))]
+
+  if (normalizedMentionTexts.length === 0) {
     return []
   }
 
   return prisma.user.findMany({
     where: {
-      username: {
-        in: usernames,
-      },
+      OR: [
+        {
+          username: {
+            in: normalizedMentionTexts,
+          },
+        },
+        {
+          nickname: {
+            in: normalizedMentionTexts,
+          },
+        },
+      ],
     },
     select: {
       id: true,

@@ -18,6 +18,7 @@ import { VipBadge } from "@/components/vip-badge"
 import type { SiteCommentItem } from "@/lib/comments"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
+import { getVipNameClass } from "@/lib/vip-status"
 
 
 interface CommentThreadProps {
@@ -185,7 +186,7 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                 </Link>
                 <div className={cn("min-w-0 space-y-2", isRestrictedCommentAuthor && "grayscale")}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/users/${comment.authorUsername}`} className={comment.authorIsVip ? "font-medium text-violet-700 hover:underline dark:text-violet-300" : "font-medium text-foreground hover:underline"}>{comment.author}</Link>
+                    <Link href={`/users/${comment.authorUsername}`} className={getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })}>{comment.author}</Link>
                     <UserDisplayedBadges badges={comment.authorDisplayedBadges} compact />
                     {comment.authorIsVip ? <VipBadge level={comment.authorVipLevel} compact /> : null}
 
@@ -264,7 +265,7 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                           </Link>
                           <div className={cn("min-w-0 flex-1", isRestrictedReplyAuthor && "grayscale")}>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <Link href={`/users/${reply.authorUsername}`} className={reply.authorIsVip ? "font-medium text-violet-700 hover:underline" : "font-medium text-foreground hover:underline"}>{reply.author}</Link>
+                              <Link href={`/users/${reply.authorUsername}`} className={getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })}>{reply.author}</Link>
                               <UserDisplayedBadges badges={reply.authorDisplayedBadges} compact />
                               {reply.authorIsVip ? <VipBadge level={reply.authorVipLevel} compact /> : null}
 
@@ -273,7 +274,9 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                               <span>·</span>
                               <span>{reply.createdAt}</span>
                             </div>
-                            <p className="mt-2 text-sm leading-7 text-foreground/90">{reply.content}</p>
+                            <div className="mt-2">
+                              <MarkdownContent content={reply.content} className="text-sm leading-7 text-foreground/90 dark:text-foreground/85" markdownEmojiMap={markdownEmojiMap} />
+                            </div>
                           </div>
                         </div>
 

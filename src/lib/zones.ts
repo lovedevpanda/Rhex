@@ -1,6 +1,7 @@
 import { cache } from "react"
 
-import { findAllZonesWithBoards, findZoneBoardIdsBySlug, findZoneBoardListBySlug, findZonePostsByBoardIds, findZoneWithBoardsBySlug } from "@/db/taxonomy-queries"
+import { findAllZonesWithBoards, findGlobalPinnedPosts, findZoneBoardIdsBySlug, findZoneBoardListBySlug, findZoneNormalPosts, findZonePinnedPosts, findZoneWithBoardsBySlug } from "@/db/taxonomy-queries"
+import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
 import { mapListPost } from "@/lib/post-map"
 
 import type { SitePostItem } from "@/lib/posts"
@@ -102,9 +103,22 @@ export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promi
     return []
   }
 
-  const posts = await findZonePostsByBoardIds(zone.boards.map((item: (typeof zone.boards)[number]) => item.id), page, pageSize)
+  const boardIds = zone.boards.map((item: (typeof zone.boards)[number]) => item.id)
+  const [globalPinnedPosts, zonePinnedPosts] = await Promise.all([
+    findGlobalPinnedPosts(),
+    findZonePinnedPosts(boardIds),
+  ])
+  const pinnedPosts = [...globalPinnedPosts, ...zonePinnedPosts]
 
+  if (page === 1) {
+    const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts)
+    const normalPosts = await findZoneNormalPosts(boardIds, pinnedPostIds, 1, pageSize)
 
+    return [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))]
+  }
 
-  return posts.map((post) => mapListPost(post))
+  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
+  const normalPosts = await findZoneNormalPosts(boardIds, excludedPostIds, page, pageSize)
+
+  return normalPosts.map((post) => mapListPost(post))
 }
