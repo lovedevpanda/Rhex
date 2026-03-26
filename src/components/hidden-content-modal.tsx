@@ -6,6 +6,7 @@ import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 
 interface HiddenContentModalProps {
+
   open: boolean
   title: string
   description: string
@@ -13,11 +14,15 @@ interface HiddenContentModalProps {
   onChange: (value: string) => void
   onClose: () => void
   price?: string
+
   onPriceChange?: (value: string) => void
   priceLabel?: string
 }
 
+
 export function HiddenContentModal({ open, title, description, value, onChange, onClose, price, onPriceChange, priceLabel }: HiddenContentModalProps) {
+
+
   const [draftValue, setDraftValue] = useState(value)
   const [draftPrice, setDraftPrice] = useState(price ?? "")
 
@@ -63,6 +68,7 @@ export function HiddenContentModal({ open, title, description, value, onChange, 
             placeholder="写下这部分隐藏内容，支持 Markdown、图片和表情。"
             minHeight={260}
           />
+
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">

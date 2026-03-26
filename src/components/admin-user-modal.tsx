@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react"
 import { AdminModal } from "@/components/admin-modal"
 import { Button } from "@/components/ui/button"
 import type { AdminUserListItem } from "@/lib/admin-user-management"
+import { formatDateTime } from "@/lib/formatters"
 import { isVipActive } from "@/lib/vip-status"
 
 interface AdminUserModalProps {
@@ -34,10 +35,11 @@ export function AdminUserModal({ user }: AdminUserModalProps) {
       { label: "邀请数", value: String(user.inviteCount) },
       { label: "邮箱", value: user.email ?? "-" },
       { label: "手机", value: user.phone ?? "-" },
-      { label: "注册时间", value: user.createdAt },
-      { label: "最近登录", value: user.lastLoginAt ?? "-" },
+      { label: "注册时间", value: formatDateTime(user.createdAt) },
+      { label: "最近登录", value: user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "-" },
       { label: "登录 IP", value: user.lastLoginIp ?? "-" },
       { label: "VIP", value: vipActive ? `VIP${user.vipLevel}` : "非 VIP" },
+      { label: "VIP 到期", value: user.vipExpiresAt ? formatDateTime(user.vipExpiresAt) : "长期 / 无" },
     ],
     [user, vipActive],
   )
@@ -74,7 +76,6 @@ export function AdminUserModal({ user }: AdminUserModalProps) {
         description={`角色 ${user.role} · 状态 ${user.status} · ${vipActive ? `VIP${user.vipLevel}` : "非 VIP"}`}
         footer={
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">用弹层承载详情与少量编辑，保证主列表尽可能紧凑。</p>
             <div className="flex items-center gap-2">
               <Button type="button" variant="ghost" className="h-8 px-3 text-xs" onClick={() => setOpen(false)}>
                 关闭
@@ -102,7 +103,7 @@ export function AdminUserModal({ user }: AdminUserModalProps) {
                 {user.loginLogs.length === 0 ? <p className="text-sm text-muted-foreground">暂无登录记录</p> : null}
                 {user.loginLogs.map((log) => (
                   <div key={log.id} className="grid gap-2 rounded-[16px] border border-border px-3 py-2 text-xs text-muted-foreground md:grid-cols-[160px_120px_minmax(0,1fr)]">
-                    <span>{log.createdAt}</span>
+                    <span>{formatDateTime(log.createdAt)}</span>
                     <span>IP：{log.ip ?? "-"}</span>
                     <span className="truncate">{log.userAgent ?? "-"}</span>
                   </div>

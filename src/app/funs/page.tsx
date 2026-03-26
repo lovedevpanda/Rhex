@@ -3,7 +3,9 @@ import type { Metadata } from "next"
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { SiteHeader } from "@/components/site-header"
+import { LevelIcon } from "@/components/level-icon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
 import { getCurrentUser } from "@/lib/auth"
 import { getBoards } from "@/lib/boards"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
@@ -48,8 +50,9 @@ export default async function FunsPage() {
                 {boards.map((board) => (
                   <a key={board.id} href={`/boards/${board.slug}`} className="rounded-[24px] border border-border p-5 transition-colors hover:bg-accent">
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">{board.icon}</span>
+                      <LevelIcon icon={board.icon} className="h-6 w-6 text-2xl" svgClassName="[&>svg]:block" />
                       <div>
+
                         <h2 className="font-semibold">{board.name}</h2>
                         <p className="mt-1 text-sm text-muted-foreground">{board.description}</p>
                       </div>

@@ -23,8 +23,9 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
     },
     include: {
       board: {
-        select: { name: true, slug: true },
+        select: { name: true, slug: true, iconPath: true },
       },
+
       author: true,
       comments: {
         where: { status: "NORMAL" },

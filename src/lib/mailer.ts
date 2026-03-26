@@ -42,7 +42,7 @@ export async function sendRegisterVerificationEmail(input: { to: string; code: s
     to: input.to,
     subject: `${settings.siteName} 验证码`,
     text: `你的验证码是 ${input.code}，10 分钟内有效。如非本人操作请忽略。`,
-    html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#111"><h2>${settings.siteName} 注册验证码</h2><p>你的验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${input.code}</p><p>验证码 10 分钟内有效，如非本人操作请忽略。</p></div>`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#111"><h2>${settings.siteName} 验证码</h2><p>你的验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${input.code}</p><p>验证码 10 分钟内有效，如非本人操作请忽略。</p></div>`,
   })
 }
 

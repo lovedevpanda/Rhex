@@ -15,13 +15,16 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function AnnouncementsPage() {
-  const data = await getAnnouncementPageData()
+  const [data] = await Promise.all([getAnnouncementPageData(), getSiteSettings()])
 
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-[1200px] px-4 py-6">
         <AnnouncementPageContent items={data.items} />
+
+
+
       </main>
     </div>
   )

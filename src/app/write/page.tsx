@@ -119,7 +119,9 @@ export default async function WritePage({ searchParams }: WritePageProps) {
                 <CreatePostForm
                   boardOptions={boardOptions}
                   pointName={settings.pointName}
+                  markdownEmojiMap={settings.markdownEmojiMap}
                   currentUser={{
+
                     username: user.username,
                     nickname: user.nickname,
                     level: user.level,
@@ -152,7 +154,9 @@ export default async function WritePage({ searchParams }: WritePageProps) {
               <CreatePostForm
                 boardOptions={boardOptions}
                 pointName={settings.pointName}
+                markdownEmojiMap={settings.markdownEmojiMap}
                 currentUser={{
+
                   username: user.username,
                   nickname: user.nickname,
                   level: user.level,

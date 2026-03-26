@@ -5,6 +5,10 @@ import { useState } from "react"
 import Link from "next/link"
 import { ChevronDown, ChevronUp, Info, X } from "lucide-react"
 
+import { LevelIcon } from "@/components/level-icon"
+
+
+
 interface CategoryPill {
   id: string
   label: string
@@ -42,9 +46,10 @@ export function CollapsibleInfoCard({ badge, title, icon, description, summary, 
                 href={pill.href}
                 className={pill.active ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
               >
-                <span className="text-[13px] leading-none">{pill.icon}</span>
+                <LevelIcon icon={pill.icon} className="h-3.5 w-3.5 text-[13px] leading-none" svgClassName="[&>svg]:block" />
                 <span>{pill.label}</span>
               </Link>
+
             ))}
           </div>
 
@@ -81,8 +86,9 @@ export function CollapsibleInfoCard({ badge, title, icon, description, summary, 
         <div className="overflow-hidden rounded-[28px] border-none bg-gradient-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
           <div className="p-8">
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-3xl">{icon}</span>
+              <LevelIcon icon={icon} className="h-8 w-8 text-3xl" svgClassName="[&>svg]:block" />
               <div>
+
                 <p className="text-sm text-white/70">{badge}</p>
                 <h1 className="text-3xl font-semibold">{title}</h1>
               </div>

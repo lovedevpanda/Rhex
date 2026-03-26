@@ -8,7 +8,10 @@ interface AnnouncementPageContentProps {
   items: AnnouncementItem[]
 }
 
+
 export function AnnouncementPageContent({ items }: AnnouncementPageContentProps) {
+
+
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-border bg-card p-6 shadow-sm shadow-black/5 dark:shadow-black/30">
@@ -38,6 +41,8 @@ export function AnnouncementPageContent({ items }: AnnouncementPageContentProps)
             <h2 className="mt-3 text-xl font-semibold">{item.title}</h2>
             <div className="mt-4 rounded-[22px] border border-border/70 bg-background px-5 py-4">
               <MarkdownContent content={item.content} emptyText="暂无公告内容" className="markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1" />
+
+
             </div>
           </article>
         ))}

@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
-import { ChevronUp, MessageSquareMore, Send, SmilePlus } from "lucide-react"
+import { ChevronLeft, ChevronUp, MessageSquareMore, Send, SmilePlus } from "lucide-react"
 
+import { EmojiPicker } from "@/components/emoji-picker"
 import { Button } from "@/components/ui/button"
 import { UserAvatar } from "@/components/user-avatar"
 import { EMOJI_OPTIONS } from "@/lib/emoji"
@@ -17,9 +18,10 @@ interface MessageThreadPanelProps {
   onLoadHistory: () => void
   loadingHistory: boolean
   historyError: string
+  onBack?: () => void
 }
 
-export function MessageThreadPanel({ conversation, currentUserId, usingDemoData, onMessageSent, onLoadHistory, loadingHistory, historyError }: MessageThreadPanelProps) {
+export function MessageThreadPanel({ conversation, currentUserId, usingDemoData, onMessageSent, onLoadHistory, loadingHistory, historyError, onBack }: MessageThreadPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
   const shouldStickToBottomRef = useRef(true)
@@ -148,7 +150,7 @@ export function MessageThreadPanel({ conversation, currentUserId, usingDemoData,
 
   if (!conversation || !recipient) {
     return (
-      <div className="flex min-h-[calc(100vh-164px)] items-center justify-center rounded-[28px] border border-dashed border-border bg-card px-6 text-center shadow-soft">
+      <div className="flex min-h-[calc(100vh-164px)] items-center justify-center rounded-[28px] border border-dashed border-border bg-card px-6 text-center shadow-soft max-sm:min-h-[calc(100dvh-56px)] max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:shadow-none">
         <div>
           <MessageSquareMore className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-4 text-sm uppercase tracking-[0.28em] text-muted-foreground">Chat Thread</p>
@@ -160,22 +162,32 @@ export function MessageThreadPanel({ conversation, currentUserId, usingDemoData,
   }
 
   return (
-    <div className="flex max-h-[calc(100vh-164px)] min-h-[calc(100vh-164px)] flex-col overflow-hidden rounded-[28px] border border-border bg-card shadow-soft">
-      <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-4">
+    <div className="flex max-h-[calc(100vh-164px)] min-h-[calc(100vh-164px)] flex-col overflow-hidden rounded-[28px] border border-border bg-card shadow-soft max-sm:max-h-[calc(100dvh-56px)] max-sm:min-h-[calc(100dvh-56px)] max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:shadow-none">
+      <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5 sm:py-3.5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground xl:hidden"
+              aria-label="返回会话列表"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          ) : null}
           <UserAvatar name={recipient.displayName} avatarPath={recipient.avatarPath} size="md" />
-          <div>
-            <h2 className="text-[17px] font-semibold">{conversation.title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{conversation.subtitle}</p>
+          <div className="min-w-0">
+            <h2 className="truncate text-[17px] font-semibold">{conversation.title}</h2>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{conversation.subtitle}</p>
           </div>
         </div>
-        <div className="text-right text-xs text-muted-foreground">
+        <div className="hidden text-right text-xs text-muted-foreground sm:block">
           <p>最近更新</p>
           <p className="mt-1">{conversation.updatedAt}</p>
         </div>
       </div>
 
-      <div ref={threadRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-4.5">
+      <div ref={threadRef} className="mt-3 flex-1 space-y-4 overflow-y-auto px-5 py-4.5">
         {conversation.hasMoreHistory ? (
           <div className="flex justify-center">
             <Button type="button" variant="outline" className="rounded-full" onClick={handleLoadMore} disabled={loadingHistory}>
@@ -216,10 +228,10 @@ export function MessageThreadPanel({ conversation, currentUserId, usingDemoData,
         ))}
       </div>
 
-      <div className="border-t border-border px-5 py-3.5">
+      <div className="border-t border-border px-4 py-3 sm:px-5 sm:py-3.5 max-sm:pb-[calc(env(safe-area-inset-bottom)+12px)]">
         {usingDemoData ? <p className="mb-3 rounded-[18px] bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">当前会话尚未完成数据库接入。</p> : null}
         {error ? <p className="mb-3 rounded-[18px] bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">{error}</p> : null}
-        <div className="rounded-[24px] border border-border bg-background px-4 py-3">
+        <div className="rounded-[24px] border border-border bg-background px-4 py-3 max-sm:rounded-[20px]">
           <textarea
             ref={textareaRef}
             value={draft}
@@ -240,19 +252,17 @@ export function MessageThreadPanel({ conversation, currentUserId, usingDemoData,
               </button>
               {showEmojiPanel ? (
                 <div className="absolute bottom-[calc(100%+12px)] left-0 z-20 w-[260px] rounded-2xl border border-border bg-background p-3 shadow-2xl">
-                  <div className="mb-2 text-xs text-muted-foreground">选择一个表情</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {EMOJI_OPTIONS.map((emoji) => (
-                      <button
-                        key={emoji.value}
-                        type="button"
-                        className="rounded-xl bg-secondary/40 px-3 py-2 text-lg transition hover:bg-accent"
-                        onClick={() => insertEmoji(emoji.value)}
-                      >
-                        {emoji.label}
-                      </button>
-                    ))}
-                  </div>
+                  <EmojiPicker
+                    items={EMOJI_OPTIONS.map((emoji) => ({
+                      key: emoji.value,
+                      value: emoji.value,
+                      icon: emoji.value,
+                      label: emoji.label,
+                    }))}
+                    columns={5}
+                    panelClassName="space-y-2"
+                    onSelect={(value) => insertEmoji(value)}
+                  />
                 </div>
               ) : null}
             </div>

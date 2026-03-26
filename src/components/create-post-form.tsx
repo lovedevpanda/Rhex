@@ -84,9 +84,11 @@ import { PostViewLevelModal } from "@/components/post-view-level-modal"
 import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
 
 import { DEFAULT_ALLOWED_POST_TYPES, DEFAULT_POST_TYPE, type LocalPostType } from "@/lib/post-types"
+
 
 
 
@@ -266,7 +268,9 @@ function BoardSelectField({
 interface CreatePostFormProps {
   boardOptions: CreatePostFormBoardGroup[]
   pointName: string
+  markdownEmojiMap?: MarkdownEmojiItem[]
   currentUser: {
+
     username: string
     nickname: string | null
     level: number
@@ -348,7 +352,8 @@ function HiddenConfigChip({
   )
 }
 
-export function CreatePostForm({ boardOptions, pointName, currentUser, mode = "create", postId, successSlug, initialValues }: CreatePostFormProps) {
+export function CreatePostForm({ boardOptions, pointName, markdownEmojiMap, currentUser, mode = "create", postId, successSlug, initialValues }: CreatePostFormProps) {
+
   const router = useRouter()
   const [title, setTitle] = useState(initialValues?.title ?? "")
   const [content, setContent] = useState(initialValues?.content ?? "")
@@ -829,7 +834,8 @@ export function CreatePostForm({ boardOptions, pointName, currentUser, mode = "c
             <p className="text-sm font-medium">公开正文</p>
             <p className="text-xs text-muted-foreground">请遵守社区规则，文明发帖！</p>
           </div>
-          <RefinedRichPostEditor value={content} onChange={setContent} placeholder="文明社区，文明发言。支持 Markdown 语法。" />
+          <RefinedRichPostEditor value={content} onChange={setContent} placeholder="文明社区，文明发言。支持 Markdown 语法。" markdownEmojiMap={markdownEmojiMap} />
+
         </div>
 
         <div className="rounded-[24px] border border-border bg-card px-4 py-3">
@@ -883,6 +889,8 @@ export function CreatePostForm({ boardOptions, pointName, currentUser, mode = "c
 
       <HiddenContentModal
         open={activeModal === "reply"}
+
+
         title="配置回复后可看"
         description="用户在本帖回复 1 次后即可解锁。详细说明已收进这里，页面主区域只保留一行入口。"
         value={replyUnlockContent}

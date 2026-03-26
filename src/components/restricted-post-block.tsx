@@ -4,8 +4,10 @@ import { useState } from "react"
 
 import { MarkdownContent } from "@/components/markdown-content"
 import { PurchaseUnlockButton } from "@/components/purchase-unlock-button"
+import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 
 interface RestrictedPostBlockProps {
+
   type: "AUTHOR_ONLY" | "REPLY_UNLOCK" | "PURCHASE_UNLOCK"
   postId: string
   blockId: string
@@ -17,9 +19,11 @@ interface RestrictedPostBlockProps {
   price?: number
   userReplyCount?: number
   isOwnerOrAdmin?: boolean
+  markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
-function UnlockedContentFrame({ title, content }: { title: string; content: string }) {
+function UnlockedContentFrame({ title, content }: { title: string; content: string; markdownEmojiMap?: MarkdownEmojiItem[] }) {
+
   return (
     <div className="rounded-[20px] border border-border bg-secondary/35 p-5">
       <div className="mb-3 text-sm font-medium text-foreground">{title}</div>
@@ -28,7 +32,8 @@ function UnlockedContentFrame({ title, content }: { title: string; content: stri
   )
 }
 
-export function RestrictedPostBlock({ type, postId, blockId, text, visible, currentUserId, pointName, replyThreshold, price, userReplyCount = 0, isOwnerOrAdmin = false }: RestrictedPostBlockProps) {
+export function RestrictedPostBlock({ type, postId, blockId, text, visible, currentUserId, pointName, replyThreshold, price, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
+
   const [scrolling, setScrolling] = useState(false)
 
   function scrollToReplyBox() {
@@ -40,7 +45,8 @@ export function RestrictedPostBlock({ type, postId, blockId, text, visible, curr
 
 
   if (visible && text) {
-    return <UnlockedContentFrame title={type === "REPLY_UNLOCK" ? "回复后已解锁内容" : "购买后已解锁内容"} content={text} />
+    return <UnlockedContentFrame title={type === "REPLY_UNLOCK" ? "回复后已解锁内容" : "购买后已解锁内容"} content={text} markdownEmojiMap={markdownEmojiMap} />
+
   }
 
   if (type === "AUTHOR_ONLY") {

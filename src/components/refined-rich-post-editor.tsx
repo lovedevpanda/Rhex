@@ -1,12 +1,18 @@
 "use client"
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+
+
 import { createPortal } from "react-dom"
 
 import { Bold, Heading2, Highlighter, ImageIcon, Maximize2, Minimize2, Quote, Smile, Video } from "lucide-react"
 
+import { EmojiPicker } from "@/components/emoji-picker"
 import { MarkdownContent } from "@/components/markdown-content"
-import { EMOJI_OPTIONS } from "@/lib/emoji"
+import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
+import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
+
+
 
 interface RefinedRichPostEditorProps {
   value: string
@@ -15,7 +21,9 @@ interface RefinedRichPostEditorProps {
   minHeight?: number
   disabled?: boolean
   uploadFolder?: string
+  markdownEmojiMap?: MarkdownEmojiItem[]
 }
+
 
 type MediaInsertResult = {
   template: string
@@ -127,7 +135,9 @@ export function RefinedRichPostEditor({
   minHeight = 240,
   disabled = false,
   uploadFolder = "posts",
+  markdownEmojiMap: externalMarkdownEmojiMap,
 }: RefinedRichPostEditorProps) {
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const mediaPanelRef = useRef<HTMLDivElement | null>(null)
@@ -147,10 +157,16 @@ export function RefinedRichPostEditor({
   const [mediaPanelPosition, setMediaPanelPosition] = useState<FloatingPanelPosition | null>(null)
   const [emojiPanelPosition, setEmojiPanelPosition] = useState<FloatingPanelPosition | null>(null)
   const [isClient, setIsClient] = useState(false)
+  const [isMediaPanelReady, setIsMediaPanelReady] = useState(false)
+  const [isEmojiPanelReady, setIsEmojiPanelReady] = useState(false)
+  const markdownEmojiMap = useMarkdownEmojiMap(externalMarkdownEmojiMap)
+
+
   const contentMinHeight = isFullscreen ? "calc(100vh - 220px)" : minHeight
 
 
   const mediaHint = useMemo(() => {
+
     if (!mediaUrl.trim()) {
       return "粘贴视频或音频地址，将插入可解析媒体标记。"
     }
@@ -162,6 +178,11 @@ export function RefinedRichPostEditor({
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+
+
+
+
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -219,17 +240,41 @@ export function RefinedRichPostEditor({
 
   const syncFloatingPanels = useCallback(() => {
     if (showMediaPanel) {
-      setMediaPanelPosition(updateFloatingPanelPosition(mediaButtonRef.current, mediaPanelRef.current, 320))
+      const nextMediaPosition = updateFloatingPanelPosition(mediaButtonRef.current, mediaPanelRef.current, 320)
+      setMediaPanelPosition(nextMediaPosition)
+      setIsMediaPanelReady(Boolean(nextMediaPosition && mediaPanelRef.current?.offsetHeight))
+    } else {
+      setMediaPanelPosition(null)
+      setIsMediaPanelReady(false)
     }
+
     if (showEmojiPanel) {
-      setEmojiPanelPosition(updateFloatingPanelPosition(emojiButtonRef.current, emojiPanelRef.current, 260))
+      const nextEmojiPosition = updateFloatingPanelPosition(emojiButtonRef.current, emojiPanelRef.current, 260)
+      setEmojiPanelPosition(nextEmojiPosition)
+      setIsEmojiPanelReady(Boolean(nextEmojiPosition && emojiPanelRef.current?.offsetHeight))
+    } else {
+      setEmojiPanelPosition(null)
+      setIsEmojiPanelReady(false)
     }
   }, [showEmojiPanel, showMediaPanel, updateFloatingPanelPosition])
 
-
   useLayoutEffect(() => {
+    if (!showMediaPanel && !showEmojiPanel) {
+      return
+    }
+
     syncFloatingPanels()
-  }, [syncFloatingPanels])
+
+    const frameId = window.requestAnimationFrame(() => {
+      syncFloatingPanels()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [showEmojiPanel, showMediaPanel, syncFloatingPanels])
+
+
 
   useEffect(() => {
     if (!showMediaPanel && !showEmojiPanel) {
@@ -485,7 +530,8 @@ export function RefinedRichPostEditor({
             ) : (
               <div className="min-w-0 overflow-y-auto" style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}>
 
-                <MarkdownContent content={value} emptyText="暂无预览内容" />
+                <MarkdownContent content={value} emptyText="暂无预览内容" markdownEmojiMap={markdownEmojiMap} />
+
               </div>
             )}
 
@@ -554,8 +600,12 @@ export function RefinedRichPostEditor({
             top: mediaPanelPosition.top,
             width: mediaPanelPosition.width,
             maxHeight: mediaPanelPosition.maxHeight,
+            opacity: isMediaPanelReady ? 1 : 0,
+            pointerEvents: isMediaPanelReady ? "auto" : "none",
           }}
+          aria-hidden={!isMediaPanelReady}
         >
+
 
           <div className="mb-3 space-y-1">
             <div className="text-sm font-medium text-foreground">插入媒体</div>
@@ -601,26 +651,26 @@ export function RefinedRichPostEditor({
             top: emojiPanelPosition.top,
             width: emojiPanelPosition.width,
             maxHeight: emojiPanelPosition.maxHeight,
+            opacity: isEmojiPanelReady ? 1 : 0,
+            pointerEvents: isEmojiPanelReady ? "auto" : "none",
           }}
+          aria-hidden={!isEmojiPanelReady}
         >
 
-          <div className="mb-2 text-xs text-muted-foreground">选择一个表情</div>
-          <div className="grid grid-cols-5 gap-2">
-            {EMOJI_OPTIONS.map((emoji) => (
-              <button
-                key={emoji.value}
-                type="button"
-                className="rounded-xl bg-secondary/40 px-3 py-2 text-lg transition hover:bg-accent"
-                onClick={() => {
-                  applyWrap(`${emoji.value} `)
-                  setShowEmojiPanel(false)
-                }}
 
-              >
-                {emoji.label}
-              </button>
-            ))}
-          </div>
+          <EmojiPicker
+            items={markdownEmojiMap.map((emoji) => ({
+              key: emoji.shortcode,
+              value: emoji.shortcode,
+              icon: emoji.icon,
+              label: emoji.label,
+            }))}
+            onSelect={(shortcode) => {
+              applyWrap(`:${shortcode}: `)
+              setShowEmojiPanel(false)
+            }}
+          />
+
         </div>,
         document.body,
       ) : null}

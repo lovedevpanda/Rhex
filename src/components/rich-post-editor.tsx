@@ -1,9 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import {  useCallback, useMemo, useRef, useState } from "react"
 import { ImagePlus, List, ListOrdered, SmilePlus, Table2, TextQuote } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { DEFAULT_MARKDOWN_EMOJI_ITEMS, type MarkdownEmojiItem } from "@/lib/markdown-emoji"
+
+
 
 interface RichPostEditorProps {
   value: string
@@ -34,8 +37,9 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const selectionRef = useRef({ start: 0, end: 0 })
   const [uploading, setUploading] = useState(false)
-
+  const [markdownEmojiMap] = useState<MarkdownEmojiItem[]>(DEFAULT_MARKDOWN_EMOJI_ITEMS)
   const [message, setMessage] = useState("")
+
 
   const stats = useMemo(() => ({
     chars: value.length,
@@ -107,6 +111,8 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
 
 
 
+
+
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) {
@@ -170,12 +176,27 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
           <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
         <Button type="button" variant="outline" onClick={() => insertTemplate("## 小标题")}>小标题</Button>
-        <Button type="button" variant="outline" onMouseDown={handleToolbarMouseDown} onClick={() => applyWrap(":grinning: :fire: :100: ")}>
+        <Button type="button" variant="outline" onMouseDown={handleToolbarMouseDown} onClick={() => applyWrap(`:${markdownEmojiMap[0]?.shortcode ?? "smile"}: :${markdownEmojiMap[1]?.shortcode ?? "heart"}: :${markdownEmojiMap[2]?.shortcode ?? "rocket"}: `)}>
           <SmilePlus className="mr-1 h-4 w-4" />
           常用表情
         </Button>
+        {markdownEmojiMap.slice(0, 8).map((emoji) => (
+          <Button
+            key={emoji.shortcode}
+            type="button"
+            variant="outline"
+            className="gap-1.5"
+            onMouseDown={handleToolbarMouseDown}
+            onClick={() => applyWrap(`:${emoji.shortcode}: `)}
+            title={`${emoji.label}（:${emoji.shortcode}:）`}
+          >
+            <span>{emoji.icon}</span>
+            <span className="max-w-16 truncate text-xs">{emoji.label}</span>
+          </Button>
+        ))}
 
       </div>
+
 
       <textarea
         ref={textareaRef}

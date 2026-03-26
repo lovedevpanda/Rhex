@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache"
 import { NextResponse } from "next/server"
 
 import { requireAdminUser } from "@/lib/admin"
@@ -12,6 +13,7 @@ import {
   normalizeHeatThresholds,
   normalizeTippingAmounts,
 } from "@/lib/shared/normalizers"
+import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/markdown-emoji"
 
 async function getOrCreateSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })
@@ -85,7 +87,29 @@ export async function POST(request: Request) {
       },
     })
 
+    revalidatePath("/")
+    revalidatePath("/write")
+    revalidatePath("/admin")
+
     return NextResponse.json({ code: 0, message: "基础信息已保存", data: settings })
+  }
+
+  if (section === "site-markdown-emoji") {
+    const markdownEmojiMap = normalizeMarkdownEmojiItems(body.markdownEmojiMap)
+    const markdownEmojiMapJson = serializeMarkdownEmojiItems(markdownEmojiMap)
+
+    await prisma.$executeRaw`
+      UPDATE "SiteSetting"
+      SET "markdownEmojiMapJson" = ${markdownEmojiMapJson},
+          "updatedAt" = NOW()
+      WHERE "id" = ${existing.id}
+    `
+
+    revalidatePath("/")
+    revalidatePath("/write")
+    revalidatePath("/admin")
+
+    return NextResponse.json({ code: 0, message: "Markdown 表情已保存" })
   }
 
   if (section === "site-footer-links") {

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 
 interface CommentFormProps {
   postId: string
@@ -16,9 +17,10 @@ interface CommentFormProps {
   onCancel?: () => void
   disabledMessage?: string | null
   commentsVisibleToAuthorOnly?: boolean
+  markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
-export function CommentForm({ postId, parentId, replyToUserName, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false }: CommentFormProps) {
+export function CommentForm({ postId, parentId, replyToUserName, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false, markdownEmojiMap }: CommentFormProps) {
 
   const router = useRouter()
   const pathname = usePathname()
@@ -115,6 +117,7 @@ export function CommentForm({ postId, parentId, replyToUserName, compact = false
         disabled={Boolean(disabledMessage)}
         minHeight={compact ? 120 : 180}
         uploadFolder="comments"
+        markdownEmojiMap={markdownEmojiMap}
         placeholder={replyToUserName ? `回复 @${replyToUserName}…` : "写下你的回复…支持 @用户名 提及"}
       />
       <div className="flex items-center justify-between gap-3">

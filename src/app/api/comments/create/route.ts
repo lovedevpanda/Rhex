@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { countRootCommentsByPostId, createCommentWithRelations, findCommentAuthorByUserId, findCommentParentById } from "@/db/comment-queries"
+import { countRootCommentsByPostId, createCommentWithRelations, findCommentAuthorByUserId, findCommentParentById, findRootCommentPageById } from "@/db/comment-queries"
+
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
 import { extractMentionUsernames, findMentionUsers } from "@/lib/comment-mentions"
@@ -103,11 +104,19 @@ export async function POST(request: Request) {
     })
 
 
-    const totalRootComments = await countRootCommentsByPostId(postId)
     const pageSize = 15
-    const lastPage = Math.max(1, Math.ceil(totalRootComments / pageSize))
+    const totalRootComments = normalizedParentId ? null : await countRootCommentsByPostId(postId)
+    const targetPage = normalizedParentId
+      ? await findRootCommentPageById({
+          postId,
+          rootCommentId: normalizedParentId,
+          pageSize,
+          sort: "oldest",
+        })
+      : Math.max(1, Math.ceil((totalRootComments ?? 0) / pageSize))
 
     await evaluateUserLevelProgress(user.id)
+
     await enrollUserInLotteryPool({ postId, userId: user.id, replyCommentId: created.id }).catch(() => null)
 
     return NextResponse.json({
@@ -117,10 +126,11 @@ export async function POST(request: Request) {
       data: {
         id: created.id,
         navigation: {
-          page: lastPage,
+          page: targetPage,
           sort: "oldest",
           anchor: `comment-${created.id}`,
         },
+
       },
     })
   } catch (error) {

@@ -4,7 +4,9 @@ import Link from "next/link"
 
 const settingSections = [
   { key: "profile", label: "基础信息" },
+  { key: "markdown-emoji", label: "Markdown 表情" },
   { key: "footer-links", label: "页脚导航" },
+
   { key: "registration", label: "注册与邀请" },
   { key: "interaction", label: "互动与热度" },
   { key: "friend-links", label: "友情链接" },

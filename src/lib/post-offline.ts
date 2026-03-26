@@ -67,7 +67,6 @@ export async function offlineOwnPost(input: { postId: string; reason?: string | 
   }
 
   const settings = await getSiteSettings()
-  const price = resolvePostOfflinePrice(currentUser, settings)
   const reason = String(input.reason ?? "").trim()
 
   const result = await prisma.$transaction(async (tx) => {

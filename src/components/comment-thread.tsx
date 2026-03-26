@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button"
 import { VipBadge } from "@/components/vip-badge"
 
 import type { SiteCommentItem } from "@/lib/comments"
+import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
+
 
 interface CommentThreadProps {
   comments: SiteCommentItem[]
@@ -31,11 +33,14 @@ interface CommentThreadProps {
   commentsVisibleToAuthorOnly?: boolean
   isAdmin?: boolean
   canPinComment?: boolean
+  markdownEmojiMap?: MarkdownEmojiItem[]
 }
+
 
 const INITIAL_VISIBLE_REPLIES = 10
 
-export function CommentThread({ comments, postId, canReply, currentPage, pageSize, total, currentSort, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, isAdmin = false, canPinComment = false }: CommentThreadProps) {
+export function CommentThread({ comments, postId, canReply, currentPage, pageSize, total, currentSort, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, isAdmin = false, canPinComment = false, markdownEmojiMap }: CommentThreadProps) {
+
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [submittingAnswerId, setSubmittingAnswerId] = useState<string | null>(null)
   const [pinningCommentId, setPinningCommentId] = useState<string | null>(null)
@@ -135,8 +140,9 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
 
       {comments.map((comment, index) => {
         const isExpanded = expandedReplies[comment.id] ?? false
-        const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, 2)
+        const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, INITIAL_VISIBLE_REPLIES)
         const canAcceptCurrentComment = canAcceptAnswer && !comment.isAcceptedAnswer && currentUserId !== comment.authorId
+
         const isRestrictedCommentAuthor = comment.authorStatus === "BANNED" || comment.authorStatus === "MUTED"
         const commentActions = [
           ...(canPinComment
@@ -388,7 +394,9 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
             replyToUserName={replyTarget?.replyToUserName}
             onCancel={() => setReplyTarget(null)}
             commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly}
+            markdownEmojiMap={markdownEmojiMap}
           />
+
         </div>
       ) : null}
     </div>

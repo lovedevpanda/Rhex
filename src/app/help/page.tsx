@@ -3,7 +3,9 @@ import Link from "next/link"
 import { ArrowRight, BookOpen, CheckCircle2, Crown, Gem, HelpCircle, MessageSquareText, PenSquare, Search, ShieldCheck, Sparkles, Star, UserPlus } from "lucide-react"
 
 import { SiteHeader } from "@/components/site-header"
+import { LevelIcon } from "@/components/level-icon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
 import { getFeaturedBoards } from "@/lib/boards"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -218,8 +220,9 @@ export default async function HelpPage() {
               <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {featuredBoards.map((board) => (
                   <Link key={board.id} href={`/boards/${board.slug}`} className="flex items-center gap-3 rounded-[20px] border border-border bg-background px-4 py-3 transition-colors hover:bg-accent">
-                    <span className="text-xl leading-none">{board.icon}</span>
+                    <LevelIcon icon={board.icon} className="h-5 w-5 text-xl leading-none" svgClassName="[&>svg]:block" />
                     <div className="min-w-0">
+
                       <div className="truncate text-sm font-medium">{board.name}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{board.count} 篇帖子</div>
                     </div>

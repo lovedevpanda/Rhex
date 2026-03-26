@@ -3,7 +3,9 @@ import Link from "next/link"
 import { ArrowRight, Compass, HeartHandshake, LibraryBig, MessageSquareText, Sparkles } from "lucide-react"
 
 import { SiteHeader } from "@/components/site-header"
+import { LevelIcon } from "@/components/level-icon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
 import { getBoards } from "@/lib/boards"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -117,9 +119,10 @@ export default async function AboutPage() {
                   className="flex flex-col gap-2 rounded-[24px] border border-border bg-card px-4 py-4 transition-transform duration-200 hover:-translate-y-0.5 hover:bg-accent"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl leading-none">{board.icon}</span>
+                    <LevelIcon icon={board.icon} className="h-6 w-6 text-2xl leading-none" svgClassName="[&>svg]:block" />
                     <span className="text-sm font-medium text-foreground">{board.name}</span>
                   </div>
+
                   <p className="line-clamp-2 text-xs leading-6 text-muted-foreground">{board.description}</p>
                   <span className="text-xs text-muted-foreground">{board.count} 篇帖子</span>
                 </Link>

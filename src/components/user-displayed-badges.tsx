@@ -1,4 +1,6 @@
+import { LevelIcon } from "@/components/level-icon"
 import { cn } from "@/lib/utils"
+
 
 export interface DisplayedBadgeItem {
   id: string
@@ -33,8 +35,9 @@ export function UserDisplayedBadges({ badges = [], compact = false }: UserDispla
             backgroundColor: `${badge.color}12`,
           }}
         >
-          {badge.iconText || "🏅"}
+          <LevelIcon icon={badge.iconText} color={badge.color} className={compact ? "h-3 w-3 text-[12px]" : "h-3.5 w-3.5 text-[14px]"} emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
         </span>
+
       ))}
     </div>
   )

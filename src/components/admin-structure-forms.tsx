@@ -6,9 +6,13 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 
 import { useRouter } from "next/navigation"
 
+import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
 import { AdminModal } from "@/components/admin-modal"
+import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+
+
 
 import type { BoardItem, ZoneItem } from "@/lib/admin-structure-management"
 import { DEFAULT_ALLOWED_POST_TYPES, normalizePostTypes } from "@/lib/post-types"
@@ -155,9 +159,10 @@ export function StructureManager({ zones, boards, initialFilters }: StructureMan
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span>{zone.icon}</span>
+                        <LevelIcon icon={zone.icon} className="h-4 w-4 text-sm" svgClassName="[&>svg]:block" />
                         <span className="truncate text-sm font-semibold">{zone.name}</span>
                       </div>
+
                       <p className="mt-1 truncate text-[11px] text-muted-foreground">/{zone.slug} · 排序 {zone.sortOrder}</p>
                     </div>
                     <span className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{zone.boards.length} 节点</span>
@@ -249,9 +254,10 @@ function BoardRow({ board, onEdit }: { board: BoardItem; onEdit: () => void }) {
     <div className="grid items-center gap-3 border-b border-border px-4 py-3 text-xs last:border-b-0 lg:grid-cols-[minmax(0,1.3fr)_120px_120px_160px_230px]">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-base">{board.icon || "💬"}</span>
+          <LevelIcon icon={board.icon} className="h-4 w-4 text-base" svgClassName="[&>svg]:block" />
           <span className="truncate text-sm font-semibold">{board.name}</span>
         </div>
+
         <p className="mt-1 truncate text-[11px] text-muted-foreground">所属分区：{board.zoneName ?? "未分配"} · 排序 {board.sortOrder}</p>
       </div>
 
@@ -550,7 +556,17 @@ function StructureModal({ modal, zones, onClose }: { modal: ModalMode; zones: Zo
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={isBoard ? "节点名称" : "分区名称"} value={name} onChange={setName} placeholder={isBoard ? "如 摄影" : "如 生活方式"} />
           <Field label="标识 slug" value={slug} onChange={setSlug} placeholder={isBoard ? "如 camera" : "如 lifestyle"} />
-          <Field label="图标" value={icon} onChange={setIcon} placeholder={isBoard ? "如 📷" : "如 🌿"} />
+          <AdminIconPickerField
+            label="图标"
+            value={icon}
+            onChange={setIcon}
+            popoverTitle={isBoard ? "选择节点图标" : "选择分区图标"}
+            containerClassName="space-y-2 md:col-span-2"
+            triggerClassName="flex h-11 w-full items-center gap-3 rounded-full border border-border bg-background px-4 text-left text-sm transition-colors hover:bg-accent"
+            textareaRows={4}
+          />
+
+
           <Field label="排序" value={sortOrder} onChange={setSortOrder} placeholder="数字越小越靠前" />
         </div>
 
@@ -640,6 +656,8 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+
+
   return (
     <label className="flex h-11 items-center justify-between rounded-full border border-border bg-background px-4 text-sm">
       <span>{label}</span>

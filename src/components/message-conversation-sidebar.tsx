@@ -13,9 +13,10 @@ interface MessageConversationSidebarProps {
   activeConversationId?: string
   deletingConversationId?: string
   onDeleteConversation: (conversationId: string) => void
+  mobileHidden?: boolean
 }
 
-export function MessageConversationSidebar({ conversations, activeConversationId, deletingConversationId, onDeleteConversation }: MessageConversationSidebarProps) {
+export function MessageConversationSidebar({ conversations, activeConversationId, deletingConversationId, onDeleteConversation, mobileHidden = false }: MessageConversationSidebarProps) {
   const router = useRouter()
   const listRef = useRef<HTMLDivElement | null>(null)
   const [keyword, setKeyword] = useState("")
@@ -44,8 +45,14 @@ export function MessageConversationSidebar({ conversations, activeConversationId
   }
 
   return (
-    <div className="flex h-full max-h-[calc(100vh-164px)] min-h-[calc(100vh-164px)] flex-col overflow-hidden rounded-[24px] border border-border bg-card shadow-soft">
-      <div className="border-b border-border px-4 py-3.5">
+    <div
+      className={cn(
+        "flex h-full max-h-[calc(100vh-164px)] min-h-[calc(100vh-164px)] flex-col overflow-hidden rounded-[24px] border border-border bg-card shadow-soft",
+        "max-sm:min-h-[calc(100dvh-56px)] max-sm:max-h-[calc(100dvh-56px)] max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:shadow-none",
+        mobileHidden ? "hidden xl:flex" : "flex",
+      )}
+    >
+      <div className="border-b border-border px-4 py-3.5 max-sm:px-4 max-sm:pt-4 max-sm:pb-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Message Center</p>
@@ -64,7 +71,7 @@ export function MessageConversationSidebar({ conversations, activeConversationId
         </div>
       </div>
 
-      <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto p-2.5">
+      <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto p-2.5 max-sm:px-3 max-sm:pb-[calc(env(safe-area-inset-bottom)+12px)] max-sm:pt-3">
         {filteredConversations.length === 0 ? <p className="px-3 py-8 text-sm text-muted-foreground">没有匹配的会话。</p> : null}
         {filteredConversations.map((conversation) => {
           const active = conversation.id === activeConversationId

@@ -22,7 +22,7 @@ interface MessagesClientProps {
 export function MessagesClient({ currentUser, initialData, conversationId }: MessagesClientProps) {
   const router = useRouter()
   const reconnectTimerRef = useRef<number | null>(null)
-  const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "closed">("connecting")
+  const connectionStateRef = useRef<"connecting" | "connected" | "closed">("connecting")
   const [deletingConversationId, setDeletingConversationId] = useState("")
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState("")
@@ -179,14 +179,14 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
 
   useEffect(() => {
     if (!currentUser || !data || data.usingDemoData) {
-      setConnectionState("closed")
+      connectionStateRef.current = "closed"
       return
     }
 
     const eventSource = new EventSource("/api/messages/stream")
 
     eventSource.onopen = () => {
-      setConnectionState("connected")
+      connectionStateRef.current = "connected"
     }
 
     eventSource.onmessage = (event) => {
@@ -208,7 +208,7 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
     }
 
     eventSource.onerror = () => {
-      setConnectionState("connecting")
+      connectionStateRef.current = "connecting"
       eventSource.close()
 
       if (reconnectTimerRef.current) {
@@ -225,13 +225,15 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
         window.clearTimeout(reconnectTimerRef.current)
       }
 
-      setConnectionState("closed")
+      connectionStateRef.current = "closed"
       eventSource.close()
     }
   }, [activeConversationId, conversationId, currentUser, data, router])
 
+  const isMobileThreadVisible = Boolean(data?.activeConversation)
+
   return (
-    <main className="mx-auto max-w-[1240px] px-4 py-4 lg:px-5 lg:py-5">
+    <main className="mx-auto max-w-[1240px] px-0 py-0 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
       {!currentUser ? (
         <Card>
           <CardHeader>
@@ -246,24 +248,14 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
         </Card>
       ) : !data ? null : (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className={isMobileThreadVisible ? "hidden sm:mb-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3" : "mb-4 flex flex-wrap items-center justify-between gap-3"}>
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Facebook Style Inbox</p>
               <h1 className="mt-2 flex items-center gap-2 text-3xl font-semibold">
                 <MessageSquareMore className="h-7 w-7" />
                 站内私信
               </h1>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground shadow-soft">
-                当前会话 {data.conversations.length} 个
-              </div>
-              {!data.usingDemoData ? (
-                <div className="rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground shadow-soft">
-                  {connectionState === "connected" ? "实时已连接" : connectionState === "connecting" ? "实时连接中" : "实时已关闭"}
-                </div>
-              ) : null}
-            </div>
+    
           </div>
 
           <div className="grid items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -272,16 +264,20 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
               activeConversationId={data.activeConversation?.id}
               deletingConversationId={deletingConversationId}
               onDeleteConversation={handleDeleteConversation}
+              mobileHidden={isMobileThreadVisible}
             />
-            <MessageThreadPanel
-              conversation={data.activeConversation}
-              currentUserId={currentUser.id}
-              usingDemoData={data.usingDemoData}
-              onMessageSent={handleLocalMessageSent}
-              onLoadHistory={handleLoadHistory}
-              loadingHistory={loadingHistory}
-              historyError={historyError}
-            />
+            <div className={isMobileThreadVisible ? "block" : "hidden xl:block"}>
+              <MessageThreadPanel
+                conversation={data.activeConversation}
+                currentUserId={currentUser.id}
+                usingDemoData={data.usingDemoData}
+                onMessageSent={handleLocalMessageSent}
+                onLoadHistory={handleLoadHistory}
+                loadingHistory={loadingHistory}
+                historyError={historyError}
+                onBack={data.activeConversation ? () => router.push("/messages", { scroll: false }) : undefined}
+              />
+            </div>
           </div>
         </>
       )}

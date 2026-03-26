@@ -995,6 +995,7 @@ model SiteSetting {
   uploadAllowedImageTypes       String   @default("jpg,jpeg,png,gif,webp")
   uploadMaxFileSizeMb           Int      @default(5)
   uploadAvatarMaxFileSizeMb     Int      @default(2)
+  markdownEmojiMapJson          String?  @default("[]")
   appStateJson               String?  @default("{}")
   footerLinksJson               String?  @default("[{\"label\":\"关于\",\"href\":\"/about\"},{\"label\":\"小黑屋\",\"href\":\"/prison\"},{\"label\":\"帮助文档\",\"href\":\"/help\"},{\"label\":\"FAQ\",\"href\":\"/faq\"},{\"label\":\"协议\",\"href\":\"/terms\"}]")
   createdAt                     DateTime @default(now())

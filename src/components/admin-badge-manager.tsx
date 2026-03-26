@@ -4,7 +4,10 @@ import { useMemo, useState, useTransition } from "react"
 import { BadgeRuleOperator, BadgeRuleType } from "@/db/types"
 import { Pencil, Plus, Save, Trash2 } from "lucide-react"
 
+import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
+import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/button"
+
 
 type BadgeRuleFormItem = {
   id?: string
@@ -260,8 +263,9 @@ export function AdminBadgeManager({ initialBadges }: AdminBadgeManagerProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl" style={{ backgroundColor: `${badge.color}18`, color: badge.color }}>
-                        {badge.iconText || "🏅"}
+                        <LevelIcon icon={badge.iconText} color={badge.color} className="h-5 w-5 text-[20px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                       </div>
+
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-semibold">{badge.name}</p>
@@ -313,7 +317,17 @@ export function AdminBadgeManager({ initialBadges }: AdminBadgeManagerProps) {
                 <Field label="勋章名称" value={editingBadge.name} onChange={(value) => updateBadge(editingIndex!, { name: value })} placeholder="如 论坛先锋" />
                 <Field label="唯一标识" value={editingBadge.code} onChange={(value) => updateBadge(editingIndex!, { code: value.replace(/\s+/g, "_") })} placeholder="如 forum_pioneer" />
                 <Field label="分类" value={editingBadge.category} onChange={(value) => updateBadge(editingIndex!, { category: value })} placeholder="如 社区成就" />
-                <Field label="图标 Emoji" value={editingBadge.iconText} onChange={(value) => updateBadge(editingIndex!, { iconText: value })} placeholder="🏅" />
+                <AdminIconPickerField
+                  label="图标"
+                  value={editingBadge.iconText}
+                  onChange={(value) => updateBadge(editingIndex!, { iconText: value })}
+                  previewColor={editingBadge.color}
+                  popoverTitle="选择勋章图标"
+                  containerClassName="space-y-2"
+                  triggerClassName="flex h-11 w-full items-center gap-3 rounded-[18px] border border-border bg-background px-4 text-left text-sm transition-colors hover:bg-accent"
+                  textareaRows={4}
+                />
+
                 <div className="space-y-2">
                   <span className="text-sm font-medium">主题色</span>
                   <PopoverTriggerField value={editingBadge.color} previewColor={editingBadge.color} onClick={() => setColorPickerOpen((current) => !current)} />

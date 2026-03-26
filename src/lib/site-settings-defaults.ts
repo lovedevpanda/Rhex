@@ -78,6 +78,14 @@ export const defaultSiteSettingsCreateInput = {
   uploadAllowedImageTypes: "jpg,jpeg,png,gif,webp",
   uploadMaxFileSizeMb: 5,
   uploadAvatarMaxFileSizeMb: 2,
+  markdownEmojiMapJson: JSON.stringify([
+    { shortcode: "smile", label: "微笑", icon: "😀" },
+    { shortcode: "heart", label: "爱心", icon: "❤️" },
+    { shortcode: "rocket", label: "火箭", icon: "🚀" },
+    { shortcode: "fire", label: "火焰", icon: "🔥" },
+    { shortcode: "sparkles", label: "闪光", icon: "✨" },
+  ]),
   appStateJson: "{}",
+
 } as const
 

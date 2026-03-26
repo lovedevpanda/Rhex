@@ -100,7 +100,61 @@ export function countRootCommentsByPostId(postId: string) {
   })
 }
 
+export async function findRootCommentPageById(params: {
+  postId: string
+  rootCommentId: string
+  pageSize: number
+  sort: "oldest" | "newest"
+}) {
+  const rootComment = await prisma.comment.findFirst({
+    where: {
+      id: params.rootCommentId,
+      postId: params.postId,
+      status: "NORMAL",
+      parentId: null,
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      isPinnedByAuthor: true,
+    },
+  })
+
+  if (!rootComment) {
+    return 1
+  }
+
+  const precedingCount = await prisma.comment.count({
+    where: {
+      postId: params.postId,
+      status: "NORMAL",
+      parentId: null,
+      OR: rootComment.isPinnedByAuthor
+        ? [
+            { isPinnedByAuthor: true, createdAt: { lt: rootComment.createdAt } },
+            { isPinnedByAuthor: true, createdAt: rootComment.createdAt, id: { lt: rootComment.id } },
+          ]
+        : [
+            { isPinnedByAuthor: true },
+            { isPinnedByAuthor: false, createdAt: { lt: rootComment.createdAt } },
+            { isPinnedByAuthor: false, createdAt: rootComment.createdAt, id: { lt: rootComment.id } },
+          ],
+    },
+  })
+
+  const totalRootComments = await countRootCommentsByPostId(params.postId)
+  const oldestPage = Math.max(1, Math.ceil((precedingCount + 1) / params.pageSize))
+
+  if (params.sort === "oldest") {
+    return oldestPage
+  }
+
+  const newestIndex = totalRootComments - precedingCount
+  return Math.max(1, Math.ceil(newestIndex / params.pageSize))
+}
+
 export function findRootCommentsByPostId(params: {
+
   postId: string
   sort: "oldest" | "newest"
   page: number

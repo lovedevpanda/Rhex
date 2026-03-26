@@ -1,4 +1,7 @@
 import Link from "next/link"
+
+import { LevelIcon } from "@/components/level-icon"
+
 import { MessageCircle } from "lucide-react"
 
 import { UserAvatar } from "@/components/user-avatar"
@@ -83,9 +86,10 @@ export function ForumPostListItem({ item, showBoard = true, compactFirstItem = f
           {showBoard && item.boardSlug ? (
             <>
               <Link href={`/boards/${item.boardSlug}`} className="flex items-center gap-1 font-semibold hover:underline">
-                <span className="text-sm">{item.boardIcon || "💬"}</span>
+                <LevelIcon icon={item.boardIcon} className="h-3.5 w-3.5 text-sm" svgClassName="[&>svg]:block" />
                 <span>{item.boardName}</span>
               </Link>
+
               <span>•</span>
             </>
           ) : null}

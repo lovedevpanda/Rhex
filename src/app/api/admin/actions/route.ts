@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs"
 import { BoardStatus, CommentStatus, PostStatus, ReportStatus, UserRole, UserStatus } from "@/db/types"
 import { NextResponse } from "next/server"
 
@@ -93,6 +94,26 @@ export async function POST(request: Request) {
       await prisma.user.update({ where: { id: normalizedUserTargetId }, data: { points } })
       await writeAdminLog(admin.id, action, "USER", targetId, message || `管理员将用户积分调整为 ${points}`, requestIp)
       return NextResponse.json({ code: 0, message: "用户积分已更新" })
+    }
+    case "user.password.update": {
+      if (!normalizedUserTargetId) {
+        return NextResponse.json({ code: 400, message: "用户标识不合法" }, { status: 400 })
+      }
+      const newPassword = String(body.newPassword ?? "")
+      if (!newPassword) {
+        return NextResponse.json({ code: 400, message: "新密码不能为空" }, { status: 400 })
+      }
+      if (newPassword.length < 6 || newPassword.length > 64) {
+        return NextResponse.json({ code: 400, message: "新密码长度需为 6-64 位" }, { status: 400 })
+      }
+      const user = await prisma.user.findUnique({ where: { id: normalizedUserTargetId }, select: { id: true, username: true } })
+      if (!user) {
+        return NextResponse.json({ code: 404, message: "用户不存在" }, { status: 404 })
+      }
+      const passwordHash = await bcrypt.hash(newPassword, 10)
+      await prisma.user.update({ where: { id: normalizedUserTargetId }, data: { passwordHash } })
+      await writeAdminLog(admin.id, action, "USER", targetId, message || `管理员重置用户 @${user.username} 的密码`, requestIp)
+      return NextResponse.json({ code: 0, message: `用户 @${user.username} 的密码已更新` })
     }
     case "user.profile.note": {
       await writeAdminLog(admin.id, action, "USER", targetId, message || "管理员添加用户备注", requestIp)

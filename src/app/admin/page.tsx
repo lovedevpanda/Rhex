@@ -9,6 +9,7 @@ import { AdminBadgeManager } from "@/components/admin-badge-manager"
 import { AdminBasicSettingsForm } from "@/components/admin-basic-settings-form"
 import { AdminLevelSettingsForm } from "@/components/admin-level-settings-form"
 import { AdminLogCenter } from "@/components/admin-log-center"
+import { AdminMarkdownEmojiSettingsForm } from "@/components/admin-markdown-emoji-settings-form"
 import { AdminPostList } from "@/components/admin-post-list"
 import { AdminRedeemCodeManager } from "@/components/admin-redeem-code-manager"
 import { AdminReportCenter } from "@/components/admin-report-center"
@@ -277,6 +278,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         }))} /> : null}
         {tab === "announcements" ? <AdminAnnouncementManager initialItems={announcements} /> : null}
         {tab === "settings" && currentSettingsSection === "profile" ? <AdminBasicSettingsForm initialSettings={siteSettings} mode="profile" /> : null}
+        {tab === "settings" && currentSettingsSection === "markdown-emoji" ? <AdminMarkdownEmojiSettingsForm initialItems={siteSettings.markdownEmojiMap} /> : null}
         {tab === "settings" && currentSettingsSection === "footer-links" ? <AdminFooterLinksSettingsForm initialLinks={siteSettings.footerLinks} /> : null}
         {tab === "settings" && currentSettingsSection === "registration" ? <AdminBasicSettingsForm initialSettings={siteSettings} mode="registration" /> : null}
         {tab === "settings" && currentSettingsSection === "interaction" ? <AdminBasicSettingsForm initialSettings={siteSettings} mode="interaction" /> : null}

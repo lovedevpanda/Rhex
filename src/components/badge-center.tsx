@@ -2,7 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react"
 
+import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/button"
+
 
 interface BadgeCenterItem {
   id: string
@@ -164,8 +166,9 @@ export function BadgeCenter({ badges, isLoggedIn }: BadgeCenterProps) {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-14 w-14 items-center justify-center rounded-[22px] text-3xl" style={{ color: badge.color, backgroundColor: `${badge.color}14` }}>
-                      {badge.iconText || "🏅"}
+                      <LevelIcon icon={badge.iconText} color={badge.color} className="h-7 w-7 text-[28px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                     </div>
+
                     <div>
                       <p className="text-xs text-muted-foreground">{badge.category || "社区成就"}</p>
                       <h2 className="mt-1 text-lg font-semibold">{badge.name}</h2>

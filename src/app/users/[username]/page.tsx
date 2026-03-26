@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 
 import { ForumPostStream } from "@/components/forum-post-stream"
 import { LevelBadge } from "@/components/level-badge"
+import { LevelIcon } from "@/components/level-icon"
 import { ReportDialog } from "@/components/report-dialog"
 import { SiteHeader } from "@/components/site-header"
 import { UserAvatar } from "@/components/user-avatar"
@@ -122,7 +123,7 @@ export default async function UserPage({ params }: UserPageProps) {
                     {badgeItems.map((badge: (typeof badgeItems)[number]) => (
                       <div key={badge.id} className="rounded-xl p-2 text-center dark:bg-white/[0.02]">
                         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-lg" style={{ backgroundColor: `${badge.color}18`, color: badge.color }}>
-                          {badge.iconText || "🏅"}
+                          <LevelIcon icon={badge.iconText} color={badge.color} className="h-5 w-5 text-[18px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                         </div>
                         <p className="mt-2 line-clamp-1 text-xs font-medium" style={{ color: badge.color }}>{badge.name}</p>
                       </div>

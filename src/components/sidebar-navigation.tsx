@@ -1,5 +1,8 @@
 import Link from "next/link"
 
+import { LevelIcon } from "@/components/level-icon"
+
+
 interface SidebarZoneItem {
   id: string
   slug: string
@@ -49,9 +52,10 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
 
                 return (
                   <Link key={zone.id} href={`/zones/${zone.slug}`} className={`${baseItemClass} ${isActive ? activeItemClass : inactiveItemClass}`}>
-                    <span className="text-lg">{zone.icon}</span>
+                    <LevelIcon icon={zone.icon} className="h-4 w-4 text-lg" svgClassName="[&>svg]:block" />
                     <span>{zone.name}</span>
                   </Link>
+
                 )
               })}
             </nav>
@@ -70,9 +74,10 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
 
                 return (
                   <Link key={board.id} href={`/boards/${board.slug}`} className={`${baseItemClass} ${isActive ? activeItemClass : inactiveItemClass}`}>
-                    <span className="text-lg">{board.icon}</span>
+                    <LevelIcon icon={board.icon} className="h-4 w-4 text-lg" svgClassName="[&>svg]:block" />
                     <span className="truncate">{board.name}</span>
                   </Link>
+
                 )
               })}
             </nav>

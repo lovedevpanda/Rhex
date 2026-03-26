@@ -6,9 +6,11 @@ import { useMemo } from "react"
 
 import { AdminUserActionButton } from "@/components/admin-user-action-button"
 import { AdminUserModal } from "@/components/admin-user-modal"
+import { AdminUserPasswordModal } from "@/components/admin-user-password-modal"
 import { AdminUserStatusModal } from "@/components/admin-user-status-modal"
 import { AdminUserVipModal } from "@/components/admin-user-vip-modal"
 import { Button } from "@/components/ui/button"
+import { formatDateTime } from "@/lib/formatters"
 import type { AdminUserListResult } from "@/lib/admin-user-management"
 import { isVipActive } from "@/lib/vip-status"
 
@@ -106,7 +108,7 @@ export function AdminUserList({ data }: AdminUserListProps) {
       </div>
 
       <div className="overflow-hidden rounded-[22px] border border-border bg-card">
-        <div className="grid items-center gap-3 border-b border-border bg-secondary/40 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:grid-cols-[220px_120px_120px_120px_minmax(0,1fr)_260px]">
+        <div className="grid items-center gap-3 border-b border-border bg-secondary/40 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:grid-cols-[220px_120px_150px_150px_minmax(0,1fr)_320px]">
           <span>用户</span>
           <span>角色/状态</span>
           <span>等级/VIP</span>
@@ -123,7 +125,7 @@ export function AdminUserList({ data }: AdminUserListProps) {
           const canSetAdmin = user.role !== "ADMIN"
           const canDemote = user.role !== "USER"
           return (
-            <div key={user.id} className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-[220px_120px_120px_120px_minmax(0,1fr)_260px]">
+            <div key={user.id} className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-[220px_120px_150px_150px_minmax(0,1fr)_320px]">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-semibold text-sm">{user.displayName}</span>
@@ -142,13 +144,13 @@ export function AdminUserList({ data }: AdminUserListProps) {
               <div className="space-y-1 text-muted-foreground">
                 <div>Lv.{user.level}</div>
                 <div>{vipActive ? `VIP${user.vipLevel}` : "非 VIP"}</div>
-                <div>{user.vipExpiresAt ?? "长期 / 无"}</div>
+                <div>{user.vipExpiresAt ? formatDateTime(user.vipExpiresAt) : "长期 / 无"}</div>
               </div>
 
               <div className="space-y-1 text-muted-foreground">
                 <div>积分 {user.points}</div>
-                <div>注册 {user.createdAt.slice(0, 10)}</div>
-                <div>登录 {user.lastLoginAt ? user.lastLoginAt.slice(0, 10) : "从未"}</div>
+                <div>注册 {formatDateTime(user.createdAt)}</div>
+                <div>登录 {user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "从未"}</div>
               </div>
 
               <div className="grid gap-1 text-muted-foreground md:grid-cols-2 xl:grid-cols-3">
@@ -165,9 +167,10 @@ export function AdminUserList({ data }: AdminUserListProps) {
                 <AdminUserStatusModal userId={user.id} username={user.username} action="mute" />
                 <AdminUserStatusModal userId={user.id} username={user.username} action="ban" />
                 <AdminUserActionButton userId={user.id} action="user.activate" label="恢复" className="h-7 rounded-full px-2.5 text-xs" />
-                <AdminUserVipModal userId={user.id} username={user.username} vipLevel={user.vipLevel} vipExpiresAt={user.vipExpiresAt} />
                 {canPromoteModerator ? <AdminUserActionButton userId={user.id} action="user.promoteModerator" label="版主" className="h-7 rounded-full px-2.5 text-xs" /> : null}
                 {canSetAdmin ? <AdminUserActionButton userId={user.id} action="user.setAdmin" label="管理员" className="h-7 rounded-full px-2.5 text-xs" /> : null}
+                <AdminUserPasswordModal userId={user.id} username={user.username} displayName={user.displayName} />
+                <AdminUserVipModal userId={user.id} username={user.username} vipLevel={user.vipLevel} vipExpiresAt={user.vipExpiresAt} />
                 {canDemote ? <AdminUserActionButton userId={user.id} action="user.demoteToUser" label="降权" className="h-7 rounded-full px-2.5 text-xs" /> : null}
               </div>
             </div>

@@ -10,6 +10,7 @@ import {
   type FooterLinkItem,
 } from "@/lib/shared/config-parsers"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
+import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
 
 export type { FooterLinkItem } from "@/lib/shared/config-parsers"
 
@@ -87,6 +88,8 @@ export interface SiteSettingsData {
   uploadAllowedImageTypes: string[]
   uploadMaxFileSizeMb: number
   uploadAvatarMaxFileSizeMb: number
+  markdownEmojiMapJson?: string | null
+  markdownEmojiMap: Array<{ shortcode: string; label: string; icon: string }>
   appStateJson?: string | null
 }
 
@@ -162,6 +165,7 @@ function mapSiteSettings(record: {
   uploadAllowedImageTypes: string
   uploadMaxFileSizeMb: number
   uploadAvatarMaxFileSizeMb: number
+  markdownEmojiMapJson?: string | null
   appStateJson?: string | null
   friendLinksEnabled: boolean
   friendLinkApplicationEnabled: boolean
@@ -241,6 +245,7 @@ function mapSiteSettings(record: {
     uploadAllowedImageTypes: String(record.uploadAllowedImageTypes || "jpg,jpeg,png,gif,webp").split(/[，,\s]+/).map((item) => item.trim().toLowerCase()).filter(Boolean),
     uploadMaxFileSizeMb: record.uploadMaxFileSizeMb,
     uploadAvatarMaxFileSizeMb: record.uploadAvatarMaxFileSizeMb,
+    markdownEmojiMap: parseMarkdownEmojiMapJson(record.markdownEmojiMapJson),
     appStateJson: record.appStateJson,
   }
 }

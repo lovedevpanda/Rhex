@@ -3,7 +3,9 @@ import Link from "next/link"
 import { ArrowRight, BookOpen, Flame, HelpCircle, MessageSquareText, Search, ShieldCheck, Sparkles } from "lucide-react"
 
 import { SiteHeader } from "@/components/site-header"
+import { LevelIcon } from "@/components/level-icon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
 import { getLevelDefinitions } from "@/lib/level-system"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -235,8 +237,9 @@ export default async function FaqPage() {
                                   borderColor: `${level.color}33`,
                                 }}
                               >
-                                {level.icon || "⭐"}
+                                <LevelIcon icon={level.icon} color={level.color} className="h-5 w-5 text-[18px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                               </span>
+
                               <div className="min-w-0">
                                 <div className="font-medium" style={{ color: level.color }}>{level.name}</div>
                                 <div className="text-xs text-muted-foreground">{index === 0 ? "初始等级" : "满足以下条件后可升级"}</div>

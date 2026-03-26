@@ -5,7 +5,9 @@ import { notFound } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { CommentThread } from "@/components/comment-thread"
+import { LevelIcon } from "@/components/level-icon"
 import { MarkdownContent } from "@/components/markdown-content"
+
 import { PostAdminPanel } from "@/components/post-admin-panel"
 import { PostEditPanel } from "@/components/post-edit-panel"
 import { PostEngagementBar } from "@/components/post-engagement-bar"
@@ -224,8 +226,9 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                         </Link>
                         <div className={cn("min-w-0 space-y-3", isRestrictedAuthor && "grayscale")}>
                           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                            <span>{displayPost.boardIcon}</span>
+                            <LevelIcon icon={displayPost.boardIcon} className="h-4 w-4 text-sm" svgClassName="[&>svg]:block" />
                             <Link href={`/boards/${displayPost.boardSlug}`} className="hover:underline">
+
                               {displayPost.board}
                             </Link>
                             <span>·</span>
@@ -274,7 +277,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                     <div className="mt-8 space-y-5 text-[15px] leading-8 text-foreground/90 dark:text-foreground/85">
                       {(displayPost.contentBlocks ?? []).map((block) => (
                         block.type === "PUBLIC"
-                          ? <MarkdownContent key={block.id} content={block.text} />
+                          ? <MarkdownContent key={block.id} content={block.text} markdownEmojiMap={settings.markdownEmojiMap} />
+
                           : (
                             <RestrictedPostBlock
                               key={block.id}
@@ -306,7 +310,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                                 <span>{formatRelativeTime(appendix.createdAt)}</span>
                               </div>
                               <div className="mt-2 pl-0.5">
-                                <MarkdownContent content={appendix.content} className="text-[15px] leading-8 text-muted-foreground dark:text-muted-foreground/90" />
+                                <MarkdownContent content={appendix.content} className="text-[15px] leading-8 text-muted-foreground dark:text-muted-foreground/90" markdownEmojiMap={settings.markdownEmojiMap} />
+
                               </div>
                             </section>
                           ))}
@@ -390,7 +395,9 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                       commentsVisibleToAuthorOnly={displayPost.commentsVisibleToAuthorOnly}
                       isAdmin={isAdmin}
                       canPinComment={Boolean(currentUser?.id === displayPost.authorId || isAdmin)}
+                      markdownEmojiMap={settings.markdownEmojiMap}
                     />
+
                   </CardContent>
                 </Card>
               </>

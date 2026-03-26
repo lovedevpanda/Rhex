@@ -605,7 +605,7 @@ export async function getMessageCenterData(currentUserId: number, conversationId
 
   const resolvedConversationId = await resolveConversationId(currentUserId, conversationId)
   const conversations = await getDatabaseBackedConversations(currentUserId)
-  const activeId = resolvedConversationId ?? conversations[0]?.id
+  const activeId = resolvedConversationId
   const activeConversation = activeId ? await getDatabaseConversationDetail(currentUserId, activeId) : null
 
   return {

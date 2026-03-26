@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react"
 
+import { renderMarkdownEmojiHtml, type MarkdownEmojiItem } from "@/lib/markdown-emoji"
+import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
+
 import MarkdownIt from "markdown-it"
 import markdownItAbbr from "markdown-it-abbr"
 import markdownItAttrs from "markdown-it-attrs"
@@ -21,6 +24,7 @@ interface MarkdownContentProps {
   content: string
   className?: string
   emptyText?: string
+  markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
 interface MarkdownHeadingToken {
@@ -162,7 +166,18 @@ function parseContainerTitle(info: string, type: CalloutType) {
   return suffix || type.toUpperCase()
 }
 
-function createMarkdownRenderer() {
+function applyMarkdownEmojiShortcodes(input: string, emojiItems: MarkdownEmojiItem[]) {
+  return input.replace(/(^|[^\\]):([a-zA-Z0-9_-]{1,32}):/g, (matched, prefix: string, shortcode: string) => {
+    const rendered = renderMarkdownEmojiHtml(shortcode, emojiItems)
+    if (!rendered) {
+      return matched
+    }
+
+    return `${prefix}${rendered}`
+  })
+}
+
+function createMarkdownRenderer(emojiItems: MarkdownEmojiItem[]) {
   const md = new MarkdownIt({
     html: false,
     linkify: true,
@@ -224,12 +239,19 @@ function createMarkdownRenderer() {
     return self.renderToken(tokens, index, options)
   }
 
+  const defaultTextRule = md.renderer.rules.text
+  md.renderer.rules.text = (tokens, index, options, env, self) => {
+    const raw = defaultTextRule
+      ? defaultTextRule(tokens, index, options, env, self)
+      : ((tokens[index] as { content?: string } | undefined)?.content ?? "")
+    return applyMarkdownEmojiShortcodes(raw, emojiItems)
+  }
+
   return md
 }
 
-const markdown = createMarkdownRenderer()
-
-function renderMarkdown(input: string) {
+function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
+  const markdown = createMarkdownRenderer(emojiItems)
   const lines = input.split("\n")
   const htmlChunks: string[] = []
   const markdownBuffer: string[] = []
@@ -385,10 +407,11 @@ async function enhanceMarkdown(container: HTMLElement) {
   )
 }
 
-export function MarkdownContent({ content, className, emptyText }: MarkdownContentProps) {
+export function MarkdownContent({ content, className, emptyText, markdownEmojiMap }: MarkdownContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const normalized = content.replace(/\r\n/g, "\n").trim()
-  const html = useMemo(() => (normalized ? renderMarkdown(normalized) : ""), [normalized])
+  const resolvedMarkdownEmojiMap = useMarkdownEmojiMap(markdownEmojiMap)
+  const html = useMemo(() => (normalized ? renderMarkdown(normalized, resolvedMarkdownEmojiMap) : ""), [normalized, resolvedMarkdownEmojiMap])
 
   useEffect(() => {
     const container = containerRef.current

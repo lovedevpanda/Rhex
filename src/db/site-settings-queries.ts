@@ -79,8 +79,10 @@ export const siteSettingsSelect = {
   uploadAllowedImageTypes: true,
   uploadMaxFileSizeMb: true,
   uploadAvatarMaxFileSizeMb: true,
+  markdownEmojiMapJson: true,
   footerLinksJson: true,
   appStateJson: true,
+
 } as const
 
 export async function findSiteSettingsRecord() {

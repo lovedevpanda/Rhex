@@ -3,8 +3,12 @@
 import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Crown, GripVertical, Plus, Save, Trash2 } from "lucide-react"
 import { useMemo, useRef, useState, useTransition } from "react"
 
+import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
+import { LevelIcon } from "@/components/level-icon"
 import { PickerPopover, PickerTriggerField, normalizeHexColor } from "@/components/admin-picker-popover"
 import { Button } from "@/components/ui/button"
+
+
 
 interface LevelDefinitionFormItem {
   id?: string
@@ -27,8 +31,8 @@ const LEVEL_COLOR_PRESETS = ["#64748b", "#2563eb", "#7c3aed", "#db2777", "#ea580
 
 type PickerState =
   | { type: "color"; index: number }
-  | { type: "icon"; index: number }
   | null
+
 
 function createLevel(level: number): LevelDefinitionFormItem {
   return {
@@ -150,7 +154,7 @@ export function AdminLevelSettingsForm({ initialLevels }: AdminLevelSettingsForm
           const canMoveUp = index > 1
           const canMoveDown = index > 0 && index < sortedLevels.length - 1
           const showColorPicker = picker?.type === "color" && picker.index === index
-          const showIconPicker = picker?.type === "icon" && picker.index === index
+
 
           return (
             <div key={level.id ?? `level-${level.level}`} className="rounded-[20px] border border-border bg-card px-3 py-3 shadow-sm shadow-black/5">
@@ -167,8 +171,9 @@ export function AdminLevelSettingsForm({ initialLevels }: AdminLevelSettingsForm
                       borderColor: `${level.color}33`,
                     }}
                   >
-                    {level.icon || "⭐"}
+                    <LevelIcon icon={level.icon} color={level.color} className="h-5 w-5 text-[18px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                   </div>
+
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-sm font-semibold">Lv.{level.level}</span>
@@ -205,10 +210,17 @@ export function AdminLevelSettingsForm({ initialLevels }: AdminLevelSettingsForm
                   <NumberField label="回复" value={String(level.requireCommentCount)} onChange={(value) => updateLevel(index, { requireCommentCount: clampToNonNegative(value) })} disabled={readonlyBase} />
                   <NumberField label="获赞" value={String(level.requireLikeCount)} onChange={(value) => updateLevel(index, { requireLikeCount: clampToNonNegative(value) })} disabled={readonlyBase} />
 
-                  <div className="space-y-1" ref={showColorPicker || showIconPicker ? pickerContainerRef : undefined}>
-                    <p className="text-[11px] font-medium text-muted-foreground">图标</p>
-                    <PickerTriggerField value={level.icon} onClick={() => setPicker(showIconPicker ? null : { type: "icon", index })} />
+                  <div ref={showColorPicker ? pickerContainerRef : undefined}>
+                    <AdminIconPickerField
+                      label="图标"
+                      value={level.icon}
+                      onChange={(value) => updateLevel(index, { icon: value })}
+                      presets={LEVEL_ICON_PRESETS}
+                      previewColor={level.color}
+                      popoverTitle="选择等级图标"
+                    />
                   </div>
+
                 </div>
 
                 <div className="flex items-center justify-end gap-1">
@@ -261,40 +273,9 @@ export function AdminLevelSettingsForm({ initialLevels }: AdminLevelSettingsForm
                 </PickerPopover>
               ) : null}
 
-              {showIconPicker ? (
-                <PickerPopover title="选择等级图标" onClose={() => setPicker(null)}>
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">自定义图标</p>
-                      <input
-                        value={level.icon}
-                        onChange={(event) => updateLevel(index, { icon: event.target.value })}
-                        placeholder="输入任意 emoji 或符号"
-                        className="h-8 w-full rounded-full border border-border bg-background px-3 text-xs outline-none"
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {LEVEL_ICON_PRESETS.map((preset) => {
-                        const active = level.icon === preset
-                        return (
-                          <button
-                            key={`${level.level}-${preset}`}
-                            type="button"
-                            className={active ? "flex h-7 min-w-7 items-center justify-center rounded-full border border-foreground/15 bg-accent px-2 text-sm shadow-sm" : "flex h-7 min-w-7 items-center justify-center rounded-full border border-border bg-background px-2 text-sm transition-colors hover:bg-accent"}
-                            onClick={() => {
-                              updateLevel(index, { icon: preset })
-                              setPicker(null)
-                            }}
-                            aria-label={`使用图标 ${preset}`}
-                          >
-                            {preset}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </PickerPopover>
-              ) : null}
+
+
+
 
             </div>
           )
