@@ -8,10 +8,11 @@ import { mapLotteryView } from "@/lib/lottery"
 import { parsePostContentDocument } from "@/lib/post-content"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 import type { PostTipSummary } from "@/lib/post-tips"
+import { withRuntimeFallback } from "@/lib/runtime-errors"
 
-import { prisma } from "@/db/client"
-import { findEditablePostBySlug, findPostDetailBySlug, findPostSeoBySlug } from "@/db/post-queries"
-import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
+
+import { findEditablePostBySlug, findHomepagePosts, findPostDetailBySlug, findPostSeoBySlug, increasePostViewCount } from "@/db/post-queries"
+
 import { mapListPost } from "@/lib/post-map"
 
 
@@ -275,24 +276,18 @@ function mapPostDetail(
 
 
 export async function getHomepagePosts(page = 1, pageSize = 20): Promise<SitePostItem[]> {
-  try {
-    const posts = await prisma.post.findMany({
-      where: {
-        status: "NORMAL",
-      },
-      include: postListInclude,
-      orderBy: pinnedPostOrderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    })
-
-
+  return withRuntimeFallback(async () => {
+    const posts = await findHomepagePosts(page, pageSize)
     return posts.map(mapDatabasePost)
-  } catch (error) {
-    console.error(error)
-    return []
-  }
+  }, {
+    area: "posts",
+    action: "getHomepagePosts",
+    message: "首页帖子加载失败",
+    metadata: { page, pageSize },
+    fallback: [],
+  })
 }
+
 
 export async function getPostDetailBySlug(
   slug: string,
@@ -354,18 +349,18 @@ export async function getPostSeoBySlug(slug: string): Promise<PostSeoData | null
 
 
 export async function incrementPostViewCount(postId: string) {
-  try {
-    await prisma.post.update({
-      where: { id: postId },
-      data: {
-        viewCount: {
-          increment: 1,
-        },
-      },
-    })
-  } catch (error) {
-    console.error(error)
-  }
+  await withRuntimeFallback(async () => {
+    await increasePostViewCount(postId)
+  }, {
+    area: "posts",
+    action: "incrementPostViewCount",
+    message: "帖子浏览量更新失败",
+    metadata: { postId },
+    fallback: undefined,
+    level: "warn",
+  })
 }
+
+
 
 

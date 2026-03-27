@@ -3,7 +3,12 @@ import crypto from "node:crypto"
 
 import { canSendEmail } from "@/lib/mailer"
 import { prisma } from "@/db/client"
+
+import { parseBusinessDateTime } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
+
+
+
 
 export type LotteryConditionTypeValue = "REPLY_CONTENT_LENGTH" | "REPLY_KEYWORD" | "LIKE_POST" | "FAVORITE_POST" | "REGISTER_DAYS" | "USER_LEVEL" | "VIP_LEVEL" | "USER_POINTS"
 export type LotteryConditionOperatorValue = "GTE" | "EQ"
@@ -178,8 +183,9 @@ export function normalizeLotteryConfig(raw: unknown): { success: boolean; messag
         .filter((item) => item.type && item.value)
     : []
 
-  const startsAt = typeof payload.startsAt === "string" && String(payload.startsAt).trim() ? new Date(String(payload.startsAt)) : null
-  const endsAt = typeof payload.endsAt === "string" && String(payload.endsAt).trim() ? new Date(String(payload.endsAt)) : null
+  const startsAt = typeof payload.startsAt === "string" && String(payload.startsAt).trim() ? parseBusinessDateTime(String(payload.startsAt)) : null
+  const endsAt = typeof payload.endsAt === "string" && String(payload.endsAt).trim() ? parseBusinessDateTime(String(payload.endsAt)) : null
+
   const participantGoal = payload.participantGoal == null || payload.participantGoal === ""
     ? null
     : normalizeInteger(payload.participantGoal)
@@ -485,6 +491,11 @@ export async function enrollUserInLotteryPool(input: { postId: string; userId: n
   await maybeAutoDrawLottery(input.postId)
   return { joined: true, reason: null }
 }
+
+
+
+
+
 
 function secureShuffle<T>(items: T[]) {
   const values = [...items]

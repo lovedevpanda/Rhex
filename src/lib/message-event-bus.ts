@@ -1,39 +1,46 @@
-type MessageListener = (payload: string) => void
-
-interface StreamClient {
+export interface MessageStreamCursor {
   id: string
-  userId: number
-  push: MessageListener
+  createdAt: string
 }
 
-const globalForMessageEvents = globalThis as typeof globalThis & {
-  messageStreamClients?: Map<string, StreamClient>
+export interface MessageStreamEvent {
+  type: "message.created"
+  conversationId: string
+  messageId: string
+  senderId: number
+  recipientId: number
+  occurredAt: string
 }
 
-const clients = globalForMessageEvents.messageStreamClients ?? new Map<string, StreamClient>()
-
-globalForMessageEvents.messageStreamClients = clients
-
-function getClientId(userId: number) {
-  return `${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+export function buildMessageEventPayload(event: MessageStreamEvent) {
+  return `data: ${JSON.stringify(event)}\n\n`
 }
 
-export function subscribeMessageEvents(userId: number, push: MessageListener) {
-  const id = getClientId(userId)
-  clients.set(id, { id, userId, push })
+export function buildHeartbeatPayload() {
+  return `data: ${JSON.stringify({ type: "heartbeat", occurredAt: new Date().toISOString() })}\n\n`
+}
 
-  return () => {
-    clients.delete(id)
+export function parseMessageStreamCursor(value: string | null): MessageStreamCursor | null {
+  if (!value) {
+    return null
+  }
+
+  const [createdAt, id] = value.split("|")
+  if (!createdAt || !id) {
+    return null
+  }
+
+  const timestamp = new Date(createdAt)
+  if (Number.isNaN(timestamp.getTime())) {
+    return null
+  }
+
+  return {
+    id,
+    createdAt: timestamp.toISOString(),
   }
 }
 
-export function publishMessageEvent(userIds: number[], event: Record<string, unknown>) {
-  const payload = `data: ${JSON.stringify(event)}\n\n`
-  const targetIds = new Set(userIds)
-
-  clients.forEach((client) => {
-    if (targetIds.has(client.userId)) {
-      client.push(payload)
-    }
-  })
+export function formatMessageStreamCursor(cursor: MessageStreamCursor) {
+  return `${cursor.createdAt}|${cursor.id}`
 }

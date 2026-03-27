@@ -4,7 +4,8 @@ export { GobangPage } from "@/components/gobang-page"
 export { GobangAdminPage } from "@/components/gobang-admin-page"
 
 import { prisma } from "@/lib/prisma"
-import { createGobangMatchRecord, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
+import { countGobangMatchesInRange, createGobangMatchRecord, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
+
 
 import { getGobangAppConfig } from "@/lib/app-config"
 import { getBusinessDayRange } from "@/lib/formatters"
@@ -271,28 +272,9 @@ async function getGobangPluginConfig() {
 
 async function countTodayMatches(userId: number) {
   const { start, end } = getBusinessDayRange()
-
-  const [totalRows, paidRows] = await Promise.all([
-
-    prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*)::bigint AS count FROM "GobangMatch" WHERE "creatorId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3`,
-      userId,
-      start,
-      end,
-    ),
-    prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*)::bigint AS count FROM "GobangMatch" WHERE "creatorId" = $1 AND "ticketCost" > 0 AND "createdAt" >= $2 AND "createdAt" < $3`,
-      userId,
-      start,
-      end,
-    ),
-  ])
-
-  return {
-    total: Number(totalRows[0]?.count ?? 0),
-    paid: Number(paidRows[0]?.count ?? 0),
-  }
+  return countGobangMatchesInRange(userId, start, end)
 }
+
 
 function resolveChallengePolicy(
   user: CurrentUser,
@@ -445,7 +427,7 @@ export async function createGobangMatch(user: CurrentUser) {
 
 export async function listGobangMatches(userId: number): Promise<GobangMatch[]> {
   const matches = await listGobangMatchRows(userId)
-
+console.log(new Date())
   if (matches.length === 0) {
     return []
   }
@@ -532,7 +514,9 @@ export async function makeGobangMove(input: { matchId: string; user: CurrentUser
     await finishGobangMatchNow({
       matchId: input.matchId,
       winnerId: input.user.id,
+      updatedAt: new Date(),
     })
+
 
 
     if (challengeMode === "FREE") {

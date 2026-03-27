@@ -6,6 +6,7 @@ import { enforceSensitiveText } from "@/lib/content-safety"
 import { getRequestIp } from "@/lib/request-ip"
 import { validateProfilePayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 
 type ProfileUpdateResponse = {
   username: string
@@ -189,7 +190,20 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
     messageParts.push(`已扣除 ${nicknameChangePointCost} ${pointName}`)
   }
 
+  logRouteWriteSuccess({
+    scope: "profile-update",
+    action: "update-profile",
+  }, {
+    userId: currentUser.id,
+    targetId: String(currentUser.id),
+    extra: {
+      nicknameChanged,
+      emailChanged,
+    },
+  })
+
   return apiSuccess(toProfileUpdateResponse(updated), messageParts.join("，"))
+
 
 }, {
   errorMessage: "保存资料失败",

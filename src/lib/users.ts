@@ -2,6 +2,7 @@ import { findUserAccountSettingsById, findUserPostsByUsername, findUserProfileBy
 import { getCurrentSessionActor } from "@/lib/auth"
 import { getLevelBadgeData } from "@/lib/level-badge"
 import { mapListPost } from "@/lib/post-map"
+import { withRuntimeFallback } from "@/lib/runtime-errors"
 
 export type PublicUserStatus = "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
 
@@ -51,7 +52,7 @@ export interface SiteUserProfile {
 
 
 export async function getUserProfile(username: string): Promise<SiteUserProfile | null> {
-  try {
+  return withRuntimeFallback(async () => {
     const user = await findUserProfileByUsername(username)
 
     if (!user) {
@@ -91,10 +92,13 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
       favoriteCount: user._count.favorites,
       boardCount: user._count.boardFollows,
     }
-  } catch (error) {
-    console.error(error)
-    return null
-  }
+  }, {
+    area: "users",
+    action: "getUserProfile",
+    message: "用户资料加载失败",
+    metadata: { username },
+    fallback: null,
+  })
 }
 
 export async function getCurrentUserProfile(): Promise<SiteUserProfile | null> {

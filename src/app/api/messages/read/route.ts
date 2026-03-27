@@ -1,22 +1,32 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
-import { publishMessageEvent } from "@/lib/message-event-bus"
 import { markConversationAsRead } from "@/lib/messages"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const conversationId = requireStringField(body, "conversationId", "缺少会话信息")
 
-  await markConversationAsRead(conversationId, currentUser.id)
+  return withRequestWriteGuard({
+    request,
+    userId: currentUser.id,
+    scope: "messages-read",
+    cooldownMs: 500,
+    dedupeKey: `${currentUser.id}:${conversationId}`,
+    dedupeWindowMs: 1_000,
+  }, async () => {
+    await markConversationAsRead(conversationId, currentUser.id)
 
+    logRouteWriteSuccess({
+      scope: "messages-read",
+      action: "mark-conversation-read",
+    }, {
+      userId: currentUser.id,
+      targetId: conversationId,
+    })
 
-  publishMessageEvent([currentUser.id], {
-    type: "conversation.read",
-    conversationId,
-    senderId: currentUser.id,
-    occurredAt: new Date().toISOString(),
+    return apiSuccess(undefined, "已读状态已更新")
   })
-
-  return apiSuccess(undefined, "已读状态已更新")
 }, {
   errorMessage: "更新会话已读失败",
   logPrefix: "[api/messages/read] unexpected error",

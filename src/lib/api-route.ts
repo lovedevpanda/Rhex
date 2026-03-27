@@ -103,7 +103,29 @@ export function requireNumberField(body: JsonObject, field: string, message: str
   return value
 }
 
+export function readOptionalNumberField(body: JsonObject, field: string) {
+  const rawValue = body[field]
+
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
+    return undefined
+  }
+
+  const value = typeof rawValue === "number" ? rawValue : Number(rawValue)
+  return Number.isFinite(value) ? value : undefined
+}
+
+export function requirePositiveIntegerField(body: JsonObject, field: string, message: string) {
+  const value = requireNumberField(body, field, message)
+
+  if (!Number.isInteger(value) || value <= 0) {
+    apiError(400, message)
+  }
+
+  return value
+}
+
 export function requireSearchParam(request: Request, key: string, message: string) {
+
   const value = new URL(request.url).searchParams.get(key)?.trim() ?? ""
 
   if (!value) {

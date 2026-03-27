@@ -228,7 +228,7 @@ export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[
       board: true,
       author: true,
     },
-    orderBy: [{ createdAt: "desc" }],
+    orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * pageSize,
     take: pageSize,
   })
@@ -264,7 +264,7 @@ export function findBoardNormalPosts(boardId: string, excludedPostIds: string[],
       board: true,
       author: true,
     },
-    orderBy: [{ createdAt: "desc" }],
+    orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * pageSize,
     take: pageSize,
   })

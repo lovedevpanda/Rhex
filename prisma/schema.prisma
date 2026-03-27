@@ -206,8 +206,8 @@ model User {
   username          String         @unique
   email             String?        @unique
   phone             String?        @unique
-  emailVerifiedAt   DateTime?
-  phoneVerifiedAt   DateTime?
+  emailVerifiedAt   DateTime?   @db.Timestamptz(3)    
+  phoneVerifiedAt   DateTime?   @db.Timestamptz(3)    
   passwordHash      String
   nickname          String?        @unique
   avatarPath        String?
@@ -219,19 +219,19 @@ model User {
   points            Int            @default(0)
   level             Int            @default(1)
   vipLevel          Int            @default(0)
-  vipExpiresAt      DateTime?
+  vipExpiresAt      DateTime?   @db.Timestamptz(3)    
   postCount         Int            @default(0)
   commentCount      Int            @default(0)
   likeReceivedCount Int            @default(0)
   inviteCount       Int            @default(0)
   acceptedAnswerCount Int          @default(0)
   inviterId         Int?
-  lastPostAt        DateTime?
-  lastCommentAt     DateTime?
-  lastLoginAt       DateTime?
+  lastPostAt        DateTime?   @db.Timestamptz(3)    
+  lastCommentAt     DateTime?   @db.Timestamptz(3)    
+  lastLoginAt       DateTime?   @db.Timestamptz(3)    
   lastLoginIp       String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime   @db.Timestamptz(3)          @default(now())
+  updatedAt         DateTime   @db.Timestamptz(3)          @updatedAt
   inviter           User?          @relation("UserInvites", fields: [inviterId], references: [id], onDelete: SetNull)
   invitedUsers      User[]         @relation("UserInvites")
   posts             Post[]
@@ -283,8 +283,8 @@ model UserLevelProgress {
   receivedPostLikes   Int      @default(0)
   receivedCommentLikes Int     @default(0)
   receivedLikeCount   Int      @default(0)
-  updatedAt           DateTime @updatedAt
-  createdAt           DateTime @default(now())
+  updatedAt           DateTime   @db.Timestamptz(3)    @updatedAt
+  createdAt           DateTime   @db.Timestamptz(3)    @default(now())
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -296,8 +296,8 @@ model GobangMatch {
   winnerId    Int?
   ticketCost  Int
   winReward   Int
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)             @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)             @updatedAt
 
   @@index([creatorId])
   @@index([challengerId])
@@ -311,7 +311,7 @@ model GobangMove {
   step       Int
   x          Int
   y          Int
-  createdAt  DateTime @default(now())
+  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
 
   @@index([matchId, step])
 }
@@ -331,10 +331,10 @@ model SelfServeAdOrder {
   pricePoints     Int
   status          SelfServeAdOrderStatus
   reviewNote      String?
-  startsAt        DateTime?
-  endsAt          DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  startsAt        DateTime?   @db.Timestamptz(3)    
+  endsAt          DateTime?   @db.Timestamptz(3)    
+  createdAt       DateTime   @db.Timestamptz(3)                 @default(now())
+  updatedAt       DateTime   @db.Timestamptz(3)                 @updatedAt
 
   @@map("SelfServeAdOrder")
   @@index([status, slotType, slotIndex])
@@ -351,8 +351,8 @@ model LevelDefinition {
   requirePostCount  Int      @default(0)
   requireCommentCount Int    @default(0)
   requireLikeCount  Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt         DateTime   @db.Timestamptz(3)    @updatedAt
 
   @@index([level])
 }
@@ -379,8 +379,8 @@ model Zone {
   minViewVipLevel      Int      @default(0)
   minPostVipLevel      Int      @default(0)
   minReplyVipLevel     Int      @default(0)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt            DateTime   @db.Timestamptz(3)    @updatedAt
   boards               Board[]
 
   @@index([sortOrder])
@@ -415,8 +415,8 @@ model Board {
   minReplyVipLevel     Int?
   postCount            Int           @default(0)
   followerCount        Int           @default(0)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  createdAt            DateTime   @db.Timestamptz(3)         @default(now())
+  updatedAt            DateTime   @db.Timestamptz(3)         @updatedAt
   zone                 Zone?         @relation(fields: [zoneId], references: [id])
   posts                Post[]
   followers            BoardFollow[]
@@ -430,7 +430,7 @@ model BoardFollow {
   id        String   @id @default(cuid())
   userId    Int
   boardId   String
-  createdAt DateTime @default(now())
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
 
@@ -470,25 +470,25 @@ model Post {
   tipCount               Int          @default(0)
   tipTotalPoints         Int          @default(0)
   bountyPoints           Int?
-  bountyAwardedAt        DateTime?
+  bountyAwardedAt        DateTime?   @db.Timestamptz(3)    
   acceptedCommentId      String?      @unique
-  pollExpiresAt          DateTime?
+  pollExpiresAt          DateTime?   @db.Timestamptz(3)    
   lotteryStatus          LotteryStatus?
   lotteryTriggerMode     LotteryTriggerMode?
-  lotteryStartsAt        DateTime?
-  lotteryEndsAt          DateTime?
+  lotteryStartsAt        DateTime?   @db.Timestamptz(3)    
+  lotteryEndsAt          DateTime?   @db.Timestamptz(3)    
   lotteryParticipantGoal Int?
-  lotteryLockedAt        DateTime?
-  lotteryDrawnAt         DateTime?
+  lotteryLockedAt        DateTime?   @db.Timestamptz(3)    
+  lotteryDrawnAt         DateTime?   @db.Timestamptz(3)    
   lotteryAnnouncement    String?
-  editableUntil          DateTime?
+  editableUntil          DateTime?   @db.Timestamptz(3)    
   appendedContent        String?
-  lastAppendedAt         DateTime?
-  lastCommentedAt        DateTime?
-  activityAt             DateTime     @default(now())
-  publishedAt            DateTime?
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
+  lastAppendedAt         DateTime?   @db.Timestamptz(3)    
+  lastCommentedAt        DateTime?   @db.Timestamptz(3)    
+  activityAt             DateTime   @db.Timestamptz(3)        @default(now())
+  publishedAt            DateTime?   @db.Timestamptz(3)    
+  createdAt              DateTime   @db.Timestamptz(3)        @default(now())
+  updatedAt              DateTime   @db.Timestamptz(3)        @updatedAt
   board                  Board        @relation(fields: [boardId], references: [id])
   author                 User         @relation(fields: [authorId], references: [id])
   acceptedComment        Comment?     @relation("AcceptedBountyComment", fields: [acceptedCommentId], references: [id])
@@ -527,7 +527,7 @@ model Tag {
   id        String    @id @default(cuid())
   name      String    @unique
   slug      String    @unique
-  createdAt DateTime  @default(now())
+  createdAt DateTime   @db.Timestamptz(3)     @default(now())
   posts     PostTag[]
 }
 
@@ -546,8 +546,8 @@ model PostAppendix {
   postId    String
   content   String
   sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt DateTime   @db.Timestamptz(3)    @updatedAt
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId, sortOrder])
@@ -564,10 +564,10 @@ model Comment {
   likeCount             Int           @default(0)
   isAcceptedAnswer      Boolean       @default(false)
   isPinnedByAuthor      Boolean       @default(false)
-  acceptedAt            DateTime?
+  acceptedAt            DateTime?   @db.Timestamptz(3)    
   bountyAcceptedForPost Post?         @relation("AcceptedBountyComment")
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime   @db.Timestamptz(3)         @default(now())
+  updatedAt             DateTime   @db.Timestamptz(3)         @updatedAt
   post                  Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
   user                  User          @relation("commentAuthor", fields: [userId], references: [id], onDelete: Cascade)
   parent                Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
@@ -592,7 +592,7 @@ model Like {
   targetId   String
   postId     String?
   commentId  String?
-  createdAt  DateTime   @default(now())
+  createdAt  DateTime   @db.Timestamptz(3)      @default(now())
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   post       Post?      @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment    Comment?   @relation(fields: [commentId], references: [id], onDelete: Cascade)
@@ -605,7 +605,7 @@ model Favorite {
   id        String   @id @default(cuid())
   userId    Int
   postId    String
-  createdAt DateTime @default(now())
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -618,7 +618,7 @@ model PollOption {
   content   String
   sortOrder Int        @default(0)
   voteCount Int        @default(0)
-  createdAt DateTime   @default(now())
+  createdAt DateTime   @db.Timestamptz(3)      @default(now())
   post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
   votes     PollVote[]
 
@@ -631,7 +631,7 @@ model PollVote {
   optionId  String
   userId    Int
   commentId String?
-  createdAt DateTime   @default(now())
+  createdAt DateTime   @db.Timestamptz(3)      @default(now())
   post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
   option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -650,8 +650,8 @@ model LotteryPrize {
   description String
   quantity    Int
   sortOrder   Int             @default(0)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)           @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)           @updatedAt
   post        Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
   winners     LotteryWinner[]
 
@@ -667,8 +667,8 @@ model LotteryCondition {
   description String?
   groupKey    String                   @default("default")
   sortOrder   Int                      @default(0)
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)                    @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)                    @updatedAt
   post        Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId, sortOrder])
@@ -680,13 +680,13 @@ model LotteryParticipant {
   postId           String
   userId           Int
   sourceCommentId  String?
-  joinedAt         DateTime @default(now())
-  lockedAt         DateTime?
+  joinedAt         DateTime   @db.Timestamptz(3)    @default(now())
+  lockedAt         DateTime?   @db.Timestamptz(3)    
   lockVersion      Int      @default(0)
   isEligible       Boolean  @default(true)
   ineligibleReason String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt        DateTime   @db.Timestamptz(3)    @updatedAt
   post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceComment    Comment? @relation(fields: [sourceCommentId], references: [id], onDelete: SetNull)
@@ -703,8 +703,8 @@ model LotteryWinner {
   prizeId       String
   participantId String
   userId        Int
-  drawnAt       DateTime           @default(now())
-  createdAt     DateTime           @default(now())
+  drawnAt       DateTime   @db.Timestamptz(3)              @default(now())
+  createdAt     DateTime   @db.Timestamptz(3)              @default(now())
   post          Post               @relation(fields: [postId], references: [id], onDelete: Cascade)
   prize         LotteryPrize       @relation(fields: [prizeId], references: [id], onDelete: Cascade)
   participant   LotteryParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -725,8 +725,8 @@ model Notification {
   title       String
   content     String
   isRead      Boolean          @default(false)
-  readAt      DateTime?
-  createdAt   DateTime         @default(now())
+  readAt      DateTime?   @db.Timestamptz(3)    
+  createdAt   DateTime   @db.Timestamptz(3)            @default(now())
   user        User             @relation("notificationUser", fields: [userId], references: [id], onDelete: Cascade)
   sender      User?            @relation("notificationSender", fields: [senderId], references: [id])
 
@@ -736,9 +736,9 @@ model Notification {
 
 model Conversation {
   id             String                    @id @default(cuid())
-  lastMessageAt  DateTime                  @default(now())
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
+  lastMessageAt  DateTime   @db.Timestamptz(3)                     @default(now())
+  createdAt      DateTime   @db.Timestamptz(3)                     @default(now())
+  updatedAt      DateTime   @db.Timestamptz(3)                     @updatedAt
   participants   ConversationParticipant[]
   messages       DirectMessage[]
 
@@ -751,8 +751,8 @@ model ConversationParticipant {
   userId            Int
   unreadCount       Int           @default(0)
   lastReadMessageId String?
-  joinedAt          DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  joinedAt          DateTime   @db.Timestamptz(3)         @default(now())
+  updatedAt         DateTime   @db.Timestamptz(3)         @updatedAt
   conversation      Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadMessage   DirectMessage? @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
@@ -767,7 +767,7 @@ model DirectMessage {
   conversationId String
   senderId       Int
   body           String
-  createdAt      DateTime                   @default(now())
+  createdAt      DateTime   @db.Timestamptz(3)                      @default(now())
   conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User                       @relation(fields: [senderId], references: [id], onDelete: Cascade)
   readByParticipants ConversationParticipant[] @relation("LastReadMessage")
@@ -786,8 +786,8 @@ model Report {
   status       ReportStatus @default(PENDING)
   handledBy    Int?
   handledNote  String?
-  handledAt    DateTime?
-  createdAt    DateTime     @default(now())
+  handledAt    DateTime?   @db.Timestamptz(3)    
+  createdAt    DateTime   @db.Timestamptz(3)        @default(now())
   reporter     User         @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   handler      User?        @relation("handler", fields: [handledBy], references: [id])
 
@@ -809,8 +809,8 @@ model Badge {
   sortOrder   Int         @default(0)
   status      Boolean     @default(true)
   isHidden    Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)       @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)       @updatedAt
   users       UserBadge[]
   rules       BadgeRule[]
 
@@ -825,8 +825,8 @@ model BadgeRule {
   value      String
   extraValue String?
   sortOrder  Int               @default(0)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  createdAt  DateTime   @db.Timestamptz(3)             @default(now())
+  updatedAt  DateTime   @db.Timestamptz(3)             @updatedAt
   badge      Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@index([badgeId, sortOrder])
@@ -836,7 +836,7 @@ model UserBadge {
   id             String            @id @default(cuid())
   userId         Int
   badgeId        String
-  grantedAt      DateTime          @default(now())
+  grantedAt      DateTime   @db.Timestamptz(3)             @default(now())
   grantedBy      Int?
   grantSource    BadgeGrantSource  @default(SELF_CLAIM)
   grantSnapshot  String?
@@ -864,8 +864,8 @@ model VerificationType {
   needRemark               Boolean            @default(true)
   userLimit                Int                @default(1)
   allowResubmitAfterReject Boolean            @default(true)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  createdAt                DateTime   @db.Timestamptz(3)              @default(now())
+  updatedAt                DateTime   @db.Timestamptz(3)              @updatedAt
   applications             UserVerification[]
 
   @@index([status, sortOrder])
@@ -881,10 +881,10 @@ model UserVerification {
   note            String?
   rejectReason    String?
   reviewerId      Int?
-  submittedAt     DateTime               @default(now())
-  reviewedAt      DateTime?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  submittedAt     DateTime   @db.Timestamptz(3)                  @default(now())
+  reviewedAt      DateTime?   @db.Timestamptz(3)    
+  createdAt       DateTime   @db.Timestamptz(3)                  @default(now())
+  updatedAt       DateTime   @db.Timestamptz(3)                  @updatedAt
   user            User                   @relation("userVerificationApplicant", fields: [userId], references: [id], onDelete: Cascade)
   type            VerificationType       @relation(fields: [typeId], references: [id], onDelete: Cascade)
   reviewer        User?                  @relation("userVerificationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
@@ -902,7 +902,7 @@ model PointLog {
   reason      String
   relatedType RelatedType?
   relatedId   String?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime   @db.Timestamptz(3)        @default(now())
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -917,9 +917,9 @@ model VipOrder {
   pointsCost  Int?
   days        Int
   vipLevel    Int     @default(1)
-  expiresAt   DateTime?
+  expiresAt   DateTime?   @db.Timestamptz(3)    
   remark      String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
   user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -937,7 +937,7 @@ model Upload {
   fileSize     Int
   storagePath  String
   urlPath      String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @db.Timestamptz(3)    @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -952,9 +952,9 @@ model FriendLink {
   clickCount    Int              @default(0)
   status        FriendLinkStatus @default(PENDING)
   reviewNote    String?
-  reviewedAt    DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  reviewedAt    DateTime?   @db.Timestamptz(3)    
+  createdAt     DateTime   @db.Timestamptz(3)            @default(now())
+  updatedAt     DateTime   @db.Timestamptz(3)            @updatedAt
 
   @@index([status, sortOrder, createdAt])
   @@index([createdAt])
@@ -966,10 +966,10 @@ model Announcement {
   content     String
   status      AnnouncementStatus @default(DRAFT)
   isPinned    Boolean            @default(false)
-  publishedAt DateTime?
+  publishedAt DateTime?   @db.Timestamptz(3)    
   createdBy   Int
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)              @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)              @updatedAt
   creator     User               @relation("announcementCreator", fields: [createdBy], references: [id])
 }
 
@@ -979,8 +979,8 @@ model SensitiveWord {
   matchType  String
   actionType String
   status     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt  DateTime   @db.Timestamptz(3)    @updatedAt
 }
 
 model AdminLog {
@@ -991,7 +991,7 @@ model AdminLog {
   targetId   String?
   detail     String?
   ip         String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
   admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
@@ -1079,8 +1079,8 @@ model SiteSetting {
   markdownEmojiMapJson          String?  @default("[]")
   appStateJson               String?  @default("{}")
   footerLinksJson               String?  @default("[{\"label\":\"关于\",\"href\":\"/about\"},{\"label\":\"小黑屋\",\"href\":\"/prison\"},{\"label\":\"帮助文档\",\"href\":\"/help\"},{\"label\":\"FAQ\",\"href\":\"/faq\"},{\"label\":\"协议\",\"href\":\"/terms\"}]")
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
+  createdAt                     DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt                     DateTime   @db.Timestamptz(3)    @updatedAt
 }
 
 model PostTip {
@@ -1089,7 +1089,7 @@ model PostTip {
   senderId    Int
   receiverId  Int
   amount      Int
-  createdAt   DateTime @default(now())
+  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   sender      User     @relation("PostTipSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver    User     @relation("PostTipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
@@ -1113,8 +1113,8 @@ model PostRedPacket {
   status          PostRedPacketStatus     @default(ACTIVE)
   claimedCount    Int                     @default(0)
   claimedPoints   Int                     @default(0)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  createdAt       DateTime   @db.Timestamptz(3)                   @default(now())
+  updatedAt       DateTime   @db.Timestamptz(3)                   @updatedAt
   post            Post                    @relation(fields: [postId], references: [id], onDelete: Cascade)
   sender          User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
   claims          PostRedPacketClaim[]
@@ -1131,7 +1131,7 @@ model PostRedPacketClaim {
   triggerType      PostRedPacketTriggerType
   triggerCommentId String?
   amount           Int
-  createdAt        DateTime                 @default(now())
+  createdAt        DateTime   @db.Timestamptz(3)                    @default(now())
   redPacket        PostRedPacket            @relation(fields: [redPacketId], references: [id], onDelete: Cascade)
   post             Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user             User                     @relation("PostRedPacketClaimUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -1148,11 +1148,11 @@ model InviteCode {
   code        String   @unique
   createdById Int?
   usedById    Int?
-  usedAt      DateTime?
-  expiresAt   DateTime?
+  usedAt      DateTime?   @db.Timestamptz(3)    
+  expiresAt   DateTime?   @db.Timestamptz(3)    
   note        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)    @updatedAt
   createdBy   User?    @relation("InviteCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
   usedBy      User?    @relation("InviteCodeConsumer", fields: [usedById], references: [id], onDelete: SetNull)
 
@@ -1167,11 +1167,11 @@ model RedeemCode {
   points       Int
   createdById  Int?
   redeemedById Int?
-  redeemedAt   DateTime?
-  expiresAt    DateTime?
+  redeemedAt   DateTime?   @db.Timestamptz(3)    
+  expiresAt    DateTime?   @db.Timestamptz(3)    
   note         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt    DateTime   @db.Timestamptz(3)    @updatedAt
   createdBy    User?    @relation("RedeemCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
   redeemedBy   User?    @relation("RedeemCodeConsumer", fields: [redeemedById], references: [id], onDelete: SetNull)
 
@@ -1189,17 +1189,31 @@ model VerificationCode {
   attempts    Int                 @default(0)
   maxAttempts Int                 @default(5)
   expiresAt   DateTime
-  consumedAt  DateTime?
+  consumedAt  DateTime?   @db.Timestamptz(3)    
   sentByIp    String?
   userAgent   String?
   userId      Int?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt   DateTime   @db.Timestamptz(3)               @default(now())
+  updatedAt   DateTime   @db.Timestamptz(3)               @updatedAt
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([channel, target, purpose])
   @@index([expiresAt])
   @@index([userId])
+}
+model RequestControl {
+  id         String   @id @default(cuid())
+  scope      String
+  identity   String
+  kind       String
+  fingerprint String?
+  expiresAt  DateTime
+  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
+  updatedAt  DateTime   @db.Timestamptz(3)    @updatedAt
+
+  @@unique([scope, identity, kind, fingerprint])
+  @@index([expiresAt])
+  @@index([scope, identity, kind])
 }
 
 model UserCheckInLog {
@@ -1209,7 +1223,7 @@ model UserCheckInLog {
   checkedInOn String
   isMakeUp    Boolean  @default(false)
   makeUpCost  Int      @default(0)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, checkedInOn])
@@ -1222,9 +1236,10 @@ model UserLoginLog {
   userId    Int
   ip        String?
   userAgent String?
-  createdAt DateTime @default(now())
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
+
 }

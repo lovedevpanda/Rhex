@@ -1,8 +1,7 @@
 import { togglePostLike } from "@/db/interaction-queries"
 import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
-import { syncUserReceivedLikes } from "@/lib/level-system"
-import { enrollUserInLotteryPool } from "@/lib/lottery"
-import { tryClaimPostRedPacket } from "@/lib/post-red-packets"
+import { handlePostLikeSideEffects } from "@/lib/interaction-side-effects"
+import { logRequestSucceeded } from "@/lib/request-log"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await request.json()
@@ -18,18 +17,21 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     senderName: currentUser.nickname ?? currentUser.username,
   })
 
-  let redPacketClaim: Awaited<ReturnType<typeof tryClaimPostRedPacket>> | null = null
+  const { redPacketClaim } = await handlePostLikeSideEffects({
+    liked: result.liked,
+    postId,
+    userId: currentUser.id,
+    targetUserId: result.targetUserId,
+  })
 
-  if (result.liked && result.targetUserId) {
-    const settled = await Promise.all([
-      syncUserReceivedLikes(result.targetUserId),
-      enrollUserInLotteryPool({ postId, userId: currentUser.id }).catch(() => null),
-      tryClaimPostRedPacket({ postId, userId: currentUser.id, triggerType: "LIKE" }).catch(() => null),
-    ])
-    redPacketClaim = settled[2] ?? null
-  } else if (result.targetUserId) {
-    await syncUserReceivedLikes(result.targetUserId)
-  }
+  logRequestSucceeded({
+    scope: "posts-like",
+    action: "toggle-post-like",
+    userId: currentUser.id,
+    targetId: postId,
+  }, {
+    liked: result.liked,
+  })
 
   return apiSuccess({ liked: result.liked }, result.liked ? (redPacketClaim?.claimed ? `点赞成功，并领取了 ${redPacketClaim.amount} ${redPacketClaim.pointName} 红包` : "点赞成功") : "已取消点赞")
 }, {

@@ -1,6 +1,24 @@
 import { DbTransaction, withDbTransaction } from "@/db/helpers"
-import { findConversationByIdForParticipant, findConversationDetailById, findConversationListItems, findConversationParticipantsWithConversation, getUnreadConversationCount } from "@/db/message-read-queries"
-import { findMessageRecipientById } from "@/db/message-write-queries"
+import {
+  findConversationByIdForParticipant,
+  findConversationDetailById,
+  findConversationListItems,
+  findConversationParticipantsWithConversation,
+  findDirectConversationCandidates,
+  findLatestMessageByConversationId,
+  getUnreadConversationCount,
+  updateConversationReadState,
+} from "@/db/message-read-queries"
+import {
+  createConversationWithParticipants,
+  createDirectMessageInTransaction,
+  findConversationHistoryBatch,
+  findConversationParticipantByUser,
+  findConversationWithParticipants,
+  findMessageHistoryAnchor,
+  findMessageRecipientById,
+} from "@/db/message-write-queries"
+
 
 
 
@@ -19,8 +37,8 @@ import type {
   MessageHistoryResult,
   MessageParticipantProfile,
 } from "@/lib/message-types"
-import { prisma } from "@/db/client"
 import { getUserDisplayName } from "@/lib/users"
+
 
 
 type MessageTransactionClient = DbTransaction
@@ -133,11 +151,12 @@ async function cleanupMalformedConversations(currentUserId: number) {
     return
   }
 
-  await prisma.$transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     for (const conversationId of invalidConversationIds) {
       await removeConversationForUser(tx, conversationId, currentUserId)
     }
   })
+
 }
 
 async function normalizeDirectConversations(currentUserId: number) {
@@ -165,27 +184,7 @@ async function normalizeDirectConversations(currentUserId: number) {
 
 
 async function findDirectConversations(userAId: number, userBId: number) {
-  const candidates = await prisma.conversation.findMany({
-    where: {
-      participants: {
-        some: {
-          userId: {
-            in: [userAId, userBId],
-          },
-        },
-      },
-    },
-    include: {
-      participants: {
-        select: {
-          id: true,
-          userId: true,
-          unreadCount: true,
-          lastReadMessageId: true,
-        },
-      },
-    },
-  })
+  const candidates = await findDirectConversationCandidates(userAId, userBId)
 
   return candidates
     .filter((conversation) => {
@@ -198,6 +197,7 @@ async function findDirectConversations(userAId: number, userBId: number) {
     })
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
 }
+
 
 async function mergeDuplicateDirectConversations(userAId: number, userBId: number) {
   const conversations = await findDirectConversations(userAId, userBId)
@@ -259,13 +259,9 @@ async function mergeDuplicateDirectConversations(userAId: number, userBId: numbe
     }
   })
 
-  return prisma.conversation.findUnique({
-    where: { id: canonical.id },
-    include: {
-      participants: true,
-    },
-  })
+  return findConversationWithParticipants(canonical.id)
 }
+
 
 async function getOrCreateConversation(senderId: number, recipientId: number) {
   const merged = await mergeDuplicateDirectConversations(senderId, recipientId)
@@ -273,20 +269,9 @@ async function getOrCreateConversation(senderId: number, recipientId: number) {
     return merged
   }
 
-  return prisma.conversation.create({
-    data: {
-      participants: {
-        create: [
-          { userId: senderId, unreadCount: 0 },
-          { userId: recipientId, unreadCount: 0 },
-        ],
-      },
-    },
-    include: {
-      participants: true,
-    },
-  })
+  return createConversationWithParticipants(senderId, recipientId)
 }
+
 
 async function resolveCanonicalConversationId(currentUserId: number, conversationId: string): Promise<string | undefined> {
   const conversation = await findConversationByIdForParticipant(conversationId, currentUserId)
@@ -372,23 +357,11 @@ export async function markConversationAsRead(conversationId: string, currentUser
     return
   }
 
-  const latestMessage = await prisma.directMessage.findFirst({
-    where: { conversationId: canonicalConversationId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  })
+  const latestMessage = await findLatestMessageByConversationId(canonicalConversationId)
 
-  await prisma.conversationParticipant.updateMany({
-    where: {
-      conversationId: canonicalConversationId,
-      userId: currentUserId,
-    },
-    data: {
-      unreadCount: 0,
-      lastReadMessageId: latestMessage?.id,
-    },
-  })
+  await updateConversationReadState(canonicalConversationId, currentUserId, latestMessage?.id)
 }
+
 
 async function getDatabaseConversationDetail(currentUserId: number, conversationId: string): Promise<MessageConversationDetail | null> {
   const canonicalConversationId = await resolveCanonicalConversationId(currentUserId, conversationId)
@@ -407,9 +380,10 @@ async function getDatabaseConversationDetail(currentUserId: number, conversation
   const partner = participants.find((participant) => !participant.isCurrentUser)
 
   if (!partner) {
-    await prisma.$transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       await removeConversationForUser(tx, conversation.id, currentUserId)
     })
+
     return null
   }
 
@@ -477,45 +451,8 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
 
   const conversation = await getOrCreateConversation(senderId, recipientId)
 
-  const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.directMessage.create({
-      data: {
-        conversationId: conversation.id,
-        senderId,
-        body: content,
-      },
-    })
+  const message = await createDirectMessageInTransaction(conversation.id, senderId, recipientId, content)
 
-    await tx.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        lastMessageAt: created.createdAt,
-      },
-    })
-
-    await tx.conversationParticipant.updateMany({
-      where: {
-        conversationId: conversation.id,
-        userId: recipientId,
-      },
-      data: {
-        unreadCount: { increment: 1 },
-      },
-    })
-
-    await tx.conversationParticipant.updateMany({
-      where: {
-        conversationId: conversation.id,
-        userId: senderId,
-      },
-      data: {
-        unreadCount: 0,
-        lastReadMessageId: created.id,
-      },
-    })
-
-    return created
-  })
 
   return {
     id: message.id,
@@ -532,52 +469,22 @@ export async function getConversationHistory(currentUserId: number, conversation
     throw new Error("会话不存在或无权查看")
   }
 
-  const participant = await prisma.conversationParticipant.findFirst({
-    where: {
-      conversationId: canonicalConversationId,
-      userId: currentUserId,
-    },
-    select: { id: true },
-  })
+  const participant = await findConversationParticipantByUser(canonicalConversationId, currentUserId)
+
 
   if (!participant) {
     throw new Error("会话不存在或无权查看")
   }
 
-  const anchor = await prisma.directMessage.findFirst({
-    where: {
-      id: beforeMessageId,
-      conversationId: canonicalConversationId,
-    },
-    select: { createdAt: true },
-  })
+  const anchor = await findMessageHistoryAnchor(beforeMessageId, canonicalConversationId)
+
 
   if (!anchor) {
     throw new Error("历史消息定位失败")
   }
 
-  const history = await prisma.directMessage.findMany({
-    where: {
-      conversationId: canonicalConversationId,
-      createdAt: {
-        lt: anchor.createdAt,
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: MESSAGE_HISTORY_BATCH_SIZE + 1,
-    include: {
-      sender: {
-        select: {
-          id: true,
-          username: true,
-          nickname: true,
-          avatarPath: true,
-        },
-      },
-    },
-  })
+  const history = await findConversationHistoryBatch(canonicalConversationId, anchor.createdAt, MESSAGE_HISTORY_BATCH_SIZE)
+
 
   const hasMoreHistory = history.length > MESSAGE_HISTORY_BATCH_SIZE
   const visibleHistory = hasMoreHistory ? history.slice(0, MESSAGE_HISTORY_BATCH_SIZE) : history

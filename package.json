@@ -12,7 +12,7 @@
     "setup:prod": "cross-env SETUP_MODE=production tsx scripts/setup.ts",
     "setup:start": "npm run setup:dev && npm run dev",
     "setup:start:prod": "npm run setup:prod && npm run start:prod",
-    "lint": "next lint",
+    "lint": "eslint . --ext .ts,.tsx",
     "plugins:generate": "tsx scripts/generate-plugin-bundles.ts",
     "version:sync": "tsx scripts/copy-release-to-version.ts",
     "prisma:generate": "prisma generate",

@@ -1,30 +1,24 @@
 import path from "path"
 
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { prisma } from "@/db/client"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
 import { saveUploadedFile } from "@/lib/upload"
+import { withRequestWriteGuard } from "@/lib/write-guard"
+
 
 const ALLOWED_UPLOAD_FOLDERS = new Set(["avatars", "posts", "friend-links", "site-logo"])
-
-
 
 function normalizeExtension(fileName: string) {
   return path.extname(fileName).replace(/^\./, "").toLowerCase()
 }
 
-export async function POST(request: Request) {
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const settings = await getSiteSettings()
-  const currentUser = await getCurrentUser()
 
   if (settings.uploadRequireLogin && !currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录后再上传" }, { status: 401 })
-  }
-
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "当前上传需要登录用户归属，暂不支持匿名上传" }, { status: 401 })
+    apiError(401, "请先登录后再上传")
   }
 
   const formData = await request.formData()
@@ -33,11 +27,11 @@ export async function POST(request: Request) {
   const folder = ALLOWED_UPLOAD_FOLDERS.has(rawFolder) ? rawFolder : "avatars"
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ code: 400, message: "缺少上传文件" }, { status: 400 })
+    apiError(400, "缺少上传文件")
   }
 
   if (file.size <= 0) {
-    return NextResponse.json({ code: 400, message: "上传文件不能为空" }, { status: 400 })
+    apiError(400, "上传文件不能为空")
   }
 
   const extension = normalizeExtension(file.name)
@@ -46,21 +40,25 @@ export async function POST(request: Request) {
   const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
   const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
 
-
   if (!extension || extension === "svg" || !allowedExtensions.includes(extension)) {
-    return NextResponse.json({ code: 400, message: `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片` }, { status: 400 })
+    apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
   }
 
-
   if (!file.type.startsWith("image/")) {
-    return NextResponse.json({ code: 400, message: "仅允许上传图片文件" }, { status: 400 })
+    apiError(400, "仅允许上传图片文件")
   }
 
   if (file.size > maxSizeBytes) {
-    return NextResponse.json({ code: 400, message: `上传文件不能超过 ${maxSizeMb}MB` }, { status: 400 })
+    apiError(400, `上传文件不能超过 ${maxSizeMb}MB`)
   }
 
-  try {
+  return withRequestWriteGuard({
+    request,
+    userId: currentUser.id,
+    scope: "upload-file",
+    cooldownMs: 2_000,
+    dedupeKey: `${currentUser.id}:${folder}:${file.name}:${file.size}`,
+  }, async () => {
     const saved = await saveUploadedFile(file, folder)
 
     await prisma.upload.create({
@@ -77,15 +75,26 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({
-      code: 0,
-      message: "上传成功",
-      data: {
+    logRouteWriteSuccess({
+      scope: "upload-file",
+      action: "upload-file",
+    }, {
+      userId: currentUser.id,
+      targetId: saved.fileName,
+      extra: {
+        folder,
         urlPath: saved.urlPath,
       },
     })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "上传失败" }, { status: 400 })
-  }
-}
 
+    return apiSuccess({
+      urlPath: saved.urlPath,
+    }, "上传成功")
+
+  })
+}, {
+  errorMessage: "上传失败",
+  logPrefix: "[api/upload] unexpected error",
+  unauthorizedMessage: "请先登录后再上传",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

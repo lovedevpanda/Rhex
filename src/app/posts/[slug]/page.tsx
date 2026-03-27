@@ -106,8 +106,10 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
   }
 
   const isAdmin = Boolean(currentUser && (currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"))
-  const canViewPendingPost = basePost.status === "PENDING" && (isAdmin || currentUser?.id === basePost.authorId)
   const isOwnerOrAdmin = Boolean(currentUser?.id === basePost.authorId || isAdmin)
+  const canViewPendingPost = basePost.status === "PENDING" && isOwnerOrAdmin
+  const canViewOfflinePost = basePost.status === "OFFLINE" && isAdmin
+
   const boardAccessContextPromise = getBoardAccessContextByPostId(basePost.id)
   const boardAccessContext = await boardAccessContextPromise
 
@@ -118,19 +120,25 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       ? { allowed: true, message: "" }
       : { allowed: false, message: `该帖子要求用户等级至少达到 Lv.${basePost.minViewLevel}` }
   const mergedViewPermission = !viewPermission.allowed ? viewPermission : postLevelPermission
-  const canViewRestrictedPost = basePost.status === "NORMAL" && (mergedViewPermission.allowed || isAdmin || currentUser?.id === basePost.authorId)
+  const canViewRestrictedPost = basePost.status === "NORMAL" && (mergedViewPermission.allowed || isOwnerOrAdmin)
+  const shouldRenderOfflineNotice = basePost.status === "OFFLINE" && !canViewOfflinePost
 
-  if ((basePost.status !== "NORMAL" && !canViewPendingPost) || (basePost.status === "NORMAL" && !canViewRestrictedPost && !isAdmin && currentUser?.id !== basePost.authorId)) {
-    if (basePost.status !== "NORMAL") {
-      notFound()
-    }
+  if (basePost.status === "PENDING" && !canViewPendingPost) {
+    notFound()
   }
 
+  if (basePost.status !== "NORMAL" && basePost.status !== "PENDING" && basePost.status !== "OFFLINE" && !isOwnerOrAdmin) {
+    notFound()
+  }
+
+
   const userReplyCountPromise = canViewRestrictedPost ? getUserReplyCountByPost(basePost.id, currentUser?.id) : Promise.resolve(0)
+
   const purchasedBlockIdsPromise = canViewRestrictedPost ? getPurchasedPostBlockIds(basePost.id, currentUser?.id) : Promise.resolve(new Set<string>())
   const tipSummaryPromise = canViewRestrictedPost ? getPostTipSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
   const redPacketSummaryPromise = canViewRestrictedPost ? getPostRedPacketSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
   const postOfflineMetaPromise = currentUser?.id === basePost.authorId ? getPostOfflineActionMeta(basePost.id) : Promise.resolve(null)
+
 
   const [userReplyCount, purchasedBlockIds, tipSummary, redPacketSummary, postOfflineMeta, commentResult, sidebarData, boards, zones] = await Promise.all([
 
@@ -240,9 +248,18 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
               </div>
             ) : null}
 
-            {!canViewRestrictedPost && basePost.status === "NORMAL" ? (
+            {shouldRenderOfflineNotice ? (
+              <Card>
+                <CardContent className="p-8">
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-6 text-center text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+                    当前帖子已被<strong>下线</strong>。
+                  </div>
+                </CardContent>
+              </Card>
+            ) : !canViewRestrictedPost && basePost.status === "NORMAL" ? (
               <AccessDeniedCard title="当前帖子暂不可查看" description="该帖子所在节点、分区或帖子本身设置了浏览门槛，未满足条件的用户无法查看帖子正文与互动内容。" reason={mergedViewPermission.message || "当前没有访问权限"} />
             ) : (
+
               <>
                 <Card>
                   <CardContent className="p-4 sm:p-6 md:p-8">
@@ -421,11 +438,13 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                     postAuthorId={displayPost.authorId ?? 0}
                     postAuthorUsername={displayPost.authorUsername ?? displayPost.author}
                     postAuthorStatus={displayPost.authorStatus}
+                    postStatus={displayPost.status}
                     isPinned={displayPost.isPinned}
                     pinScope={displayPost.pinScope}
                     isFeatured={displayPost.isFeatured}
                     boardOptions={adminBoardOptions}
                   />
+
                 ) : null}
 
 

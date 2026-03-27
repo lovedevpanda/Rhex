@@ -172,47 +172,6 @@ const defaultBadges = [
   },
 ] as const
 
-async function resetDatabase() {
-  await prisma.userBadge.deleteMany()
-  await prisma.badgeRule.deleteMany()
-  await prisma.badge.deleteMany()
-  await prisma.verificationCode.deleteMany()
-  await prisma.redeemCode.deleteMany()
-  await prisma.inviteCode.deleteMany()
-  await prisma.userLevelProgress.deleteMany()
-  await prisma.levelDefinition.deleteMany()
-  await prisma.userLoginLog.deleteMany()
-  await prisma.notification.deleteMany()
-  await prisma.adminLog.deleteMany()
-  await prisma.announcement.deleteMany()
-  await prisma.report.deleteMany()
-  await prisma.upload.deleteMany()
-  await prisma.userCheckInLog.deleteMany()
-  await prisma.postTip.deleteMany()
-  await prisma.directMessage.deleteMany()
-  await prisma.conversationParticipant.deleteMany()
-  await prisma.conversation.deleteMany()
-  await prisma.pollVote.deleteMany()
-  await prisma.pollOption.deleteMany()
-  await prisma.like.deleteMany()
-  await prisma.favorite.deleteMany()
-  await prisma.comment.deleteMany()
-  await prisma.pointLog.deleteMany()
-  await prisma.$executeRawUnsafe('DELETE FROM "GobangMove"')
-  await prisma.$executeRawUnsafe('DELETE FROM "GobangMatch"')
-  await prisma.$executeRawUnsafe('DELETE FROM "SelfServeAdOrder"')
-  await prisma.postTag.deleteMany()
-
-
-  await prisma.tag.deleteMany()
-  await prisma.postAppendix.deleteMany()
-  await prisma.post.deleteMany()
-  await prisma.boardFollow.deleteMany()
-  await prisma.board.deleteMany()
-  await prisma.zone.deleteMany()
-  await prisma.siteSetting.deleteMany()
-  await prisma.user.deleteMany()
-}
 
 async function ensureSiteSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })

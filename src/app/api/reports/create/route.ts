@@ -10,10 +10,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const reasonType = requireStringField(body, "reasonType", "请填写完整的举报信息")
   const reasonDetail = readOptionalStringField(body, "reasonDetail")
 
-  if (!targetId || !reasonType) {
-    apiError(400, "请填写完整的举报信息")
-  }
-
   if (targetType !== TargetType.POST && targetType !== TargetType.COMMENT && targetType !== TargetType.USER) {
     apiError(400, "不支持的举报类型")
   }

@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/db/client"
-import { buildPostDetailInclude } from "@/db/queries"
+import { buildPostDetailInclude, pinnedPostOrderBy, postListInclude } from "@/db/queries"
 
 
 const postSeoSelect = {
@@ -53,6 +53,18 @@ export async function findPostDetailBySlug(slug: string, currentUserId?: number)
   })
 }
 
+export async function findHomepagePosts(page: number, pageSize: number) {
+  return prisma.post.findMany({
+    where: {
+      status: "NORMAL",
+    },
+    include: postListInclude,
+    orderBy: pinnedPostOrderBy,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  })
+}
+
 export async function findEditablePostBySlug(slug: string) {
   return prisma.post.findUnique({
     where: { slug },
@@ -64,6 +76,17 @@ export async function findEditablePostBySlug(slug: string) {
         },
       },
       redPacket: true,
+    },
+  })
+}
+
+export async function increasePostViewCount(postId: string) {
+  return prisma.post.update({
+    where: { id: postId },
+    data: {
+      viewCount: {
+        increment: 1,
+      },
     },
   })
 }

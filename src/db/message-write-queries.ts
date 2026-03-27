@@ -24,7 +24,75 @@ export function findConversationParticipantByUser(conversationId: string, userId
   })
 }
 
+export function createConversationWithParticipants(senderId: number, recipientId: number) {
+  return prisma.conversation.create({
+    data: {
+      participants: {
+        create: [
+          { userId: senderId, unreadCount: 0 },
+          { userId: recipientId, unreadCount: 0 },
+        ],
+      },
+    },
+    include: {
+      participants: true,
+    },
+  })
+}
+
+export function findConversationWithParticipants(conversationId: string) {
+  return prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: {
+      participants: true,
+    },
+  })
+}
+
+export async function createDirectMessageInTransaction(conversationId: string, senderId: number, recipientId: number, body: string) {
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.directMessage.create({
+      data: {
+        conversationId,
+        senderId,
+        body,
+      },
+    })
+
+    await tx.conversation.update({
+      where: { id: conversationId },
+      data: {
+        lastMessageAt: created.createdAt,
+      },
+    })
+
+    await tx.conversationParticipant.updateMany({
+      where: {
+        conversationId,
+        userId: recipientId,
+      },
+      data: {
+        unreadCount: { increment: 1 },
+      },
+    })
+
+    await tx.conversationParticipant.updateMany({
+      where: {
+        conversationId,
+        userId: senderId,
+      },
+      data: {
+        unreadCount: 0,
+        lastReadMessageId: created.id,
+      },
+    })
+
+    return created
+  })
+}
+
 export function findMessageHistoryAnchor(messageId: string, conversationId: string) {
+
   return prisma.directMessage.findFirst({
     where: {
       id: messageId,

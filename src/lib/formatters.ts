@@ -1,8 +1,10 @@
 const BUSINESS_TIME_ZONE = "Asia/Shanghai"
+const BUSINESS_TIME_ZONE_OFFSET_MINUTES = 8 * 60
 
 type SupportedDateInput = string | Date
 
 function getDateParts(date = new Date(), timeZone = BUSINESS_TIME_ZONE) {
+
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -22,13 +24,57 @@ function getDateParts(date = new Date(), timeZone = BUSINESS_TIME_ZONE) {
   return { year, month, day }
 }
 
-function normalizeDate(input: SupportedDateInput) {
+function parseBusinessDateTimeInput(input: string) {
+  const normalized = input.trim()
+  const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/)
 
-  const date = input instanceof Date ? input : new Date(input)
+  if (!matched) {
+    return null
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText = "00"] = matched
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = Number(secondText)
+
+  if ([year, month, day, hour, minute, second].some((value) => Number.isNaN(value))) {
+    return null
+  }
+
+  const utcTime = Date.UTC(year, month - 1, day, hour, minute, second) - BUSINESS_TIME_ZONE_OFFSET_MINUTES * 60 * 1000
+  const date = new Date(utcTime)
+
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+
+export function parseBusinessDateTime(input: string | null | undefined) {
+  if (!input) {
+    return null
+  }
+
+  return parseBusinessDateTimeInput(String(input))
+}
+
+function normalizeDate(input: SupportedDateInput) {
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? null : input
+  }
+
+  const businessDate = parseBusinessDateTimeInput(input)
+  if (businessDate) {
+    return businessDate
+  }
+
+  const date = new Date(input)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
 function formatWithOptions(input: string | Date, options: Intl.DateTimeFormatOptions, locale = "zh-CN") {
+
   const date = normalizeDate(input)
 
   if (!date) {

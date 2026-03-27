@@ -1,8 +1,11 @@
 import { ChangeType, PostRedPacketGrantMode, PostRedPacketStatus, PostRedPacketTriggerType, type Prisma } from "@/db/types"
 
-import { prisma } from "@/db/client"
+import { claimPostRedPacketInTransaction, findCurrentUserPostRedPacketClaim, findPostRedPacketSummaryData } from "@/db/post-red-packet-queries"
+
 import { getBusinessDayRange, formatRelativeTime } from "@/lib/formatters"
+
 import { getSiteSettings } from "@/lib/site-settings"
+
 import { multiplyPositiveSafeIntegers } from "@/lib/shared/safe-integer"
 
 
@@ -164,21 +167,8 @@ export async function assertPostRedPacketDailyLimit(params: { senderId: number; 
   const settings = await getSiteSettings()
   const { start, end } = getBusinessDayRange()
 
-  const aggregate = await prisma.postRedPacket.aggregate({
-    where: {
-      senderId: params.senderId,
-      createdAt: {
-        gte: start,
-        lt: end,
-      },
-      status: {
-        in: ["ACTIVE", "COMPLETED", "EXPIRED"],
-      },
-    },
-    _sum: {
-      totalPoints: true,
-    },
-  })
+  const aggregate = await import("@/db/post-red-packet-queries").then(({ sumTodayPostRedPacketPoints }) => sumTodayPostRedPacketPoints(params.senderId, start, end))
+
 
   const usedPoints = aggregate._sum.totalPoints ?? 0
   if (usedPoints + params.totalPoints > settings.postRedPacketDailyLimit) {
@@ -259,140 +249,31 @@ export async function tryClaimPostRedPacket(input: {
 }) {
   const settings = await getSiteSettings()
 
-  return prisma.$transaction(async (tx) => {
-    const [user, post] = await Promise.all([
-      tx.user.findUnique({ where: { id: input.userId }, select: { id: true, points: true, status: true, username: true } }),
-      tx.post.findUnique({
-        where: { id: input.postId },
-        select: {
-          id: true,
-          status: true,
-          authorId: true,
-          redPacket: {
-            include: {
-              claims: {
-                where: { userId: input.userId },
-                select: { id: true, amount: true },
-                take: 1,
-              },
-            },
-          },
-        },
-      }),
-    ])
-
-    if (!user || !post || post.status !== "NORMAL") {
-      return { claimed: false as const, reason: "帖子不存在或暂不可领取" }
-    }
-
-    if (user.status === "MUTED" || user.status === "BANNED") {
-
-      return { claimed: false as const, reason: "当前账号状态不可领取红包" }
-    }
-
-    const packet = post.redPacket
-    if (!packet || packet.status !== "ACTIVE") {
-      return { claimed: false as const, reason: "当前帖子没有可领取红包" }
-    }
-
-    if (packet.triggerType !== input.triggerType) {
-      return { claimed: false as const, reason: "当前行为不满足红包领取条件" }
-    }
-
-    if (packet.claims.length > 0) {
-      return { claimed: false as const, reason: "你已经领取过该红包", amount: packet.claims[0]?.amount }
-    }
-
-    if (packet.remainingCount <= 0 || packet.remainingPoints <= 0) {
-      const nextStatus = packet.claimedCount >= packet.packetCount ? "COMPLETED" : "EXPIRED"
-      await tx.postRedPacket.update({ where: { id: packet.id }, data: { status: nextStatus } })
-      return { claimed: false as const, reason: "红包已领完" }
-    }
-
-    const amount = allocateRedPacketAmount(packet)
-    const nextRemainingCount = packet.remainingCount - 1
-    const nextRemainingPoints = packet.remainingPoints - amount
-    const nextStatus: PostRedPacketStatus = nextRemainingCount === 0 || nextRemainingPoints === 0 ? "COMPLETED" : "ACTIVE"
-
-    await tx.postRedPacketClaim.create({
-      data: {
-        redPacketId: packet.id,
-        postId: post.id,
-        userId: user.id,
-        triggerType: input.triggerType,
-        triggerCommentId: input.triggerCommentId,
-        amount,
-      },
-    })
-
-    await tx.postRedPacket.update({
-      where: { id: packet.id },
-      data: {
-        remainingCount: nextRemainingCount,
-        remainingPoints: nextRemainingPoints,
-        claimedCount: { increment: 1 },
-        claimedPoints: { increment: amount },
-        status: nextStatus,
-      },
-    })
-
-    await tx.user.update({
-      where: { id: user.id },
-      data: {
-        points: { increment: amount },
-      },
-    })
-
-    await tx.pointLog.create({
-      data: {
-        userId: user.id,
-        changeType: ChangeType.INCREASE,
-        changeValue: amount,
-        reason: buildRedPacketClaimReason({ amount, pointName: settings.pointName, postId: post.id, triggerType: input.triggerType }),
-        relatedType: "POST",
-        relatedId: post.id,
-      },
-    })
-
-    return { claimed: true as const, amount, pointName: settings.pointName }
+  return claimPostRedPacketInTransaction({
+    postId: input.postId,
+    userId: input.userId,
+    triggerType: input.triggerType,
+    triggerCommentId: input.triggerCommentId,
+    pointName: settings.pointName,
+    buildClaimReason: buildRedPacketClaimReason,
+    allocateAmount: (packet) => allocateRedPacketAmount({
+      grantMode: packet.grantMode as PostRedPacketGrantMode,
+      remainingPoints: packet.remainingPoints,
+      remainingCount: packet.remainingCount,
+      totalPoints: packet.totalPoints,
+      packetCount: packet.packetCount,
+    }),
   })
 }
+
 
 export async function getPostRedPacketSummary(postId: string, currentUserId?: number, page = 1, pageSize = 20): Promise<PostRedPacketSummary | undefined> {
   const settings = await getSiteSettings()
   const normalizedPageSize = Math.min(100, Math.max(10, Number(pageSize) || 20))
   const normalizedPage = Math.max(1, Number(page) || 1)
 
-  const [packet, currentUser] = await Promise.all([
+  const [packet, currentUser] = await findPostRedPacketSummaryData(postId, currentUserId)
 
-    prisma.postRedPacket.findUnique({
-      where: { postId },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            username: true,
-            nickname: true,
-          },
-        },
-        claims: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                nickname: true,
-                avatarPath: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "asc" },
-          take: 50,
-        },
-      },
-    }),
-    currentUserId ? prisma.user.findUnique({ where: { id: currentUserId }, select: { points: true } }) : Promise.resolve(null),
-  ])
 
   if (!packet) {
     return undefined
@@ -402,16 +283,9 @@ export async function getPostRedPacketSummary(postId: string, currentUserId?: nu
   const totalPages = Math.max(1, Math.ceil(totalRecords / normalizedPageSize))
   const safePage = Math.min(normalizedPage, totalPages)
   const currentUserClaim = currentUserId
-    ? await prisma.postRedPacketClaim.findFirst({
-        where: {
-          redPacketId: packet.id,
-          userId: currentUserId,
-        },
-        select: {
-          amount: true,
-        },
-      })
+    ? await findCurrentUserPostRedPacketClaim(packet.id, currentUserId)
     : undefined
+
 
   return {
 

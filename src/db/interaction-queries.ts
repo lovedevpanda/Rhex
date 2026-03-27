@@ -1,6 +1,8 @@
 import { Prisma, NotificationType, TargetType } from "@/db/types"
 import { prisma } from "@/db/client"
 
+
+
 function isPrismaKnownError(error: unknown, code: string) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
 }
@@ -87,6 +89,9 @@ export async function toggleCommentLike(params: {
   }
 }
 
+
+
+
 export async function togglePostLike(params: {
   userId: number
   postId: string
@@ -169,6 +174,8 @@ export async function togglePostLike(params: {
   }
 }
 
+
+
 export async function togglePostFavorite(params: {
   userId: number
   postId: string
@@ -219,3 +226,6 @@ export async function togglePostFavorite(params: {
     favored: true,
   }
 }
+
+
+

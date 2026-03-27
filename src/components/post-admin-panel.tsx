@@ -13,6 +13,7 @@ interface PostAdminPanelProps {
   postAuthorId: number
   postAuthorUsername: string
   postAuthorStatus?: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+  postStatus?: string
   isPinned: boolean
   pinScope?: string | null
   isFeatured: boolean
@@ -34,6 +35,7 @@ export function PostAdminPanel({
   postAuthorId,
   postAuthorUsername,
   postAuthorStatus,
+  postStatus,
   isPinned,
   isFeatured,
   boardOptions,
@@ -129,11 +131,15 @@ export function PostAdminPanel({
         { action: "post.pin", targetId: postId, label: "全局置顶", extra: { scope: "GLOBAL" } },
       ]
 
+  const postVisibilityAction: AdminQuickAction = postStatus === "OFFLINE"
+    ? { action: "post.show", targetId: postId, label: "上线帖子" }
+    : { action: "post.hide", targetId: postId, label: "下线帖子", tone: "danger" as const }
+
   const actions: AdminQuickAction[] = [
     ...pinActions,
     { action: "post.feature", targetId: postId, label: isFeatured ? "取消精华" : "设为精华" },
     ...userActions,
-    { action: "post.hide", targetId: postId, label: "下线帖子", tone: "danger" as const },
+    postVisibilityAction,
   ]
 
   return (

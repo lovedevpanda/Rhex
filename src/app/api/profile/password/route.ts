@@ -1,12 +1,15 @@
 import bcrypt from "bcryptjs"
 
 import { prisma } from "@/db/client"
-import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
+
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
-  const body = await request.json()
-  const currentPassword = String(body.currentPassword ?? "")
-  const newPassword = String(body.newPassword ?? "")
+  const body = await readJsonBody(request)
+  const currentPassword = requireStringField(body, "currentPassword", "缺少必要参数")
+  const newPassword = requireStringField(body, "newPassword", "缺少必要参数")
+
 
   if (!currentPassword || !newPassword) {
     apiError(400, "缺少必要参数")
@@ -39,7 +42,16 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     data: { passwordHash },
   })
 
+  logRouteWriteSuccess({
+    scope: "profile-password",
+    action: "update-password",
+  }, {
+    userId: currentUser.id,
+    targetId: String(currentUser.id),
+  })
+
   return apiSuccess(undefined, "密码已更新")
+
 }, {
   errorMessage: "修改密码失败",
   logPrefix: "[api/profile/password] unexpected error",

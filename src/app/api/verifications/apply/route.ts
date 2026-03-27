@@ -1,42 +1,41 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, readOptionalStringField, requireStringField } from "@/lib/api-route"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { submitVerificationApplication } from "@/lib/verifications"
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const verificationTypeId = requireStringField(body, "verificationTypeId", "请选择认证类型")
+  const content = readOptionalStringField(body, "content")
+  const formResponse = body.formResponse && typeof body.formResponse === "object"
+    ? Object.fromEntries(Object.entries(body.formResponse as Record<string, unknown>).map(([key, value]) => [key, String(value ?? "")]))
+    : undefined
 
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录后再申请认证" }, { status: 401 })
-  }
+  const application = await submitVerificationApplication({
+    userId: currentUser.id,
+    verificationTypeId,
+    content,
+    formResponse,
+  })
 
-  const body = await request.json()
-  const verificationTypeId = String(body.verificationTypeId ?? "").trim()
-  const content = String(body.content ?? "").trim()
-  const formResponse = body.formResponse && typeof body.formResponse === "object" ? body.formResponse as Record<string, unknown> : undefined
-
-  if (!verificationTypeId) {
-    return NextResponse.json({ code: 400, message: "请选择认证类型" }, { status: 400 })
-  }
-
-  try {
-    const application = await submitVerificationApplication({
-      userId: currentUser.id,
+  logRouteWriteSuccess({
+    scope: "verifications-apply",
+    action: "submit-verification-application",
+  }, {
+    userId: currentUser.id,
+    targetId: application.id,
+    extra: {
       verificationTypeId,
-      content,
-      formResponse: formResponse ? Object.fromEntries(Object.entries(formResponse).map(([key, value]) => [key, String(value ?? "")])) : undefined,
-    })
+      status: application.status,
+    },
+  })
 
-
-    return NextResponse.json({
-      code: 0,
-      message: "认证申请已提交，请等待后台审核",
-      data: {
-        id: application.id,
-        status: application.status,
-      },
-    })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "提交失败" }, { status: 400 })
-  }
-}
+  return apiSuccess({
+    id: application.id,
+    status: application.status,
+  }, "认证申请已提交，请等待后台审核")
+}, {
+  errorMessage: "提交失败",
+  logPrefix: "[api/verifications/apply] unexpected error",
+  unauthorizedMessage: "请先登录后再申请认证",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

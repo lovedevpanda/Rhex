@@ -2,7 +2,9 @@ import { ChangeType } from "@/db/types"
 
 import { prisma } from "@/db/client"
 import { formatDateTime } from "@/lib/formatters"
+import { withRuntimeFallback } from "@/lib/runtime-errors"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
+
 
 export interface SitePointLogItem {
   id: string
@@ -29,7 +31,7 @@ export async function getUserPointLogs(userId: number, options: { page?: number;
   const pageSize = 10
   const requestedPage = normalizePositiveInteger(options.page, 1)
 
-  try {
+  return withRuntimeFallback(async () => {
     const total = await prisma.pointLog.count({
       where: { userId },
     })
@@ -61,9 +63,12 @@ export async function getUserPointLogs(userId: number, options: { page?: number;
       hasPrevPage: page > 1,
       hasNextPage: page < totalPages,
     }
-  } catch (error) {
-    console.error(error)
-    return {
+  }, {
+    area: "points",
+    action: "getUserPointLogs",
+    message: "积分日志加载失败",
+    metadata: { userId, page: requestedPage },
+    fallback: {
       items: [],
       page: 1,
       pageSize,
@@ -71,7 +76,8 @@ export async function getUserPointLogs(userId: number, options: { page?: number;
       totalPages: 1,
       hasPrevPage: false,
       hasNextPage: false,
-    }
-  }
+    },
+  })
 }
+
 

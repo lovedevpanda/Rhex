@@ -3,19 +3,23 @@ import { hashSync } from "bcryptjs"
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
-import { apiError, apiSuccess, createRouteHandler } from "@/lib/api-route"
+import { apiError, apiSuccess, createRouteHandler, readJsonBody } from "@/lib/api-route"
+
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { getRequestIp } from "@/lib/request-ip"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { createSessionToken, getSessionCookieName, getSessionCookieOptions } from "@/lib/session"
 import { getSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { validateAuthPayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
 
+
 export const POST = createRouteHandler(async ({ request }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const validated = validateAuthPayload(body)
+
 
   if (!validated.success || !validated.data) {
     apiError(400, validated.message ?? "参数错误")
@@ -270,7 +274,20 @@ export const POST = createRouteHandler(async ({ request }) => {
   const sessionToken = await createSessionToken(user.username)
   response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
 
+  logRouteWriteSuccess({
+    scope: "auth-register",
+    action: "register",
+  }, {
+    userId: user.id,
+    targetId: user.username,
+    extra: {
+      registerIp,
+      invited: Boolean(inviterUsername || inviteCode),
+    },
+  })
+
   return response
+
 }, {
   errorMessage: "注册失败",
   logPrefix: "[api/auth/register] unexpected error",

@@ -1,22 +1,31 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
-import { publishMessageEvent } from "@/lib/message-event-bus"
 import { deleteConversationForUser } from "@/lib/messages"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const conversationId = requireStringField(body, "conversationId", "缺少会话信息")
 
-  await deleteConversationForUser(conversationId, currentUser.id)
+  return withRequestWriteGuard({
+    request,
+    userId: currentUser.id,
+    scope: "messages-delete",
+    cooldownMs: 1_000,
+    dedupeKey: `${currentUser.id}:${conversationId}`,
+  }, async () => {
+    await deleteConversationForUser(conversationId, currentUser.id)
 
+    logRouteWriteSuccess({
+      scope: "messages-delete",
+      action: "delete-conversation",
+    }, {
+      userId: currentUser.id,
+      targetId: conversationId,
+    })
 
-  publishMessageEvent([currentUser.id], {
-    type: "conversation.read",
-    conversationId,
-    senderId: currentUser.id,
-    occurredAt: new Date().toISOString(),
+    return apiSuccess(undefined, "会话已删除")
   })
-
-  return apiSuccess(undefined, "会话已删除")
 }, {
   errorMessage: "删除会话失败",
   logPrefix: "[api/messages/delete] unexpected error",

@@ -1,32 +1,34 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { redeemPointsCode } from "@/lib/redeem-codes"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser()
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const code = requireStringField(body, "code", "请输入兑换码")
 
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
+  const redeemCode = await redeemPointsCode({
+    userId: currentUser.id,
+    code,
+  })
 
-  try {
-    const body = await request.json()
-    const redeemCode = await redeemPointsCode({
-      userId: user.id,
-      code: String(body.code ?? ""),
-    })
+  logRouteWriteSuccess({
+    scope: "redeem-codes-redeem",
+    action: "redeem-points-code",
+  }, {
+    userId: currentUser.id,
+    targetId: redeemCode.code,
+    extra: {
+      points: redeemCode.points,
+    },
+  })
 
-    return NextResponse.json({
-      code: 0,
-      message: "兑换成功",
-      data: {
-        code: redeemCode.code,
-        points: redeemCode.points,
-      },
-    })
-  } catch (error) {
-    const message = error instanceof Error && error.message ? error.message : "兑换失败"
-    return NextResponse.json({ code: 400, message }, { status: 400 })
-  }
-}
+  return apiSuccess({
+    code: redeemCode.code,
+    points: redeemCode.points,
+  }, "兑换成功")
+}, {
+  errorMessage: "兑换失败",
+  logPrefix: "[api/redeem-codes/redeem] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

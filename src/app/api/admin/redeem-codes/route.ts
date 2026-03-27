@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, createAdminRouteHandler } from "@/lib/api-route"
+import { parseBusinessDateTime } from "@/lib/formatters"
 import { createRedeemCodes, getRedeemCodeList } from "@/lib/redeem-codes"
 
 export const GET = createAdminRouteHandler(async () => {
@@ -16,7 +17,8 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   const points = Math.max(1, Number(body.points ?? 0) || 0)
   const note = typeof body.note === "string" ? body.note.trim() : ""
   const expiresAtInput = typeof body.expiresAt === "string" ? body.expiresAt.trim() : ""
-  const expiresAt = expiresAtInput ? new Date(expiresAtInput) : null
+  const expiresAt = expiresAtInput ? parseBusinessDateTime(expiresAtInput) : null
+
 
   if (Number.isNaN(expiresAt?.getTime())) {
     apiError(400, "过期时间格式不正确")

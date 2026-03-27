@@ -1,4 +1,6 @@
 import { prisma } from "@/db/client"
+import { countUserCommentLikes, countUserPostLikes, syncUserReceivedLikesInTransaction } from "@/db/level-system-queries"
+
 
 type LevelDefinitionRecord = {
   id: string
@@ -301,51 +303,15 @@ export async function recordUserCheckInGrowth(userId: number) {
 
 export async function syncUserReceivedLikes(userId: number) {
   const [postLikes, commentLikes] = await Promise.all([
-    prisma.like.count({
-      where: {
-        targetType: "POST",
-        post: {
-          authorId: userId,
-        },
-      },
-    }),
-    prisma.like.count({
-      where: {
-        targetType: "COMMENT",
-        comment: {
-          userId,
-        },
-      },
-    }),
+    countUserPostLikes(userId),
+    countUserCommentLikes(userId),
   ])
 
-  const totalLikes = postLikes + commentLikes
-
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: userId },
-      data: { likeReceivedCount: totalLikes },
-    })
-
-    await extendedPrisma.userLevelProgress.upsert({
-      where: { userId },
-      update: {
-        receivedPostLikes: postLikes,
-        receivedCommentLikes: commentLikes,
-        receivedLikeCount: totalLikes,
-      },
-      create: {
-        userId,
-        receivedPostLikes: postLikes,
-        receivedCommentLikes: commentLikes,
-        receivedLikeCount: totalLikes,
-      },
-    })
-  })
-
+  await syncUserReceivedLikesInTransaction(userId, postLikes, commentLikes)
 
   return evaluateUserLevelProgress(userId)
 }
+
 
 export async function saveLevelDefinitions(input: Array<{
   id?: string

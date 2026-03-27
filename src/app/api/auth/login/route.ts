@@ -2,16 +2,17 @@ import { compareSync } from "bcryptjs"
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
-import { apiError, createRouteHandler, apiSuccess } from "@/lib/api-route"
+import { apiError, createRouteHandler, apiSuccess, readJsonBody, readOptionalStringField } from "@/lib/api-route"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { getRequestIp } from "@/lib/request-ip"
+import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { createSessionToken, getSessionCookieName, getSessionCookieOptions } from "@/lib/session"
 import { getSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { validateAuthPayload } from "@/lib/validators"
 
 export const POST = createRouteHandler(async ({ request }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const validated = validateAuthPayload(body)
 
   if (!validated.success || !validated.data) {
@@ -19,8 +20,8 @@ export const POST = createRouteHandler(async ({ request }) => {
   }
 
   const { username, password } = validated.data
-  const captchaToken = typeof body.captchaToken === "string" ? body.captchaToken.trim() : ""
-  const builtinCaptchaCode = typeof body.builtinCaptchaCode === "string" ? body.builtinCaptchaCode.trim() : ""
+  const captchaToken = readOptionalStringField(body, "captchaToken")
+  const builtinCaptchaCode = readOptionalStringField(body, "builtinCaptchaCode")
   const settings = await getSiteSettings()
 
   if (settings.loginCaptchaMode === "TURNSTILE") {
@@ -84,6 +85,17 @@ export const POST = createRouteHandler(async ({ request }) => {
   const response = NextResponse.json(apiSuccess({ username: user.username }, "success"))
   const sessionToken = await createSessionToken(user.username)
   response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
+
+  logRouteWriteSuccess({
+    scope: "auth-login",
+    action: "login",
+  }, {
+    userId: user.id,
+    targetId: user.username,
+    extra: {
+      loginIp,
+    },
+  })
 
   return response
 }, {
