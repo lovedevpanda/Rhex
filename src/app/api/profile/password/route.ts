@@ -1,26 +1,19 @@
 import bcrypt from "bcryptjs"
-import { NextResponse } from "next/server"
 
-import { getCurrentUser } from "@/lib/auth"
 import { prisma } from "@/db/client"
+import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
-
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await request.json()
   const currentPassword = String(body.currentPassword ?? "")
   const newPassword = String(body.newPassword ?? "")
 
   if (!currentPassword || !newPassword) {
-    return NextResponse.json({ code: 400, message: "缺少必要参数" }, { status: 400 })
+    apiError(400, "缺少必要参数")
   }
 
   if (newPassword.length < 6 || newPassword.length > 64) {
-    return NextResponse.json({ code: 400, message: "新密码长度需为 6-64 位" }, { status: 400 })
+    apiError(400, "新密码长度需为 6-64 位")
   }
 
   const user = await prisma.user.findUnique({
@@ -32,12 +25,12 @@ export async function POST(request: Request) {
   })
 
   if (!user) {
-    return NextResponse.json({ code: 404, message: "用户不存在" }, { status: 404 })
+    apiError(404, "用户不存在")
   }
 
   const matched = await bcrypt.compare(currentPassword, user.passwordHash)
   if (!matched) {
-    return NextResponse.json({ code: 400, message: "当前密码不正确" }, { status: 400 })
+    apiError(400, "当前密码不正确")
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10)
@@ -46,5 +39,10 @@ export async function POST(request: Request) {
     data: { passwordHash },
   })
 
-  return NextResponse.json({ code: 0, message: "密码已更新" })
-}
+  return apiSuccess(undefined, "密码已更新")
+}, {
+  errorMessage: "修改密码失败",
+  logPrefix: "[api/profile/password] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

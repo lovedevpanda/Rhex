@@ -1,35 +1,29 @@
-import { NextResponse } from "next/server"
-
+import { apiError, apiSuccess, createRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { resetPasswordByEmailCode } from "@/lib/password-reset"
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : ""
-    const code = typeof body.code === "string" ? body.code.trim() : ""
-    const password = typeof body.password === "string" ? body.password : ""
-    const confirmPassword = typeof body.confirmPassword === "string" ? body.confirmPassword : ""
+export const POST = createRouteHandler(async ({ request }) => {
+  const body = await readJsonBody(request)
+  const email = requireStringField(body, "email", "请完整填写邮箱、验证码和新密码").toLowerCase()
+  const code = requireStringField(body, "code", "请完整填写邮箱、验证码和新密码")
+  const password = requireStringField(body, "password", "请完整填写邮箱、验证码和新密码")
+  const confirmPassword = requireStringField(body, "confirmPassword", "请完整填写邮箱、验证码和新密码")
 
-    if (!email || !code || !password || !confirmPassword) {
-      return NextResponse.json({ code: 400, message: "请完整填写邮箱、验证码和新密码" }, { status: 400 })
-    }
-
-    if (password !== confirmPassword) {
-      return NextResponse.json({ code: 400, message: "两次输入的密码不一致" }, { status: 400 })
-    }
-
-    await resetPasswordByEmailCode({
-      email,
-      code,
-      password,
-    })
-
-    return NextResponse.json({
-      code: 0,
-      message: "密码已重置，请使用新密码登录",
-    })
-  } catch (error) {
-    const message = error instanceof Error && error.message ? error.message : "重置密码失败"
-    return NextResponse.json({ code: 400, message }, { status: 400 })
+  if (!email || !code || !password || !confirmPassword) {
+    apiError(400, "请完整填写邮箱、验证码和新密码")
   }
-}
+
+  if (password !== confirmPassword) {
+    apiError(400, "两次输入的密码不一致")
+  }
+
+  await resetPasswordByEmailCode({
+    email,
+    code,
+    password,
+  })
+
+  return apiSuccess(undefined, "密码已重置，请使用新密码登录")
+}, {
+  errorMessage: "重置密码失败",
+  logPrefix: "[api/auth/forgot-password/reset] unexpected error",
+})

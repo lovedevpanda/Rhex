@@ -55,6 +55,12 @@ export interface SitePostItem {
   authorStatus?: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   authorIsVip?: boolean
   authorVipLevel?: number
+  authorVerification?: {
+    id: string
+    name: string
+    color: string
+    iconText?: string | null
+  } | null
   authorDisplayedBadges?: Array<{
     id: string
     name: string

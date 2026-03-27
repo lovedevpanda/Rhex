@@ -1,40 +1,28 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { prisma } from "@/db/client"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { enforceSensitiveText } from "@/lib/content-safety"
-import { hasDatabaseUrl } from "@/lib/db-status"
 import { buildPostContentDocument, serializePostContentDocument } from "@/lib/post-content"
 import { syncPostTaxonomy } from "@/lib/post-editor"
-import { prisma } from "@/db/client"
+import { parseNonNegativeSafeInteger, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
+
 
 const APPEND_INTERVAL_MS = 60 * 60 * 1000
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
-  const body = await request.json()
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
   const postId = String(body.postId ?? "")
   const title = String(body.title ?? "").trim()
   const content = String(body.content ?? "").trim()
   const commentsVisibleToAuthorOnly = Boolean(body.commentsVisibleToAuthorOnly)
   const replyUnlockContent = String(body.replyUnlockContent ?? "").trim()
-  const replyThreshold = Number(body.replyThreshold ?? 1)
+  const replyThreshold = parsePositiveSafeInteger(body.replyThreshold) ?? 1
   const purchaseUnlockContent = String(body.purchaseUnlockContent ?? "").trim()
-  const purchasePrice = Number(body.purchasePrice ?? 0)
-  const minViewLevel = Math.max(0, Number(body.minViewLevel ?? 0) || 0)
+  const purchasePrice = parsePositiveSafeInteger(body.purchasePrice) ?? 0
+  const minViewLevel = parseNonNegativeSafeInteger(body.minViewLevel) ?? 0
   const appendedContent = String(body.appendedContent ?? "").trim()
 
-
-
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
   if (!postId) {
-    return NextResponse.json({ code: 400, message: "缺少帖子 ID" }, { status: 400 })
-  }
-
-  if (!hasDatabaseUrl()) {
-    return NextResponse.json({ code: 503, message: "当前未配置数据库，暂不可修改帖子" }, { status: 503 })
+    apiError(400, "缺少帖子 ID")
   }
 
   const post = await prisma.post.findUnique({
@@ -71,12 +59,12 @@ export async function POST(request: Request) {
   })
 
   if (!post) {
-    return NextResponse.json({ code: 404, message: "帖子不存在" }, { status: 404 })
+    apiError(404, "帖子不存在")
   }
 
   const isAdmin = currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"
   if (!isAdmin && post.authorId !== currentUser.id) {
-    return NextResponse.json({ code: 403, message: "无权修改该帖子" }, { status: 403 })
+    apiError(403, "无权修改该帖子")
   }
 
   const canEditOriginal = Boolean(post.editableUntil && new Date(post.editableUntil).getTime() > Date.now()) || isAdmin
@@ -84,17 +72,16 @@ export async function POST(request: Request) {
   const isOriginalEditRequest = Boolean(title || content || replyUnlockContent || purchaseUnlockContent)
 
   if (isOriginalEditRequest && !canEditOriginal) {
-    return NextResponse.json({ code: 400, message: "该帖子已超过 10 分钟编辑窗口，请使用附言追加功能" }, { status: 400 })
+    apiError(400, "该帖子已超过 10 分钟编辑窗口，请使用附言追加功能")
   }
 
   if (isAppendRequest && canEditOriginal) {
-    return NextResponse.json({ code: 400, message: "帖子仍在编辑窗口内，请使用编辑功能修改原文" }, { status: 400 })
+    apiError(400, "帖子仍在编辑窗口内，请使用编辑功能修改原文")
   }
 
   if (!isAppendRequest && canEditOriginal) {
-
     if (!title || !content) {
-      return NextResponse.json({ code: 400, message: "标题和正文不能为空" }, { status: 400 })
+      apiError(400, "标题和正文不能为空")
     }
 
     const titleSafety = await enforceSensitiveText({ scene: "post.title", text: title })
@@ -119,31 +106,25 @@ export async function POST(request: Request) {
         minViewLevel,
         reviewNote: titleSafety.shouldReview || contentSafety.shouldReview ? "编辑内容命中敏感词规则，请复核" : undefined,
       },
-
     })
-
 
     await syncPostTaxonomy(postId, titleSafety.sanitizedText, serializedContent)
 
-    return NextResponse.json({
-      code: 0,
-      message: titleSafety.shouldReview || contentSafety.shouldReview ? "帖子已更新，内容命中敏感词审核规则" : "帖子已更新",
-      data: {
-        id: post.id,
-        slug: post.slug,
-      },
-    })
+    return apiSuccess({
+      id: post.id,
+      slug: post.slug,
+    }, titleSafety.shouldReview || contentSafety.shouldReview ? "帖子已更新，内容命中敏感词审核规则" : "帖子已更新")
   }
 
   if (!appendedContent) {
-    return NextResponse.json({ code: 400, message: "超过编辑时限后只能追加内容" }, { status: 400 })
+    apiError(400, "超过编辑时限后只能追加内容")
   }
 
   if (!isAdmin && post.lastAppendedAt) {
     const waitMs = APPEND_INTERVAL_MS - (Date.now() - new Date(post.lastAppendedAt).getTime())
 
     if (waitMs > 0) {
-      return NextResponse.json({ code: 429, message: `追加过于频繁，请 ${Math.ceil(waitMs / (60 * 1000))} 分钟后再试` }, { status: 429 })
+      apiError(429, `追加过于频繁，请 ${Math.ceil(waitMs / (60 * 1000))} 分钟后再试`)
     }
   }
 
@@ -165,14 +146,15 @@ export async function POST(request: Request) {
     },
   })
 
-  return NextResponse.json({
-    code: 0,
-    message: appendSafety.shouldReview ? "补充内容已提交，命中敏感词审核规则" : "已追加补充内容",
-    data: {
-      id: post.id,
-      slug: post.slug,
-    },
-  })
-}
+  return apiSuccess({
+    id: post.id,
+    slug: post.slug,
+  }, appendSafety.shouldReview ? "补充内容已提交，命中敏感词审核规则" : "已追加补充内容")
+}, {
+  errorMessage: "修改帖子失败",
+  logPrefix: "[api/posts/update] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})
 
 

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs"
+import { revalidatePath } from "next/cache"
 import { BoardStatus, CommentStatus, PostStatus, ReportStatus, UserRole, UserStatus } from "@/db/types"
 import { NextResponse } from "next/server"
 
@@ -179,6 +180,43 @@ export async function POST(request: Request) {
       await prisma.post.update({ where: { id: targetId }, data: { status: PostStatus.OFFLINE } })
       await writeAdminLog(admin.id, action, "POST", targetId, message || "管理员下线帖子", requestIp)
       return NextResponse.json({ code: 0, message: "帖子已下线" })
+    }
+    case "post.moveBoard": {
+      const boardSlug = String(body.boardSlug ?? "").trim()
+      if (!boardSlug) {
+        return NextResponse.json({ code: 400, message: "缺少目标节点" }, { status: 400 })
+      }
+
+      const [post, targetBoard] = await Promise.all([
+        prisma.post.findUnique({
+          where: { id: targetId },
+          select: { id: true, slug: true, title: true, boardId: true, board: { select: { slug: true, name: true } } },
+        }),
+        prisma.board.findUnique({ where: { slug: boardSlug }, select: { id: true, slug: true, name: true, status: true } }),
+      ])
+
+      if (!post) {
+        return NextResponse.json({ code: 404, message: "帖子不存在" }, { status: 404 })
+      }
+
+      if (!targetBoard || targetBoard.status !== BoardStatus.ACTIVE) {
+        return NextResponse.json({ code: 404, message: "目标节点不存在或不可用" }, { status: 404 })
+      }
+
+      if (post.boardId === targetBoard.id) {
+        return NextResponse.json({ code: 400, message: "帖子已在当前节点，无需移动" }, { status: 400 })
+      }
+
+      await prisma.post.update({ where: { id: targetId }, data: { boardId: targetBoard.id } })
+      await writeAdminLog(admin.id, action, "POST", targetId, message || `管理员将帖子从节点 ${post.board.name} 移动到 ${targetBoard.name}`, requestIp)
+
+      revalidatePath(`/posts/${post.slug}`)
+      revalidatePath(`/boards/${post.board.slug}`)
+      revalidatePath(`/boards/${targetBoard.slug}`)
+      revalidatePath("/")
+      revalidatePath("/admin")
+
+      return NextResponse.json({ code: 0, message: `帖子已移动到 ${targetBoard.name}`, data: { slug: post.slug, boardSlug: targetBoard.slug } })
     }
     case "post.approve": {
       await prisma.post.update({ where: { id: targetId }, data: { status: PostStatus.NORMAL, publishedAt: new Date(), reviewNote: message || null } })

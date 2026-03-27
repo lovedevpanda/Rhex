@@ -1,10 +1,13 @@
-export function normalizePositiveInteger(value: unknown, fallback: number) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback
-  }
+import { parseNonNegativeSafeInteger, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
 
-  return Math.floor(parsed)
+export function normalizePositiveInteger(value: unknown, fallback: number) {
+  const parsed = parsePositiveSafeInteger(value)
+  return parsed ?? fallback
+}
+
+export function normalizeNonNegativeInteger(value: unknown, fallback: number) {
+  const parsed = parseNonNegativeSafeInteger(value)
+  return parsed ?? fallback
 }
 
 export function normalizePageSize(value: unknown, options: readonly number[] = [20, 50, 100], fallback = 20) {
@@ -62,11 +65,12 @@ export function normalizeTippingAmounts(value: unknown) {
 export function normalizeHeatThresholds(value: unknown) {
   const values = String(value ?? "")
     .split(/[，,\s]+/)
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isFinite(item) && item >= 0)
+    .map((item) => parseNonNegativeSafeInteger(item.trim()))
+    .filter((item): item is number => item !== null)
 
   return Array.from(new Set(values)).sort((left, right) => left - right)
 }
+
 
 export function normalizeHeatColors(value: unknown) {
   return String(value ?? "")

@@ -7,6 +7,7 @@ import { AdminFooterLinksSettingsForm } from "@/components/admin-footer-links-se
 import { AdminFriendLinksSettingsForm } from "@/components/admin-friend-links-settings-form"
 import { AdminBadgeManager } from "@/components/admin-badge-manager"
 import { AdminBasicSettingsForm } from "@/components/admin-basic-settings-form"
+import { AdminVerificationManager } from "@/components/admin-verification-manager"
 import { AdminLevelSettingsForm } from "@/components/admin-level-settings-form"
 import { AdminLogCenter } from "@/components/admin-log-center"
 import { AdminMarkdownEmojiSettingsForm } from "@/components/admin-markdown-emoji-settings-form"
@@ -35,6 +36,7 @@ import { getRedeemCodeList } from "@/lib/redeem-codes"
 import { getAdminReports } from "@/lib/reports"
 import { getAdminFriendLinkPageData } from "@/lib/friend-links"
 import { getSensitiveWordPage, getSiteSettings } from "@/lib/site-settings"
+import { prisma } from "@/db/client"
 
 interface AdminPageProps {
   searchParams?: {
@@ -137,7 +139,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const currentLogPage = searchParams?.logPage ?? "1"
   const currentLogPageSize = searchParams?.logPageSize ?? "20"
 
-  const [data, siteSettings, adminUsers, filteredPosts, levelDefinitions, badges, announcements, inviteCodes, redeemCodes, reports, sensitiveWordResult, logCenter, friendLinks] = await Promise.all([
+  const [data, siteSettings, adminUsers, filteredPosts, levelDefinitions, badges, announcements, inviteCodes, redeemCodes, reports, sensitiveWordResult, logCenter, friendLinks, verificationTypes, verificationApplications] = await Promise.all([
     getAdminDashboardData(),
     getSiteSettings(),
     getAdminUsers({
@@ -179,6 +181,37 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       pageSize: Number(currentLogPageSize),
     }),
     getAdminFriendLinkPageData(),
+    prisma.verificationType.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: {
+        _count: {
+          select: {
+            applications: true,
+          },
+        },
+      },
+    }),
+    prisma.userVerification.findMany({
+      orderBy: [{ submittedAt: "desc" }],
+      take: 200,
+      include: {
+        type: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            nickname: true,
+          },
+        },
+        reviewer: {
+          select: {
+            id: true,
+            username: true,
+            nickname: true,
+          },
+        },
+      },
+    }),
   ])
 
   return (
@@ -275,6 +308,67 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             extraValue: rule.extraValue ?? "",
             sortOrder: rule.sortOrder,
           })),
+        }))} /> : null}
+        {tab === "verifications" ? <AdminVerificationManager initialTypes={verificationTypes.map((item: (typeof verificationTypes)[number]) => ({
+          id: item.id,
+          name: item.name,
+          slug: item.slug,
+          description: item.description ?? "",
+          iconText: item.iconText ?? "✔️",
+          color: item.color,
+          formFields: (() => {
+            if (!item.formSchemaJson?.trim()) {
+              return []
+            }
+            try {
+              const parsed = JSON.parse(item.formSchemaJson) as Array<Record<string, unknown>>
+              if (!Array.isArray(parsed)) {
+                return []
+              }
+              return parsed.map((field, fieldIndex) => ({
+                id: String(field.id ?? `field_${fieldIndex + 1}`),
+                label: String(field.label ?? "字段"),
+                type: (["text", "textarea", "number", "url"].includes(String(field.type ?? "text")) ? String(field.type ?? "text") : "text") as "text" | "textarea" | "number" | "url",
+                placeholder: String(field.placeholder ?? "") || undefined,
+                required: field.required === true,
+                helpText: String(field.helpText ?? "") || undefined,
+                sortOrder: Number.isFinite(Number(field.sortOrder)) ? Number(field.sortOrder) : fieldIndex,
+              }))
+            } catch {
+              return []
+            }
+          })(),
+          sortOrder: item.sortOrder,
+          status: item.status,
+          needRemark: item.needRemark,
+          userLimit: item.userLimit,
+          allowResubmitAfterReject: item.allowResubmitAfterReject,
+          applicationCount: item._count.applications,
+        }))} initialApplications={verificationApplications.map((item: (typeof verificationApplications)[number]) => ({
+          id: item.id,
+          status: item.status,
+          content: item.content,
+          formResponseJson: item.formResponseJson,
+          note: item.note,
+          rejectReason: item.rejectReason,
+          submittedAt: item.submittedAt.toISOString(),
+          reviewedAt: item.reviewedAt?.toISOString() ?? null,
+          user: {
+            id: item.user.id,
+            username: item.user.username,
+            displayName: item.user.nickname?.trim() || item.user.username,
+          },
+          type: {
+            id: item.type.id,
+            name: item.type.name,
+            iconText: item.type.iconText ?? "✔️",
+            color: item.type.color,
+          },
+          reviewer: item.reviewer ? {
+            id: item.reviewer.id,
+            username: item.reviewer.username,
+            displayName: item.reviewer.nickname?.trim() || item.reviewer.username,
+          } : null,
         }))} /> : null}
         {tab === "announcements" ? <AdminAnnouncementManager initialItems={announcements} /> : null}
         {tab === "settings" && currentSettingsSection === "profile" ? <AdminBasicSettingsForm initialSettings={siteSettings} mode="profile" /> : null}

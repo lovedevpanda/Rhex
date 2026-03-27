@@ -1,7 +1,17 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+
+import {
+  clearPostDraftFromStorage,
+  loadPostDraftFromStorage,
+  savePostDraftToStorage,
+  type LocalPostDraft,
+} from "@/lib/post-draft"
+import { multiplyPositiveSafeIntegers, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
+
+
 
 const LOTTERY_NUMERIC_CONDITION_TYPES = new Set(["REPLY_CONTENT_LENGTH", "REGISTER_DAYS", "USER_LEVEL", "VIP_LEVEL", "USER_POINTS"])
 const LOTTERY_TEXT_CONDITION_TYPES = new Set(["REPLY_KEYWORD"])
@@ -77,15 +87,19 @@ function buildLotteryConditionItem(type: string, pointName: string, groupKey = "
   }
 }
 
-import { Check, ChevronDown, Info, MessageSquareLock, Search } from "lucide-react"
+import { ChevronDown, Info, MessageSquareLock } from "lucide-react"
 
+
+
+import { BoardSelectField } from "@/components/board-select-field"
 import { HiddenContentModal } from "@/components/hidden-content-modal"
+import { PostDraftNotice } from "@/components/post-draft-notice"
 import { PostViewLevelModal } from "@/components/post-view-level-modal"
 import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
-import { cn } from "@/lib/utils"
+
 
 import { DEFAULT_ALLOWED_POST_TYPES, DEFAULT_POST_TYPE, type LocalPostType } from "@/lib/post-types"
 
@@ -107,162 +121,7 @@ interface CreatePostFormBoardGroup {
   items: CreatePostFormBoardItem[]
 }
 
-function BoardSelectField({
-  boardOptions,
-  value,
-  onChange,
-  disabled,
-}: {
-  boardOptions: CreatePostFormBoardGroup[]
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
 
-  const allBoards = useMemo(
-    () => boardOptions.flatMap((group) => group.items.map((item) => ({ ...item, zone: group.zone }))),
-    [boardOptions],
-  )
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const filteredGroups = useMemo(
-    () => boardOptions
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => {
-          if (!normalizedQuery) {
-            return true
-          }
-
-          const haystack = `${group.zone} ${item.label} ${item.value}`.toLowerCase()
-          return haystack.includes(normalizedQuery)
-        }),
-      }))
-      .filter((group) => group.items.length > 0),
-    [boardOptions, normalizedQuery],
-  )
-
-  const selectedBoard = allBoards.find((item) => item.value === value) ?? allBoards[0]
-
-  function handleSelect(nextValue: string) {
-    onChange(nextValue)
-    setOpen(false)
-    setQuery("")
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => {
-          if (!disabled) {
-            setOpen(true)
-          }
-        }}
-        disabled={disabled}
-        className={cn(
-          "flex h-11 w-full items-center justify-between gap-3 rounded-full border border-border bg-card px-4 text-left text-sm outline-none transition-colors",
-          disabled ? "cursor-not-allowed opacity-70" : "hover:bg-accent/50",
-        )}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-      >
-        <span className="min-w-0 truncate">
-          {selectedBoard ? `${selectedBoard.zone} / ${selectedBoard.label}` : "请选择节点"}
-        </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 bg-black/45"
-          onClick={() => {
-            setOpen(false)
-            setQuery("")
-          }}
-        >
-          <div className="flex min-h-full items-end justify-center overflow-y-auto px-0 pt-8 sm:items-center sm:px-4 sm:py-6">
-            <div
-              className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-2xl sm:rounded-[28px] sm:p-6"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3">
-
-                <div>
-                  <h3 className="text-base font-semibold">选择节点</h3>
-                  <p className="mt-1 text-xs leading-6 text-muted-foreground">支持按分区、节点名或 slug 搜索，节点较多时也能快速定位。</p>
-                </div>
-                <Button type="button" variant="ghost" className="h-8 px-2" onClick={() => {
-                  setOpen(false)
-                  setQuery("")
-                }}>
-                  关闭
-                </Button>
-              </div>
-
-              <div className="mt-4 rounded-[20px] border border-border bg-card/70 p-3">
-                <label className="flex items-center gap-2 rounded-full border border-border bg-background px-3">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="搜索分区、节点名称或 slug"
-                    className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                    autoFocus
-                  />
-                </label>
-              </div>
-
-              <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-2">
-
-                {filteredGroups.length > 0 ? filteredGroups.map((group) => (
-                  <section key={group.zone} className="space-y-2">
-                    <div className="sticky top-0 z-10 bg-background/95 py-1 text-xs font-medium tracking-wide text-muted-foreground backdrop-blur">
-                      {group.zone}
-                    </div>
-                    <div className="space-y-2">
-                      {group.items.map((item) => {
-                        const active = item.value === value
-                        return (
-                          <button
-                            key={item.value}
-                            type="button"
-                            onClick={() => handleSelect(item.value)}
-                            className={cn(
-                              "flex w-full items-center justify-between gap-3 rounded-[20px] border px-4 py-3 text-left transition-colors",
-                              active ? "border-foreground/20 bg-accent" : "border-border bg-card hover:bg-accent/50",
-                            )}
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-foreground">{item.label}</p>
-                              <p className="truncate text-xs leading-6 text-muted-foreground">{item.value}</p>
-                            </div>
-                            <span className={cn(
-                              "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                              active ? "border-foreground bg-foreground text-background" : "border-border text-transparent",
-                            )}>
-                              <Check className="h-3.5 w-3.5" />
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )) : (
-                  <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-                    没有找到匹配的节点，请换个关键词试试。
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
-  )
-}
 
 
 interface CreatePostFormProps {
@@ -397,15 +256,81 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   const [lotteryConditions, setLotteryConditions] = useState(initialValues?.lotteryConfig?.conditions && initialValues.lotteryConfig.conditions.length > 0 ? initialValues.lotteryConfig.conditions.map((item) => ({ type: item.type, value: item.value, operator: item.operator ?? "GTE", description: item.description ?? "", groupKey: item.groupKey ?? "default" })) : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)])
 
   const [message, setMessage] = useState("")
+  const [pendingDraftToRestore, setPendingDraftToRestore] = useState<LocalPostDraft | null>(null)
+  const [pendingDraftUpdatedAt, setPendingDraftUpdatedAt] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(false)
   const [showBoardTips, setShowBoardTips] = useState(false)
   const [activeModal, setActiveModal] = useState<HiddenModalType>(null)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [lastSavedDraftAt, setLastSavedDraftAt] = useState<string | null>(null)
+  const hasPromptedDraftRef = useRef(false)
 
   const normalizedPollOptions = useMemo(() => pollOptions.map((item) => item.trim()).filter(Boolean), [pollOptions])
+
+  const normalizedRedPacketUnitPoints = useMemo(() => parsePositiveSafeInteger(redPacketUnitPoints), [redPacketUnitPoints])
+  const normalizedRedPacketPacketCount = useMemo(() => parsePositiveSafeInteger(redPacketPacketCount), [redPacketPacketCount])
+
+  const fixedRedPacketTotalPoints = useMemo(
+    () => multiplyPositiveSafeIntegers(normalizedRedPacketUnitPoints, normalizedRedPacketPacketCount),
+    [normalizedRedPacketPacketCount, normalizedRedPacketUnitPoints],
+  )
   const allBoards = useMemo(() => boardOptions.flatMap((group) => group.items), [boardOptions])
+
   const selectedBoard = allBoards.find((item) => item.value === boardSlug) ?? allBoards[0]
   const allowedPostTypes = useMemo<LocalPostType[]>(() => (selectedBoard?.allowedPostTypes ?? DEFAULT_ALLOWED_POST_TYPES) as LocalPostType[], [selectedBoard])
+  const storageMode = mode === "edit" ? "edit" : "create"
+
+  const draftData = useMemo<LocalPostDraft>(() => ({
+    title,
+    content,
+    boardSlug,
+    postType,
+    bountyPoints,
+    pollOptions,
+    pollExpiresAt,
+    commentsVisibleToAuthorOnly,
+    replyUnlockContent,
+    purchaseUnlockContent,
+    purchasePrice,
+    minViewLevel,
+    lotteryStartsAt,
+    lotteryEndsAt,
+    lotteryParticipantGoal,
+    lotteryPrizes,
+    lotteryConditions,
+    redPacketEnabled,
+    redPacketGrantMode,
+    redPacketTriggerType,
+    redPacketUnitPoints,
+    redPacketTotalPoints,
+    redPacketPacketCount,
+  }), [
+    boardSlug,
+    bountyPoints,
+    commentsVisibleToAuthorOnly,
+    content,
+    lotteryConditions,
+    lotteryEndsAt,
+    lotteryParticipantGoal,
+    lotteryPrizes,
+    lotteryStartsAt,
+    minViewLevel,
+    pollExpiresAt,
+    pollOptions,
+    postType,
+    purchasePrice,
+    purchaseUnlockContent,
+    redPacketEnabled,
+    redPacketGrantMode,
+    redPacketPacketCount,
+    redPacketTotalPoints,
+    redPacketTriggerType,
+    redPacketUnitPoints,
+    replyUnlockContent,
+    title,
+  ])
+
 
   const isVipActive = Boolean(currentUser.vipExpiresAt && new Date(currentUser.vipExpiresAt).getTime() > Date.now())
   const currentVipLevel = isVipActive ? (currentUser.vipLevel ?? 0) : 0
@@ -421,7 +346,112 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     }
   }, [allowedPostTypes, postType])
 
+  useEffect(() => {
+    if (typeof window === "undefined" || hasPromptedDraftRef.current) {
+      return
+    }
+
+    const storedDraft = loadPostDraftFromStorage(storageMode, postId)
+    if (!storedDraft) {
+      hasPromptedDraftRef.current = true
+      return
+    }
+
+    hasPromptedDraftRef.current = true
+    setLastSavedDraftAt(storedDraft.updatedAt)
+    setPendingDraftToRestore(storedDraft.data)
+    setPendingDraftUpdatedAt(storedDraft.updatedAt)
+  }, [mode, pointName, postId, storageMode])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasPromptedDraftRef.current) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      const payload = savePostDraftToStorage(storageMode, draftData, postId)
+      if (payload) {
+        setLastSavedDraftAt(payload.updatedAt)
+      }
+    }, 800)
+
+    return () => window.clearTimeout(timer)
+  }, [draftData, postId, storageMode])
+
+  function restoreDraft(draft: LocalPostDraft) {
+    setTitle(draft.title)
+    setContent(draft.content)
+    setBoardSlug(draft.boardSlug)
+    setPostType(draft.postType as LocalPostType)
+    setBountyPoints(draft.bountyPoints)
+    setPollOptions(draft.pollOptions.length > 0 ? draft.pollOptions : ["", ""])
+    setPollExpiresAt(draft.pollExpiresAt)
+    setCommentsVisibleToAuthorOnly(draft.commentsVisibleToAuthorOnly)
+    setReplyUnlockContent(draft.replyUnlockContent)
+    setPurchaseUnlockContent(draft.purchaseUnlockContent)
+    setPurchasePrice(draft.purchasePrice)
+    setMinViewLevel(draft.minViewLevel)
+    setLotteryStartsAt(draft.lotteryStartsAt)
+    setLotteryEndsAt(draft.lotteryEndsAt)
+    setLotteryParticipantGoal(draft.lotteryParticipantGoal)
+    setLotteryPrizes(draft.lotteryPrizes.length > 0 ? draft.lotteryPrizes : [{ title: "一等奖", quantity: "1", description: "填写奖品描述" }])
+    setLotteryConditions(draft.lotteryConditions.length > 0 ? draft.lotteryConditions : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)])
+    setRedPacketEnabled(draft.redPacketEnabled)
+    setRedPacketGrantMode(draft.redPacketGrantMode)
+    setRedPacketTriggerType(draft.redPacketTriggerType)
+    setRedPacketUnitPoints(draft.redPacketUnitPoints)
+    setRedPacketTotalPoints(draft.redPacketTotalPoints)
+    setRedPacketPacketCount(draft.redPacketPacketCount)
+    setDraftRestored(true)
+    setPendingDraftToRestore(null)
+    setPendingDraftUpdatedAt(null)
+    setMessage("已恢复本地草稿，可继续编辑。")
+    toast.info("已恢复你上次未提交的本地草稿", "草稿已恢复")
+  }
+
+  function handleRestorePendingDraft() {
+    if (!pendingDraftToRestore) {
+      return
+    }
+
+    restoreDraft(pendingDraftToRestore)
+  }
+
+  function handleDismissPendingDraft() {
+    setPendingDraftToRestore(null)
+    setPendingDraftUpdatedAt(null)
+  }
+
+  function handleManualDraftSave() {
+    const payload = savePostDraftToStorage(storageMode, draftData, postId)
+    if (!payload) {
+      setLastSavedDraftAt(null)
+      setDraftRestored(false)
+      setPendingDraftUpdatedAt(null)
+      setMessage("当前内容为空，未保存本地草稿。")
+      toast.info("请先输入标题、正文或其他有效配置后再保存草稿", "未保存草稿")
+      return
+    }
+
+    setLastSavedDraftAt(payload.updatedAt)
+    setDraftRestored(false)
+    setPendingDraftUpdatedAt(null)
+    setMessage("草稿已保存到本地。")
+    toast.success("当前内容已保存到本地，下次进入可恢复", "草稿已保存")
+  }
+
+  function handleClearDraft() {
+    clearPostDraftFromStorage(storageMode, postId)
+    setLastSavedDraftAt(null)
+    setDraftRestored(false)
+    setPendingDraftToRestore(null)
+    setPendingDraftUpdatedAt(null)
+    setMessage("本地草稿已清除。")
+    toast.info("当前页面对应的本地草稿已删除", "草稿已清除")
+  }
+
   function updatePollOption(index: number, value: string) {
+
     setPollOptions((current) => current.map((item, currentIndex) => (currentIndex === index ? value : item)))
   }
 
@@ -496,11 +526,12 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
           enabled: true,
           grantMode: redPacketGrantMode,
           triggerType: redPacketTriggerType,
-          totalPoints: redPacketGrantMode === "RANDOM" ? Number(redPacketTotalPoints) : Number(redPacketUnitPoints) * Number(redPacketPacketCount),
-          unitPoints: Number(redPacketUnitPoints),
-          packetCount: Number(redPacketPacketCount),
+          totalPoints: redPacketGrantMode === "RANDOM" ? parsePositiveSafeInteger(redPacketTotalPoints) ?? 0 : fixedRedPacketTotalPoints ?? 0,
+          unitPoints: normalizedRedPacketUnitPoints ?? 0,
+          packetCount: normalizedRedPacketPacketCount ?? 0,
         }
       : undefined
+
 
     const payload = mode === "edit"
 
@@ -858,11 +889,12 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
         ) : null}
 
         <div className="space-y-2">
-
-          <p className="text-sm font-medium">标题</p>
-
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium">标题</p>
+          </div>
           <input value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-none" placeholder="写一个让人愿意点进来的标题" />
         </div>
+
 
 
         <div className="space-y-2">
@@ -962,7 +994,8 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
               </div>
               <div className="md:col-span-2 xl:col-span-4 rounded-[16px] bg-background/80 px-4 py-3 text-xs leading-6 text-muted-foreground">
                 <p>领取行为满足后自动发放；所有红包均按整数分配，每人至少 1 {pointName}。</p>
-                <p>{redPacketGrantMode === "FIXED" ? `当前总计需要 ${Math.max(0, (Number(redPacketUnitPoints) || 0) * (Number(redPacketPacketCount) || 0))} ${pointName}。` : "拼手气红包要求总积分不小于份数。"}</p>
+                <p>{redPacketGrantMode === "FIXED" ? `当前总计需要 ${fixedRedPacketTotalPoints ?? 0} ${pointName}。` : "拼手气红包要求总积分不小于份数。"}</p>
+
               </div>
 
             </div>
@@ -970,8 +1003,33 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
         </div>
 
 
-        <Button disabled={loading || !canPostInBoard}>{loading ? (mode === "edit" ? "保存中..." : "发布中...") : (mode === "edit" ? "保存帖子" : "发布帖子")}</Button>
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+        {pendingDraftToRestore ? (
+          <PostDraftNotice
+            title="检测到本地草稿"
+            description={`你在${mode === "edit" ? "编辑帖子" : "发帖"}页有一份未提交内容，可选择恢复继续编辑，或先忽略后手动处理。`}
+            meta={pendingDraftUpdatedAt ? `保存于 ${new Date(pendingDraftUpdatedAt).toLocaleString()}` : undefined}
+            tone="warning"
+            primaryAction={{ label: "恢复草稿", onClick: handleRestorePendingDraft, variant: "outline" }}
+            secondaryAction={{ label: "暂不恢复", onClick: handleDismissPendingDraft, variant: "ghost" }}
+          />
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PostDraftNotice
+              title={lastSavedDraftAt ? (draftRestored ? "已恢复草稿" : "本地草稿") : "草稿状态"}
+              description={lastSavedDraftAt ? `最近保存于 ${new Date(lastSavedDraftAt).toLocaleString()}` : "尚未检测到本地草稿，编辑内容会自动暂存到本地。"}
+              compact
+              primaryAction={{ label: "保存草稿", onClick: handleManualDraftSave, variant: "outline" }}
+              secondaryAction={lastSavedDraftAt ? { label: "清除草稿", onClick: handleClearDraft, variant: "ghost" } : undefined}
+              className="w-full sm:w-auto"
+            />
+            <Button disabled={loading || !canPostInBoard}>{loading ? (mode === "edit" ? "保存中..." : "发布中...") : (mode === "edit" ? "保存帖子" : "发布帖子")}</Button>
+          </div>
+        </div>
 
       </form>
 

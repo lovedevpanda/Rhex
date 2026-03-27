@@ -29,7 +29,17 @@ const commentUserSelect = {
   vipLevel: true,
   vipExpiresAt: true,
   userBadges: commentDisplayedBadgesInclude,
-} as const
+  verificationApplications: {
+    where: {
+      status: "APPROVED",
+    },
+    orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }] as Prisma.UserVerificationOrderByWithRelationInput[],
+    take: 1,
+    include: {
+      type: true,
+    },
+  },
+} satisfies Prisma.UserSelect
 
 
 
@@ -271,15 +281,19 @@ export async function createCommentWithRelations(params: {
       })
     }
 
+    const commentedAt = new Date()
+
     await tx.post.update({
       where: { id: params.postId },
       data: {
         commentCount: {
           increment: 1,
         },
-        lastCommentedAt: new Date(),
+        lastCommentedAt: commentedAt,
+        activityAt: commentedAt,
       },
     })
+
 
     const notifications = [] as Array<{
       userId: number

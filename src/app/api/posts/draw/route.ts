@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentUser } from "@/lib/auth"
-import { hasDatabaseUrl } from "@/lib/db-status"
 import { drawLotteryWinners } from "@/lib/lottery"
 import { prisma } from "@/db/client"
 
@@ -9,10 +8,6 @@ export async function POST(request: Request) {
   const currentUser = await getCurrentUser()
   if (!currentUser) {
     return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
-  if (!hasDatabaseUrl()) {
-    return NextResponse.json({ code: 503, message: "当前未配置数据库，暂不可开奖" }, { status: 503 })
   }
 
   const body = await request.json()

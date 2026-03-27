@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Plus, Sparkles, Star, Wallet, Zap } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { AdminModal } from "@/components/admin-modal"
 import { LevelBadge } from "@/components/level-badge"
@@ -110,18 +110,24 @@ function buildCalendarDays(monthKey: string) {
 export function SidebarUserCard({ user, createPostHref = "/write" }: { user: SidebarUserCardData | null; createPostHref?: string }) {
   const router = useRouter()
   const currentUser = user
-  const [points, setPoints] = useState(user?.points ?? 0)
-  const [checkedInToday, setCheckedInToday] = useState(Boolean(user?.checkedInToday))
+  const [checkInState, setCheckInState] = useState(() => ({
+    points: user?.points ?? 0,
+    checkedInToday: Boolean(user?.checkedInToday),
+  }))
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(getMonthKey())
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [calendarData, setCalendarData] = useState<CheckInCalendarResponse | null>(null)
+  const calendarRequestIdRef = useRef(0)
   const calendarEntries = useMemo(() => new Map((calendarData?.entries ?? []).map((item) => [item.date, item])), [calendarData?.entries])
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth])
+  const { points, checkedInToday } = checkInState
 
   const loadCalendar = useCallback(async (targetMonth: string) => {
+    const requestId = calendarRequestIdRef.current + 1
+    calendarRequestIdRef.current = requestId
     setCalendarLoading(true)
 
     try {
@@ -134,22 +140,55 @@ export function SidebarUserCard({ user, createPostHref = "/write" }: { user: Sid
       })
       const result = await response.json()
 
+      if (calendarRequestIdRef.current !== requestId) {
+        return
+      }
+
       if (!response.ok) {
         toast.error(result.message ?? "签到日历加载失败", "加载失败")
         return
       }
 
-      setCalendarData(result.data ?? null)
+      setCalendarData((current) => {
+        const nextData = result.data ?? null
+        if (!nextData) {
+          return current
+        }
+
+        if (!current || current.month !== nextData.month) {
+          return nextData
+        }
+
+        const mergedEntries = [...nextData.entries]
+        for (const entry of current.entries) {
+          if (!mergedEntries.some((item) => item.date === entry.date)) {
+            mergedEntries.push(entry)
+          }
+        }
+        mergedEntries.sort((left, right) => left.date.localeCompare(right.date))
+
+        return {
+          ...nextData,
+          entries: mergedEntries,
+        }
+      })
     } catch {
+      if (calendarRequestIdRef.current !== requestId) {
+        return
+      }
       toast.error("签到日历加载失败，请稍后再试", "加载失败")
     } finally {
-      setCalendarLoading(false)
+      if (calendarRequestIdRef.current === requestId) {
+        setCalendarLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    setPoints(user?.points ?? 0)
-    setCheckedInToday(Boolean(user?.checkedInToday))
+    setCheckInState({
+      points: user?.points ?? 0,
+      checkedInToday: Boolean(user?.checkedInToday),
+    })
   }, [user?.points, user?.checkedInToday])
 
   useEffect(() => {
@@ -193,9 +232,17 @@ export function SidebarUserCard({ user, createPostHref = "/write" }: { user: Sid
   const pointName = safeUser.pointName ?? "积分"
   const vipActive = isVipActive(safeUser)
 
+  function syncCheckInState(next: Partial<typeof checkInState>) {
+    setCheckInState((current) => ({
+      ...current,
+      ...next,
+    }))
+  }
+
   function upsertCalendarEntry(entry: CheckInCalendarEntry) {
     setCalendarData((current) => {
-      if (!current || current.month !== getMonthKey(new Date(`${entry.date}T00:00:00`))) {
+      const entryMonth = entry.date.slice(0, 7)
+      if (!current || current.month !== entryMonth) {
         return current
       }
 
@@ -237,8 +284,10 @@ export function SidebarUserCard({ user, createPostHref = "/write" }: { user: Sid
       }
 
       const checkedInDate = result.data?.date ?? todayKey
-      setPoints(result.data?.points ?? points)
-      setCheckedInToday(true)
+      syncCheckInState({
+        points: result.data?.points ?? points,
+        checkedInToday: true,
+      })
       upsertCalendarEntry({
         date: checkedInDate,
         reward: safeUser.checkInReward ?? 0,
@@ -276,11 +325,24 @@ export function SidebarUserCard({ user, createPostHref = "/write" }: { user: Sid
         return
       }
 
-      setPoints(result.data?.points ?? points)
+      const checkedInDate = result.data?.date ?? date
+      const reward = calendarData?.checkInReward ?? safeUser.checkInReward ?? 0
+      const makeUpCost = result.data?.makeUpCost ?? calendarData?.makeUpPrice ?? effectiveMakeUpPrice
+
+      syncCheckInState({
+        points: result.data?.points ?? points,
+        checkedInToday: checkedInDate === todayKey ? true : checkedInToday,
+      })
+      upsertCalendarEntry({
+        date: checkedInDate,
+        reward,
+        isMakeUp: true,
+        makeUpCost,
+        createdAt: new Date().toISOString(),
+      })
       setMessage(result.message ?? "补签成功")
       toast.success(result.message ?? "补签成功", "补签成功")
-      await loadCalendar(calendarMonth)
-      router.refresh()
+      void loadCalendar(calendarMonth)
     } finally {
       setLoading(false)
     }

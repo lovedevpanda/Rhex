@@ -94,7 +94,6 @@ export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-4">
             {redPacket?.enabled ? <PostRedPacketPanel pointName={redPacket.pointName} summary={redPacket} /> : null}
             <button
-
               type="button"
               title={liked ? "取消点赞" : "点赞"}
               aria-label={liked ? "取消点赞" : "点赞"}
@@ -102,7 +101,8 @@ export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0
               onClick={() => runAction("like")}
               disabled={isPending}
             >
-              <ThumbsUp className="h-4 w-4" />{likes}
+              <ThumbsUp className="h-4 w-4" />
+              {likes > 0 ? likes : null}
             </button>
             <button
               type="button"

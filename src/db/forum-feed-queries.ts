@@ -3,6 +3,28 @@ import type { Prisma } from "@/db/types"
 
 export type FeedQuerySort = "latest" | "new" | "hot" | "weekly"
 
+const feedPostInclude = {
+  board: {
+    select: { name: true, slug: true, iconPath: true },
+  },
+  author: true,
+  redPacket: {
+    select: {
+      id: true,
+    },
+  },
+  comments: {
+    where: { status: "NORMAL" },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    include: {
+      user: {
+        select: { username: true, nickname: true },
+      },
+    },
+  },
+} satisfies Prisma.PostInclude
+
 export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelationInput[] {
   switch (sort) {
     case "new":
@@ -13,7 +35,8 @@ export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelat
       return [{ likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
     case "latest":
     default:
-      return [{ lastCommentedAt: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
+      return [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }] as Prisma.PostOrderByWithRelationInput[]
+
   }
 }
 
@@ -28,37 +51,15 @@ function buildFeedWhere(excludedPostIds: string[] = []): Prisma.PostWhereInput {
 export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQuerySort, excludedPostIds: string[] = []) {
   return prisma.post.findMany({
     where: buildFeedWhere(excludedPostIds),
-
-    include: {
-      board: {
-        select: { name: true, slug: true, iconPath: true },
-      },
-
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      comments: {
-
-        where: { status: "NORMAL" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: {
-          user: {
-            select: { username: true, nickname: true },
-          },
-        },
-      },
-
-    },
-
+    include: feedPostInclude,
     orderBy: getFeedOrderBy(sort),
     skip: (page - 1) * pageSize,
     take: pageSize,
   })
 }
+
+
+
 
 export function findLatestTopicPosts(limit: number) {
   return prisma.post.findMany({

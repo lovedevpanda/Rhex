@@ -1,35 +1,29 @@
-import { NextResponse } from "next/server"
-
-import { requireAdminUser } from "@/lib/admin"
+import { apiSuccess, createAdminRouteHandler, readJsonBody, readOptionalStringField } from "@/lib/api-route"
 import { createInviteCodes, getInviteCodeList } from "@/lib/invite-codes"
 
-export async function GET() {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权访问" }, { status: 403 })
-  }
-
+export const GET = createAdminRouteHandler(async () => {
   const inviteCodes = await getInviteCodeList()
-  return NextResponse.json({ code: 0, data: inviteCodes })
-}
+  return apiSuccess(inviteCodes)
+}, {
+  errorMessage: "读取邀请码失败",
+  logPrefix: "[api/admin/invite-codes:GET] unexpected error",
+  unauthorizedMessage: "无权访问",
+})
 
-export async function POST(request: Request) {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权操作" }, { status: 403 })
-  }
-
-  const body = await request.json()
+export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
+  const body = await readJsonBody(request)
   const count = Math.max(1, Math.min(100, Number(body.count ?? 1) || 1))
-  const note = typeof body.note === "string" ? body.note.trim() : ""
+  const note = readOptionalStringField(body, "note")
 
   const rows = await createInviteCodes({
     count,
-    createdById: admin.id,
+    createdById: adminUser.id,
     note,
   })
 
-  return NextResponse.json({ code: 0, message: `已生成 ${rows.length} 个邀请码`, data: rows })
-}
+  return apiSuccess(rows, `已生成 ${rows.length} 个邀请码`)
+}, {
+  errorMessage: "生成邀请码失败",
+  logPrefix: "[api/admin/invite-codes:POST] unexpected error",
+  unauthorizedMessage: "无权操作",
+})

@@ -1,38 +1,28 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, requireNumberField, readOptionalStringField } from "@/lib/api-route"
 import { publishMessageEvent } from "@/lib/message-event-bus"
 import { sendDirectMessage } from "@/lib/messages"
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const recipientId = requireNumberField(body, "recipientId", "缺少接收方信息")
+  const content = readOptionalStringField(body, "body")
 
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
+  const data = await sendDirectMessage(currentUser.id, recipientId, content)
 
-  const body = await request.json()
-  const recipientId = Number(body.recipientId)
-  const content = String(body.body ?? "")
 
-  if (!Number.isFinite(recipientId)) {
-    return NextResponse.json({ code: 400, message: "缺少接收方信息" }, { status: 400 })
-  }
+  publishMessageEvent([currentUser.id, recipientId], {
+    type: "message.created",
+    conversationId: data.conversationId,
+    messageId: data.id,
+    senderId: currentUser.id,
+    recipientId,
+    occurredAt: data.occurredAt,
+  })
 
-  try {
-    const data = await sendDirectMessage(currentUser.id, recipientId, content)
-
-    publishMessageEvent([currentUser.id, recipientId], {
-      type: "message.created",
-      conversationId: data.conversationId,
-      messageId: data.id,
-      senderId: currentUser.id,
-      recipientId,
-      occurredAt: data.occurredAt,
-    })
-
-    return NextResponse.json({ code: 0, message: "发送成功", data })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "发送失败" }, { status: 400 })
-  }
-}
+  return apiSuccess(data, "发送成功")
+}, {
+  errorMessage: "发送失败",
+  logPrefix: "[api/messages/send] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

@@ -116,7 +116,6 @@ export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "l
     return [...pinnedItems, ...normalPosts.map((post) => mapFeedPost(post))]
   }
 
-
   const excludedPostIds = extractPinnedPostIds(globalPinnedPosts)
   const posts = await findLatestFeedPosts(page, pageSize, sort, excludedPostIds)
 

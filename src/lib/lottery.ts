@@ -110,10 +110,12 @@ interface LotteryPostRelations extends Post {
   lotteryWinners?: Array<{ id: string }>
 }
 
+import { parseNonNegativeSafeInteger } from "@/lib/shared/safe-integer"
+
 function normalizeInteger(value: unknown, fallback = 0) {
-  const parsed = Number(value)
-  return Number.isInteger(parsed) ? parsed : fallback
+  return parseNonNegativeSafeInteger(value) ?? fallback
 }
+
 
 function buildConditionDescription(type: LotteryConditionTypeValue, operator: LotteryConditionOperatorValue, value: string) {
   switch (type) {

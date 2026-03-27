@@ -1,8 +1,8 @@
+import { getCurrentUserRecord } from "@/db/current-user"
 import { ChangeType } from "@/db/types"
-import { NextResponse } from "next/server"
 
-import { getCurrentUser } from "@/lib/auth"
 import { prisma } from "@/db/client"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { getSiteSettings } from "@/lib/site-settings"
 
 function addDays(date: Date, days: number) {
@@ -11,18 +11,14 @@ function addDays(date: Date, days: number) {
   return next
 }
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser()
-  const body = await request.json()
-  const action = String(body.action ?? "")
+export const POST = createUserRouteHandler(async ({ request }) => {
+  const body = await readJsonBody(request)
+  const action = requireStringField(body, "action", "不支持的 VIP 操作")
 
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
+  const dbUser = await getCurrentUserRecord()
 
-  const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
   if (!dbUser) {
-    return NextResponse.json({ code: 404, message: "用户不存在" }, { status: 404 })
+    apiError(404, "用户不存在")
   }
 
   const settings = await getSiteSettings()
@@ -34,14 +30,12 @@ export async function POST(request: Request) {
     "purchase.year": { days: 365, level: 3, points: settings.vipYearlyPrice, label: "年卡 VIP3" },
   } as const
 
-
-
   if (action in vipPlanMap) {
     const plan = vipPlanMap[action as keyof typeof vipPlanMap]
-    if (dbUser.points < plan.points) {
-      return NextResponse.json({ code: 400, message: `${settings.pointName}不足，无法购买${plan.label}` }, { status: 400 })
-    }
 
+    if (dbUser.points < plan.points) {
+      apiError(400, `${settings.pointName}不足，无法购买${plan.label}`)
+    }
 
     const nextExpiresAt = addDays(currentExpiresAt, plan.days)
 
@@ -55,7 +49,6 @@ export async function POST(request: Request) {
             decrement: plan.points,
           },
         },
-
       })
       await tx.pointLog.create({
         data: {
@@ -78,10 +71,13 @@ export async function POST(request: Request) {
       })
     })
 
-    return NextResponse.json({ code: 0, message: `已成功使用${settings.pointName}开通 / 续费 ${plan.label}` })
-
+    return apiSuccess(undefined, `已成功使用${settings.pointName}开通 / 续费 ${plan.label}`)
   }
 
-
-  return NextResponse.json({ code: 400, message: "不支持的 VIP 操作" }, { status: 400 })
-}
+  apiError(400, "不支持的 VIP 操作")
+}, {
+  errorMessage: "VIP 操作失败",
+  logPrefix: "[api/vip] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

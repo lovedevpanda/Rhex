@@ -32,7 +32,12 @@ export function PostSidebarPanels({ currentUser, relatedTopics, tags }: PostSide
           <div className="space-y-3">
             {relatedTopics.length === 0 ? <p className="text-sm text-muted-foreground">暂无相关主题。</p> : null}
             {relatedTopics.map((topic) => (
-              <Link key={topic.id} href={`/posts/${topic.slug}`} className="block line-clamp-2 rounded-xl px-2 py-1 text-sm transition-colors hover:bg-accent/70 hover:text-primary">
+              <Link
+                key={topic.id}
+                href={`/posts/${topic.slug}`}
+                className="block truncate rounded-xl px-2 py-1 text-sm transition-colors hover:bg-accent/70 hover:text-primary"
+                title={topic.title}
+              >
                 {topic.title}
               </Link>
             ))}

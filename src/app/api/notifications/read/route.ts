@@ -1,25 +1,16 @@
-import { NextResponse } from "next/server"
-
 import { markNotificationAsRead } from "@/db/notification-queries"
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const notificationId = requireStringField(body, "notificationId", "缺少通知 ID")
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser()
+  await markNotificationAsRead(currentUser.id, notificationId)
 
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
-  const body = await request.json()
-  const notificationId = String(body.notificationId ?? "")
-
-  if (!notificationId) {
-    return NextResponse.json({ code: 400, message: "缺少通知 ID" }, { status: 400 })
-  }
-
-  await markNotificationAsRead(user.id, notificationId)
-
-
-  return NextResponse.json({ code: 0, message: "已标记为已读" })
-}
+  return apiSuccess(undefined, "已标记为已读")
+}, {
+  errorMessage: "标记通知失败",
+  logPrefix: "[api/notifications/read] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

@@ -49,7 +49,6 @@ html {
 
 body {
   @apply min-h-screen bg-background text-foreground antialiased;
-  font-family: "Consolas", "Panic Sans", "Bitstream Vera Sans Mono", "Menlo", "Microsoft Yahei", monospace;
 }
 
 a {

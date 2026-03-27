@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getSelfServeAdsAppConfig as loadSelfServeAdsAppConfig } from "@/lib/app-config"
 import { serializeDateTime } from "@/lib/formatters"
 import { buildSelfServeAdPriceMap, getSelfServeAdPrice, toSelfServeAdConfig } from "@/lib/self-serve-ads.shared"
+import { normalizeNonNegativeInteger, normalizePositiveInteger } from "@/lib/shared/normalizers"
 
 import type { SelfServeAdItem, SelfServeAdPurchaseDraft, SelfServeAdSlotType, SelfServeAdsPanelData } from "@/lib/self-serve-ads.shared"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -174,8 +175,9 @@ export async function reviewSelfServeAdOrder(input: {
   const existing = await findSelfServeOrderById(input.id)
   if (!existing) throw new Error("广告订单不存在")
 
-  const slotIndex = Math.max(0, Number(input.slotIndex ?? existing.slotIndex) || 0)
-  const durationMonths = Number(input.durationMonths ?? existing.durationMonths) || existing.durationMonths
+  const slotIndex = normalizeNonNegativeInteger(input.slotIndex ?? existing.slotIndex, 0)
+  const durationMonths = normalizePositiveInteger(input.durationMonths ?? existing.durationMonths, existing.durationMonths ?? 1)
+
   const reviewNote = normalizeText(input.reviewNote ?? existing.reviewNote, 300) || null
   const title = existing.slotType === "TEXT" ? normalizeText(input.title ?? existing.title, 30) : null
   const linkUrl = normalizeUrl(input.linkUrl ?? existing.linkUrl)

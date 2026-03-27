@@ -9,6 +9,7 @@ import { ReportDialog } from "@/components/report-dialog"
 import { SiteHeader } from "@/components/site-header"
 import { UserAvatar } from "@/components/user-avatar"
 import { UserStatusBadge } from "@/components/user-status-badge"
+import { UserVerificationBadge } from "@/components/user-verification-badge"
 import { VipBadge } from "@/components/vip-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -88,7 +89,10 @@ export default async function UserPage({ params }: UserPageProps) {
                 <div className="flex flex-col items-center text-center">
                   {isRestrictedUser ? <UserStatusBadge status={user.status} compact className="absolute right-4 top-4 shadow-sm" /> : null}
                   <UserAvatar name={user.displayName} avatarPath={user.avatarPath} size="lg" />
-                  <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">{user.displayName}</h1>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <UserVerificationBadge verification={user.verification ?? null} />
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">{user.displayName}</h1>
+                  </div>
                   <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                     {vipActive ? <VipBadge level={vipLevel} compact /> : null}

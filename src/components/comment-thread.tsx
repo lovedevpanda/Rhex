@@ -1,7 +1,8 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
+
 import { Flag } from "lucide-react"
 
 import { CommentForm } from "@/components/comment-form"
@@ -11,6 +12,7 @@ import { ReportDialog } from "@/components/report-dialog"
 import { UserAvatar } from "@/components/user-avatar"
 import { UserDisplayedBadges } from "@/components/user-displayed-badges"
 import { UserStatusBadge } from "@/components/user-status-badge"
+import { UserVerificationBadge } from "@/components/user-verification-badge"
 
 import { Button } from "@/components/ui/button"
 import { VipBadge } from "@/components/vip-badge"
@@ -47,10 +49,25 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
   const [pinningCommentId, setPinningCommentId] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState("")
   const [replyTarget, setReplyTarget] = useState<{ parentId: string; replyToUserName: string } | null>(null)
+  const [showOnlyAuthorComments, setShowOnlyAuthorComments] = useState(false)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const replyBoxRef = useRef<HTMLDivElement | null>(null)
 
+  const filteredComments = useMemo(() => {
+    if (!showOnlyAuthorComments) {
+      return comments
+    }
+
+    return comments
+      .filter((comment) => comment.isPostAuthor || comment.replies.some((reply) => reply.isPostAuthor))
+      .map((comment) => ({
+        ...comment,
+        replies: comment.replies.filter((reply) => reply.isPostAuthor),
+      }))
+  }, [comments, showOnlyAuthorComments])
+
   const replyHint = replyTarget ? `正在回复 @${replyTarget.replyToUserName}` : null
+
 
   function scrollToReplyBox(nextTarget?: { parentId: string; replyToUserName: string } | null) {
     setReplyTarget(nextTarget ?? null)
@@ -130,8 +147,15 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>文明发言，理性讨论</span>
+          <button
+            type="button"
+            onClick={() => setShowOnlyAuthorComments((current) => !current)}
+            className={showOnlyAuthorComments ? "rounded-full bg-foreground px-3 py-1.5 text-xs text-background" : "rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"}
+          >
+            {showOnlyAuthorComments ? "查看全部评论" : "只看楼主"}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <Link href={`?sort=oldest&page=1`} className={currentSort === "oldest" ? "rounded-full bg-foreground px-3 py-1.5 text-xs text-background" : "rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground"}>最早</Link>
@@ -139,7 +163,14 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
         </div>
       </div>
 
-      {comments.map((comment, index) => {
+      {showOnlyAuthorComments && filteredComments.length === 0 ? (
+        <div className="rounded-[20px] border border-dashed border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+          当前页暂无楼主评论
+        </div>
+      ) : null}
+
+      {filteredComments.map((comment, index) => {
+
         const isExpanded = expandedReplies[comment.id] ?? false
         const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, INITIAL_VISIBLE_REPLIES)
         const canAcceptCurrentComment = canAcceptAnswer && !comment.isAcceptedAnswer && currentUserId !== comment.authorId
@@ -186,7 +217,9 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                 </Link>
                 <div className={cn("min-w-0 space-y-2", isRestrictedCommentAuthor && "grayscale")}>
                   <div className="flex flex-wrap items-center gap-2">
+                    <UserVerificationBadge verification={comment.authorVerification ?? null} compact />
                     <Link href={`/users/${comment.authorUsername}`} className={getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })}>{comment.author}</Link>
+                    {comment.isPostAuthor ? <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">楼主</span> : null}
                     <UserDisplayedBadges badges={comment.authorDisplayedBadges} compact />
                     {comment.authorIsVip ? <VipBadge level={comment.authorVipLevel} compact /> : null}
 
@@ -266,6 +299,7 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                           <div className={cn("min-w-0 flex-1", isRestrictedReplyAuthor && "grayscale")}>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                               <Link href={`/users/${reply.authorUsername}`} className={getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })}>{reply.author}</Link>
+                              {reply.isPostAuthor ? <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">楼主</span> : null}
                               <UserDisplayedBadges badges={reply.authorDisplayedBadges} compact />
                               {reply.authorIsVip ? <VipBadge level={reply.authorVipLevel} compact /> : null}
 

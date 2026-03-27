@@ -1,9 +1,10 @@
 import { ChangeType } from "@/db/types"
-import { NextRequest, NextResponse } from "next/server"
 
+import { requireActiveCurrentUserRecord } from "@/db/current-user"
+import { apiError, apiSuccess, createCustomRouteHandler, readJsonBody, readOptionalStringField } from "@/lib/api-route"
 import { prisma } from "@/db/client"
-import { getCurrentUser } from "@/lib/auth"
 import { getLocalDateKey, getMonthKey } from "@/lib/date-key"
+
 import { recordUserCheckInGrowth } from "@/lib/level-system"
 import { getSiteSettings } from "@/lib/site-settings"
 import { isVipActive } from "@/lib/vip-status"
@@ -148,119 +149,111 @@ async function performCheckIn(params: {
   return result
 }
 
-export async function GET(request: NextRequest) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
-  const settings = await getSiteSettings()
-  if (!settings.checkInEnabled) {
-    return NextResponse.json({ code: 403, message: "签到功能暂未开启" }, { status: 403 })
-  }
-
-  const month = request.nextUrl.searchParams.get("month") || getMonthKey()
-
-
+async function buildCheckInContext() {
   try {
-    const entries = await buildCalendarData(user.id, month)
-    const vipActive = isVipActive(user)
-    const makeUpPrice = vipActive ? settings.checkInVipMakeUpCardPrice : settings.checkInMakeUpCardPrice
-
-    return NextResponse.json({
-      code: 0,
-      data: {
-        month,
-        pointName: settings.pointName,
-        checkInReward: settings.checkInReward,
-        makeUpPrice,
-        vipMakeUpPrice: settings.checkInVipMakeUpCardPrice,
-        normalMakeUpPrice: settings.checkInMakeUpCardPrice,
-        entries,
-      },
-    })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "获取签到日历失败" }, { status: 400 })
+    return await requireActiveCurrentUserRecord()
+  } catch {
+    apiError(403, "当前账号状态不可执行该操作")
   }
 }
 
-export async function POST(request: NextRequest) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
+export const GET = createCustomRouteHandler(async ({ request, context: user }) => {
   const settings = await getSiteSettings()
   if (!settings.checkInEnabled) {
-    return NextResponse.json({ code: 403, message: "签到功能暂未开启" }, { status: 403 })
+    apiError(403, "签到功能暂未开启")
   }
 
-  const body = await request.json().catch(() => ({})) as { action?: string; date?: string }
+  const month = new URL(request.url).searchParams.get("month") || getMonthKey()
+  const entries = await buildCalendarData(user.id, month)
+  const vipActive = isVipActive(user)
+  const makeUpPrice = vipActive ? settings.checkInVipMakeUpCardPrice : settings.checkInMakeUpCardPrice
+
+  return apiSuccess({
+    month,
+    pointName: settings.pointName,
+    checkInReward: settings.checkInReward,
+    makeUpPrice,
+    vipMakeUpPrice: settings.checkInVipMakeUpCardPrice,
+    normalMakeUpPrice: settings.checkInMakeUpCardPrice,
+    entries,
+  })
+}, {
+  buildContext: buildCheckInContext,
+  errorMessage: "获取签到日历失败",
+  logPrefix: "[api/check-in:GET] unexpected error",
+})
+
+export const POST = createCustomRouteHandler(async ({ request, context: user }) => {
+  const settings = await getSiteSettings()
+  if (!settings.checkInEnabled) {
+    apiError(403, "签到功能暂未开启")
+  }
+
+  let body: { action?: string; date?: string } = {}
+  try {
+    body = await readJsonBody<{ action?: string; date?: string }>(request)
+  } catch {
+    body = {}
+  }
+
   const action = body.action === "make-up" ? "make-up" : "check-in"
   const todayKey = getLocalDateKey()
   const reward = Math.max(0, settings.checkInReward)
 
-  try {
-    if (action === "check-in") {
-      const result = await performCheckIn({
-        userId: user.id,
-        dateKey: todayKey,
-        reward,
-        pointName: settings.pointName,
-        makeUpCost: 0,
-        isMakeUp: false,
-      })
-
-      if (result.alreadyCheckedIn) {
-        return NextResponse.json({ code: 0, message: "今天已经签到过了", data: { points: result.points, alreadyCheckedIn: true, date: todayKey } })
-      }
-
-      return NextResponse.json({ code: 0, message: `签到成功，获得 ${reward} ${settings.pointName}`, data: { points: result.points, alreadyCheckedIn: false, date: todayKey } })
-
-    }
-
-    const targetDate = String(body.date ?? "").trim()
-    const parsedDate = parseDateKey(targetDate)
-    if (!parsedDate) {
-      return NextResponse.json({ code: 400, message: "补签日期格式不正确" }, { status: 400 })
-    }
-
-    const targetDateKey = getLocalDateKey(parsedDate)
-    if (targetDateKey >= todayKey) {
-      return NextResponse.json({ code: 400, message: "只能补签今天之前的日期" }, { status: 400 })
-    }
-
-    const vipActive = isVipActive(user)
-    const makeUpCost = Math.max(0, vipActive ? settings.checkInVipMakeUpCardPrice : settings.checkInMakeUpCardPrice)
-
+  if (action === "check-in") {
     const result = await performCheckIn({
       userId: user.id,
-      dateKey: targetDateKey,
+      dateKey: todayKey,
       reward,
       pointName: settings.pointName,
-      makeUpCost,
-      isMakeUp: true,
+      makeUpCost: 0,
+      isMakeUp: false,
     })
 
     if (result.alreadyCheckedIn) {
-      return NextResponse.json({ code: 400, message: "该日期已经签到过了", data: { points: result.points, alreadyCheckedIn: true } }, { status: 400 })
+      return apiSuccess({ points: result.points, alreadyCheckedIn: true, date: todayKey }, "今天已经签到过了")
     }
 
-    return NextResponse.json({
-      code: 0,
-      message: makeUpCost > 0
-        ? `补签成功，消耗 ${makeUpCost} ${settings.pointName}，获得 ${reward} ${settings.pointName}`
-        : `补签成功，获得 ${reward} ${settings.pointName}`,
-      data: {
-        points: result.points,
-        alreadyCheckedIn: false,
-        makeUpCost,
-        date: targetDateKey,
-      },
-    })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "签到失败" }, { status: 400 })
+    return apiSuccess({ points: result.points, alreadyCheckedIn: false, date: todayKey }, `签到成功，获得 ${reward} ${settings.pointName}`)
   }
-}
+
+  const targetDate = readOptionalStringField(body as Record<string, unknown>, "date")
+  const parsedDate = parseDateKey(targetDate)
+  if (!parsedDate) {
+    apiError(400, "补签日期格式不正确")
+  }
+
+  const targetDateKey = getLocalDateKey(parsedDate)
+  if (targetDateKey >= todayKey) {
+    apiError(400, "只能补签今天之前的日期")
+  }
+
+  const vipActive = isVipActive(user)
+  const makeUpCost = Math.max(0, vipActive ? settings.checkInVipMakeUpCardPrice : settings.checkInMakeUpCardPrice)
+
+  const result = await performCheckIn({
+    userId: user.id,
+    dateKey: targetDateKey,
+    reward,
+    pointName: settings.pointName,
+    makeUpCost,
+    isMakeUp: true,
+  })
+
+  if (result.alreadyCheckedIn) {
+    apiError(400, "该日期已经签到过了")
+  }
+
+  return apiSuccess({
+    points: result.points,
+    alreadyCheckedIn: false,
+    makeUpCost,
+    date: targetDateKey,
+  }, makeUpCost > 0
+    ? `补签成功，消耗 ${makeUpCost} ${settings.pointName}，获得 ${reward} ${settings.pointName}`
+    : `补签成功，获得 ${reward} ${settings.pointName}`)
+}, {
+  buildContext: buildCheckInContext,
+  errorMessage: "签到失败",
+  logPrefix: "[api/check-in:POST] unexpected error",
+})

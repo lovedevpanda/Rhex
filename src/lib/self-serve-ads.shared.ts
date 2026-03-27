@@ -80,6 +80,8 @@ export const SELF_SERVE_AD_DURATION_OPTIONS: SelfServeAdDurationOption[] = [
 export const SELF_SERVE_AD_TEXT_COLORS = ["#0f172a", "#1d4ed8", "#0f766e", "#be123c", "#854d0e", "#ffffff"] as const
 export const SELF_SERVE_AD_BACKGROUND_COLORS = ["#f8fafc", "#dbeafe", "#dcfce7", "#fce7f3", "#fef3c7", "#111827"] as const
 
+import { normalizeNonNegativeInteger } from "@/lib/shared/normalizers"
+
 export function toSelfServeAdConfig(config: Record<string, boolean | number | string>): SelfServeAdConfig {
   return {
     enabled: Boolean(config.enabled ?? true),
@@ -87,20 +89,21 @@ export function toSelfServeAdConfig(config: Record<string, boolean | number | st
     cardTitle: String(config.cardTitle ?? "推广广告位"),
 
     sidebarSlot: config.sidebarSlot === "home-right-top" || config.sidebarSlot === "home-right-bottom" ? config.sidebarSlot : "home-right-middle",
-    sidebarOrder: Math.max(0, Number(config.sidebarOrder ?? 40) || 40),
-    imageSlotCount: Math.max(0, Number(config.imageSlotCount ?? 2) || 0),
-    textSlotCount: Math.max(0, Number(config.textSlotCount ?? 6) || 0),
-    imagePriceMonthly: Math.max(0, Number(config.imagePriceMonthly ?? 300) || 0),
-    imagePriceQuarterly: Math.max(0, Number(config.imagePriceQuarterly ?? 800) || 0),
-    imagePriceSemiAnnual: Math.max(0, Number(config.imagePriceSemiAnnual ?? 1500) || 0),
-    imagePriceYearly: Math.max(0, Number(config.imagePriceYearly ?? 2800) || 0),
-    textPriceMonthly: Math.max(0, Number(config.textPriceMonthly ?? 120) || 0),
-    textPriceQuarterly: Math.max(0, Number(config.textPriceQuarterly ?? 320) || 0),
-    textPriceSemiAnnual: Math.max(0, Number(config.textPriceSemiAnnual ?? 600) || 0),
-    textPriceYearly: Math.max(0, Number(config.textPriceYearly ?? 1100) || 0),
+    sidebarOrder: normalizeNonNegativeInteger(config.sidebarOrder, 40),
+    imageSlotCount: normalizeNonNegativeInteger(config.imageSlotCount, 0),
+    textSlotCount: normalizeNonNegativeInteger(config.textSlotCount, 0),
+    imagePriceMonthly: normalizeNonNegativeInteger(config.imagePriceMonthly, 0),
+    imagePriceQuarterly: normalizeNonNegativeInteger(config.imagePriceQuarterly, 0),
+    imagePriceSemiAnnual: normalizeNonNegativeInteger(config.imagePriceSemiAnnual, 0),
+    imagePriceYearly: normalizeNonNegativeInteger(config.imagePriceYearly, 0),
+    textPriceMonthly: normalizeNonNegativeInteger(config.textPriceMonthly, 0),
+    textPriceQuarterly: normalizeNonNegativeInteger(config.textPriceQuarterly, 0),
+    textPriceSemiAnnual: normalizeNonNegativeInteger(config.textPriceSemiAnnual, 0),
+    textPriceYearly: normalizeNonNegativeInteger(config.textPriceYearly, 0),
     placeholderLabel: String(config.placeholderLabel ?? "点击购买"),
   }
 }
+
 
 export function getSelfServeAdPrice(config: SelfServeAdConfig, slotType: SelfServeAdSlotType, durationMonths: 1 | 3 | 6 | 12) {
   if (slotType === "IMAGE") {

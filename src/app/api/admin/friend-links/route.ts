@@ -1,51 +1,52 @@
-import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
 
-import { requireAdminUser } from "@/lib/admin"
+import { apiSuccess, createAdminRouteHandler, readJsonBody, readOptionalStringField } from "@/lib/api-route"
 import { createFriendLinkByAdmin, reviewFriendLink } from "@/lib/friend-links"
 
-export async function POST(request: Request) {
-  const admin = await requireAdminUser()
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权操作" }, { status: 403 })
-  }
+export const POST = createAdminRouteHandler(async ({ request }) => {
+  const body = await readJsonBody(request)
+  const action = readOptionalStringField(body, "action")
+  const name = readOptionalStringField(body, "name")
+  const url = readOptionalStringField(body, "url")
+  const logoPath = readOptionalStringField(body, "logoPath") || undefined
+  const reviewNote = readOptionalStringField(body, "reviewNote") || undefined
+  const sortOrder = typeof body.sortOrder === "number" ? body.sortOrder : Number(body.sortOrder ?? 0)
 
-  try {
-    const body = await request.json()
-
-    if (body.action === "create") {
-      await createFriendLinkByAdmin({
-        name: body.name,
-        url: body.url,
-        logoPath: body.logoPath,
-        sortOrder: body.sortOrder,
-        reviewNote: body.reviewNote,
-      })
-
-
-      revalidatePath("/")
-      revalidatePath("/link")
-      revalidatePath("/admin")
-      return NextResponse.json({ code: 0, message: "友情链接已创建" })
-    }
-
-    await reviewFriendLink({
-      id: String(body.id ?? ""),
-      action: body.action,
-      reviewNote: body.reviewNote,
-      sortOrder: body.sortOrder,
-      name: body.name,
-      url: body.url,
-      logoPath: body.logoPath,
-
+  if (action === "create") {
+    await createFriendLinkByAdmin({
+      name,
+      url,
+      logoPath,
+      sortOrder,
+      reviewNote,
     })
 
     revalidatePath("/")
     revalidatePath("/link")
     revalidatePath("/admin")
-
-    return NextResponse.json({ code: 0, message: "友情链接状态已更新" })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "操作失败" }, { status: 400 })
+    return apiSuccess(undefined, "友情链接已创建")
   }
-}
+
+  const id = readOptionalStringField(body, "id")
+  const reviewAction = action as "approve" | "reject" | "disable" | "update"
+
+  await reviewFriendLink({
+    id,
+    action: reviewAction,
+    reviewNote,
+    sortOrder,
+    name,
+    url,
+    logoPath,
+  })
+
+  revalidatePath("/")
+  revalidatePath("/link")
+  revalidatePath("/admin")
+
+  return apiSuccess(undefined, "友情链接状态已更新")
+}, {
+  errorMessage: "操作失败",
+  logPrefix: "[api/admin/friend-links:POST] unexpected error",
+  unauthorizedMessage: "无权操作",
+})

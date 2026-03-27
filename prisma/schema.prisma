@@ -176,6 +176,13 @@ enum VerificationChannel {
   PHONE
 }
 
+enum UserVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum GobangMatchStatus {
   ONGOING
   FINISHED
@@ -259,7 +266,9 @@ model User {
   usedInviteCodes      InviteCode[] @relation("InviteCodeConsumer")
   generatedRedeemCodes RedeemCode[] @relation("RedeemCodeCreator")
   redeemedCodes        RedeemCode[] @relation("RedeemCodeConsumer")
-  verificationCodes    VerificationCode[]
+  verificationCodes       VerificationCode[]
+  verificationApplications UserVerification[] @relation("userVerificationApplicant")
+  reviewedVerifications    UserVerification[] @relation("userVerificationReviewer")
 
   @@index([role])
   @@index([status])
@@ -476,6 +485,7 @@ model Post {
   appendedContent        String?
   lastAppendedAt         DateTime?
   lastCommentedAt        DateTime?
+  activityAt             DateTime     @default(now())
   publishedAt            DateTime?
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
@@ -505,8 +515,10 @@ model Post {
   @@index([pinScope, createdAt])
   @@index([boardId, status, createdAt])
   @@index([boardId, status, lastCommentedAt])
+  @@index([boardId, status, activityAt])
   @@index([status, createdAt])
   @@index([status, lastCommentedAt])
+  @@index([status, activityAt])
   @@index([status, score, createdAt])
   @@index([status, likeCount, commentCount, createdAt])
 }
@@ -837,6 +849,49 @@ model UserBadge {
   @@index([userId, grantedAt])
   @@index([userId, isDisplayed, displayOrder])
   @@index([badgeId, grantedAt])
+}
+
+model VerificationType {
+  id                       String             @id @default(cuid())
+  name                     String
+  slug                     String             @unique
+  description              String?
+  iconText                 String?            @default("✔️")
+  color                    String             @default("#2563eb")
+  formSchemaJson           String?
+  sortOrder                Int                @default(0)
+  status                   Boolean            @default(true)
+  needRemark               Boolean            @default(true)
+  userLimit                Int                @default(1)
+  allowResubmitAfterReject Boolean            @default(true)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  applications             UserVerification[]
+
+  @@index([status, sortOrder])
+}
+
+model UserVerification {
+  id              String                 @id @default(cuid())
+  userId          Int
+  typeId          String
+  status          UserVerificationStatus @default(PENDING)
+  content         String
+  formResponseJson String?
+  note            String?
+  rejectReason    String?
+  reviewerId      Int?
+  submittedAt     DateTime               @default(now())
+  reviewedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  user            User                   @relation("userVerificationApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  type            VerificationType       @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  reviewer        User?                  @relation("userVerificationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, submittedAt])
+  @@index([typeId, status, submittedAt])
+  @@index([reviewerId, reviewedAt])
 }
 
 model PointLog {

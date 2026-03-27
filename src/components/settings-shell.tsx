@@ -23,6 +23,7 @@ export function SettingsShell({ children, pointName }: SettingsShellProps) {
     { key: "invite", label: "邀请中心", description: "查看邀请数据并管理邀请入口。" },
     { key: "level", label: "我的等级", description: "查看成长进度、升级条件与当前等级。" },
     { key: "badges", label: "勋章中心", description: "查看已达成状态并手动领取勋章。" },
+    { key: "verifications", label: "账号认证", description: "提交个人认证、商家认证等身份申请。" },
     { key: "points", label: `${pointName}明细`, description: `查看当前${pointName}余额与全部变动记录。` },
     { key: "favorites", label: "帖子收藏", description: "集中查看你收藏过的内容。" },
     { key: "follows", label: "关注节点", description: "查看你已关注的节点列表。" },

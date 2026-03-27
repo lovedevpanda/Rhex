@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-
     "start": "next start",
     "start:prod": "npm run build && npm run start",
     "setup": "tsx scripts/setup.ts",
@@ -17,7 +16,6 @@
     "plugins:generate": "tsx scripts/generate-plugin-bundles.ts",
     "version:sync": "tsx scripts/copy-release-to-version.ts",
     "prisma:generate": "prisma generate",
-
     "prisma:push": "prisma db push",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
@@ -28,6 +26,7 @@
     "@prisma/client": "^6.19.2",
     "@traptitech/markdown-it-katex": "^3.6.0",
     "bcryptjs": "^3.0.3",
+    "bignumber.js": "^10.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",

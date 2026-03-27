@@ -1,4 +1,5 @@
 import { findUserAccountSettingsById, findUserPostsByUsername, findUserProfileByUsername } from "@/db/user-queries"
+import { getCurrentSessionActor } from "@/lib/auth"
 import { getLevelBadgeData } from "@/lib/level-badge"
 import { mapListPost } from "@/lib/post-map"
 
@@ -34,6 +35,12 @@ export interface SiteUserProfile {
   vipExpiresAt?: string | null
   inviteCount: number
   inviterUsername?: string | null
+  verification?: {
+    id: string
+    name: string
+    color: string
+    iconText?: string | null
+  } | null
 
   postCount: number
   commentCount: number
@@ -47,12 +54,12 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
   try {
     const user = await findUserProfileByUsername(username)
 
-
     if (!user) {
       return null
     }
 
     const levelBadge = await getLevelBadgeData(user.level)
+    const approvedVerification = user.verificationApplications?.[0]
 
     return {
       id: Number(user.id),
@@ -70,19 +77,34 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
       vipExpiresAt: user.vipExpiresAt?.toISOString() ?? null,
       inviteCount: user.inviteCount,
       inviterUsername: user.inviter?.username ?? null,
-
+      verification: approvedVerification
+        ? {
+            id: approvedVerification.type.id,
+            name: approvedVerification.type.name,
+            color: approvedVerification.type.color,
+            iconText: approvedVerification.type.iconText,
+          }
+        : null,
       postCount: user.postCount,
-
       commentCount: user.commentCount,
       likeReceivedCount: user.likeReceivedCount,
       favoriteCount: user._count.favorites,
       boardCount: user._count.boardFollows,
-
     }
   } catch (error) {
     console.error(error)
     return null
   }
+}
+
+export async function getCurrentUserProfile(): Promise<SiteUserProfile | null> {
+  const actor = await getCurrentSessionActor()
+
+  if (!actor) {
+    return null
+  }
+
+  return getUserProfile(actor.username)
 }
 
 export async function getUserPosts(username: string) {

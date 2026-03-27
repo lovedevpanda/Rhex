@@ -1,4 +1,5 @@
 import { prisma } from "@/db/client"
+import type { Prisma } from "@/db/types"
 import { postListInclude } from "@/db/queries"
 
 export const userProfileSelect = {
@@ -27,7 +28,17 @@ export const userProfileSelect = {
       username: true,
     },
   },
-} as const
+  verificationApplications: {
+    where: {
+      status: "APPROVED",
+    },
+    orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }] as Prisma.UserVerificationOrderByWithRelationInput[],
+    take: 1,
+    include: {
+      type: true,
+    },
+  },
+} satisfies Prisma.UserSelect
 
 export function findUserProfileByUsername(username: string) {
   return prisma.user.findUnique({

@@ -1,24 +1,13 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { publishMessageEvent } from "@/lib/message-event-bus"
 import { markConversationAsRead } from "@/lib/messages"
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
-
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
-  const body = await request.json()
-  const conversationId = String(body.conversationId ?? "")
-
-  if (!conversationId) {
-    return NextResponse.json({ code: 400, message: "缺少会话信息" }, { status: 400 })
-  }
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const conversationId = requireStringField(body, "conversationId", "缺少会话信息")
 
   await markConversationAsRead(conversationId, currentUser.id)
+
 
   publishMessageEvent([currentUser.id], {
     type: "conversation.read",
@@ -27,5 +16,10 @@ export async function POST(request: Request) {
     occurredAt: new Date().toISOString(),
   })
 
-  return NextResponse.json({ code: 0, message: "已读状态已更新" })
-}
+  return apiSuccess(undefined, "已读状态已更新")
+}, {
+  errorMessage: "更新会话已读失败",
+  logPrefix: "[api/messages/read] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

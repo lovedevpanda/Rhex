@@ -27,6 +27,14 @@ interface ListPostAuthor extends VipStateSource {
       status: boolean
     }
   }>
+  verificationApplications?: Array<{
+    type: {
+      id: string
+      name: string
+      color: string
+      iconText?: string | null
+    }
+  }>
 
 }
 
@@ -96,6 +104,14 @@ export function mapListPost(post: ListPostSource) {
     authorIsVip: isVipActive(post.author),
 
     authorVipLevel: getVipLevel(post.author),
+    authorVerification: post.author.verificationApplications?.[0]
+      ? {
+          id: post.author.verificationApplications[0].type.id,
+          name: post.author.verificationApplications[0].type.name,
+          color: post.author.verificationApplications[0].type.color,
+          iconText: post.author.verificationApplications[0].type.iconText,
+        }
+      : null,
     authorDisplayedBadges: (post.author.userBadges ?? [])
       .filter((item) => Boolean(item.isDisplayed) && item.badge.status)
       .slice(0, 3)

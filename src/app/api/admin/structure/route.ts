@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 
 import { requireAdminUser, writeAdminLog } from "@/lib/admin"
-import { hasDatabaseUrl } from "@/lib/db-status"
 import { DEFAULT_ALLOWED_POST_TYPES_VALUE, serializePostTypes } from "@/lib/post-types"
 import { prisma } from "@/db/client"
 
@@ -15,9 +14,6 @@ async function ensureAdmin() {
     return { error: NextResponse.json({ code: 403, message: "无权执行后台操作" }, { status: 403 }) }
   }
 
-  if (!hasDatabaseUrl()) {
-    return { error: NextResponse.json({ code: 503, message: "当前未配置数据库，暂不可修改论坛结构" }, { status: 503 }) }
-  }
 
   return { admin }
 }

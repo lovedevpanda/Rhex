@@ -3,7 +3,6 @@ import { BadgeRuleOperator, BadgeRuleType } from "@/db/types"
 import { NextResponse } from "next/server"
 
 import { getRequestIp, requireAdminUser, writeAdminLog } from "@/lib/admin"
-import { hasDatabaseUrl } from "@/lib/db-status"
 import { prisma } from "@/db/client"
 
 async function ensureAdmin() {
@@ -11,10 +10,6 @@ async function ensureAdmin() {
 
   if (!admin) {
     return { error: NextResponse.json({ code: 403, message: "无权执行后台操作" }, { status: 403 }) }
-  }
-
-  if (!hasDatabaseUrl()) {
-    return { error: NextResponse.json({ code: 503, message: "当前未配置数据库，暂不可修改勋章配置" }, { status: 503 }) }
   }
 
   return { admin }

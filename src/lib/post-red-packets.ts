@@ -3,6 +3,9 @@ import { ChangeType, PostRedPacketGrantMode, PostRedPacketStatus, PostRedPacketT
 import { prisma } from "@/db/client"
 import { getBusinessDayRange, formatRelativeTime } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
+import { multiplyPositiveSafeIntegers } from "@/lib/shared/safe-integer"
+
+
 
 export interface NormalizedPostRedPacketConfig {
   enabled: boolean
@@ -108,8 +111,9 @@ export async function normalizePostRedPacketConfig(input: unknown): Promise<{
   const configuredTotalPoints = toPositiveInteger(config.totalPoints)
   const unitPoints = toPositiveInteger(config.unitPoints ?? config.totalPoints)
   const totalPoints = grantMode === "FIXED"
-    ? (unitPoints && packetCount ? unitPoints * packetCount : null)
+    ? multiplyPositiveSafeIntegers(unitPoints, packetCount)
     : configuredTotalPoints
+
 
 
   if (!(grantMode in RED_PACKET_GRANT_MODE_LABELS)) {

@@ -1,4 +1,6 @@
 import { normalizePostType, type LocalPostType } from "@/lib/post-types"
+import { parseNonNegativeSafeInteger, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
+
 
 export interface ValidationResult<T> {
   success: boolean
@@ -127,13 +129,14 @@ export function validatePostPayload(body: unknown): ValidationResult<{
   const boardSlug = normalizeString((body as Record<string, unknown> | null)?.boardSlug)
   const postType = normalizePostType((body as Record<string, unknown> | null)?.postType)
 
-  const rawBountyPoints = Number((body as Record<string, unknown> | null)?.bountyPoints ?? 0)
+  const rawBountyPoints = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.bountyPoints ?? 0) ?? 0
   const commentsVisibleToAuthorOnly = Boolean((body as Record<string, unknown> | null)?.commentsVisibleToAuthorOnly)
   const replyUnlockContent = normalizeString((body as Record<string, unknown> | null)?.replyUnlockContent)
-  const rawReplyThreshold = Number((body as Record<string, unknown> | null)?.replyThreshold ?? 1)
+  const rawReplyThreshold = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.replyThreshold ?? 1) ?? 1
   const purchaseUnlockContent = normalizeString((body as Record<string, unknown> | null)?.purchaseUnlockContent)
-  const rawPurchasePrice = Number((body as Record<string, unknown> | null)?.purchasePrice ?? 0)
-  const rawMinViewLevel = Number((body as Record<string, unknown> | null)?.minViewLevel ?? 0)
+  const rawPurchasePrice = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.purchasePrice ?? 0) ?? 0
+  const rawMinViewLevel = parseNonNegativeSafeInteger((body as Record<string, unknown> | null)?.minViewLevel ?? 0) ?? 0
+
   const pollOptions = Array.isArray((body as Record<string, unknown> | null)?.pollOptions)
     ? ((body as Record<string, unknown> | null)?.pollOptions as unknown[])
         .map((item) => normalizeString(item))

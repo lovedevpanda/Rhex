@@ -1,50 +1,51 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { requireActiveCurrentUserRecord } from "@/db/current-user"
+import { apiError, apiSuccess, createCustomRouteHandler, readJsonBody, requireNumberField, requireStringField } from "@/lib/api-route"
 import { createGobangMatch, getGobangPlayerSummary, listGobangMatches, makeGobangMove } from "@/lib/gobang"
 
-export async function GET() {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
 
+async function buildGobangContext(): Promise<Awaited<ReturnType<typeof requireActiveCurrentUserRecord>>> {
   try {
-    const [matches, summary] = await Promise.all([
-      listGobangMatches(user.id),
-      getGobangPlayerSummary(user),
-    ])
-    return NextResponse.json({ code: 0, data: { matches, summary } })
+    return await requireActiveCurrentUserRecord()
   } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "加载对局失败" }, { status: 400 })
+    const message = error instanceof Error ? error.message : "请先登录"
+    const status = message === "当前登录用户不存在" ? 401 : 403
+    apiError(status, status === 401 ? "请先登录" : message)
   }
 }
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
+export const GET = createCustomRouteHandler(async ({ context: user }) => {
+  const [matches, summary] = await Promise.all([
+    listGobangMatches(user.id),
+    getGobangPlayerSummary(user),
+  ])
+
+  return apiSuccess({ matches, summary })
+}, {
+  buildContext: buildGobangContext,
+  errorMessage: "加载对局失败",
+  logPrefix: "[api/gobang:GET] unexpected error",
+})
+
+export const POST = createCustomRouteHandler<unknown, Awaited<ReturnType<typeof requireActiveCurrentUserRecord>>>(async ({ request, context: user }) => {
+  const body = await readJsonBody(request)
+  const action = requireStringField(body, "action", "不支持的操作")
+
+  if (action === "create") {
+    const result = await createGobangMatch(user)
+    return apiSuccess(result, result.policy.mode === "FREE" ? "已开始免费挑战" : "已开始付费挑战")
   }
 
-  const body = await request.json()
-  const action = String(body.action ?? "")
-
-  try {
-    if (action === "create") {
-      const result = await createGobangMatch(user)
-      return NextResponse.json({ code: 0, message: result.policy.mode === "FREE" ? "已开始免费挑战" : "已开始付费挑战", data: result })
-    }
-
-    if (action === "move") {
-      const matchId = String(body.matchId ?? "")
-      const x = Number(body.x)
-      const y = Number(body.y)
-      const data = await makeGobangMove({ matchId, user, x, y })
-      return NextResponse.json({ code: 0, message: data.winnerId === user.id ? "你赢了，奖励已到账" : data.winnerId === 0 ? "AI 获胜，再接再厉" : "落子成功", data })
-    }
-
-    return NextResponse.json({ code: 400, message: "不支持的操作" }, { status: 400 })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "五子棋操作失败" }, { status: 400 })
+  if (action === "move") {
+    const matchId = requireStringField(body, "matchId", "缺少对局参数")
+    const x = requireNumberField(body, "x", "缺少落子坐标")
+    const y = requireNumberField(body, "y", "缺少落子坐标")
+    const data = await makeGobangMove({ matchId, user, x, y })
+    return apiSuccess(data, data.winnerId === user.id ? "你赢了，奖励已到账" : data.winnerId === 0 ? "AI 获胜，再接再厉" : "落子成功")
   }
-}
+
+  apiError(400, "不支持的操作")
+}, {
+  buildContext: buildGobangContext,
+  errorMessage: "五子棋操作失败",
+  logPrefix: "[api/gobang:POST] unexpected error",
+})

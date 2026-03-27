@@ -11,6 +11,7 @@ const adminNavigation = [
   { href: "/admin?tab=structure", label: "版块管理", icon: Settings2 },
   { href: "/admin?tab=levels", label: "等级系统", icon: Sparkles },
   { href: "/admin?tab=badges", label: "勋章系统", icon: Sparkles },
+  { href: "/admin?tab=verifications", label: "认证系统", icon: ShieldAlert },
   { href: "/admin?tab=announcements", label: "公告管理", icon: Megaphone },
   { href: "/admin?tab=reports", label: "举报中心", icon: Flag },
   { href: "/admin?tab=logs", label: "日志中心", icon: Logs },

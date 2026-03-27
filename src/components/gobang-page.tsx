@@ -61,8 +61,12 @@ function formatMatchTime(value: string | undefined) {
     return "时间未知"
   }
 
-  const formatted = formatBusinessMonthDayTime(value)
-  return formatted && formatted !== "-" ? formatted : "时间未知"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "时间未知"
+  }
+
+  return formatBusinessMonthDayTime(date)
 }
 
 
@@ -236,7 +240,9 @@ export function GobangPage({ config, initialMatches, initialSummary }: GobangPag
   const activeMatch = useMemo(() => matches.find((item) => item.id === activeMatchId) ?? matches.find((item) => item.status === "ONGOING") ?? matches[0] ?? null, [activeMatchId, matches])
   const latestMove = activeMatch?.moves.at(-1) ? { r: activeMatch.moves.at(-1)!.y, c: activeMatch.moves.at(-1)!.x } : null
   const winningLine = useMemo(() => activeMatch ? resolveWinningLine(activeMatch.board, activeMatch.winnerId) : null, [activeMatch])
-  const historyMatches = useMemo(() => matches.filter((item) => item.status === "FINISHED" && item.id !== (activeMatch?.status === "FINISHED" ? activeMatch.id : null)), [activeMatch, matches])
+  const historyMatches = useMemo(() => matches
+    .filter((item) => item.status === "FINISHED")
+    .sort((left, right) => new Date(right.finishedAt || right.updatedAt || right.createdAt).getTime() - new Date(left.finishedAt || left.updatedAt || left.createdAt).getTime()), [matches])
   const filteredHistoryMatches = useMemo(() => historyFilter === "all" ? historyMatches : historyFilter === "win" ? historyMatches.filter((item) => item.winnerId !== 0) : historyMatches.filter((item) => item.winnerId === 0), [historyFilter, historyMatches])
   const selectedHistoryMatch = useMemo(() => filteredHistoryMatches.find((item) => item.id === selectedHistoryMatchId) ?? filteredHistoryMatches[0] ?? null, [filteredHistoryMatches, selectedHistoryMatchId])
   const selectedHistoryWinningLine = useMemo(() => selectedHistoryMatch ? resolveWinningLine(selectedHistoryMatch.board, selectedHistoryMatch.winnerId) : null, [selectedHistoryMatch])

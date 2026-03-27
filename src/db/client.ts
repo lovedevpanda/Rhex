@@ -44,8 +44,8 @@ const WRITE_OPERATIONS = new Set([
 const DEFAULT_CACHE_TTL_MS = 5_000
 const DEFAULT_CACHE_MAX_ENTRIES = 10000 //最大缓存数量
 const DEFAULT_CACHE_MAX_VALUE_BYTES = 1024 * 1024 //单条大小 1024kb
-const DEFAULT_CACHE_MAX_HEAP_MB = 1024 //1024MB
 const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 60_000 //默认每 60s 清一次
+
 
 const globalForPrisma = globalThis as unknown as GlobalPrismaState
 const prismaCache = globalForPrisma.prismaCache ?? new Map<string, DbCacheEntry>()
@@ -55,6 +55,8 @@ const shouldLogDbCache = process.env.NODE_ENV !== "production"
   && process.env.DB_CLIENT_CACHE_LOG !== "false"
 
 function getPositiveNumberFromEnv(rawValue: string | undefined, fallback: number) {
+
+
   const parsedValue = Number(rawValue)
 
   if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
@@ -76,12 +78,8 @@ function getCacheMaxValueBytes() {
   return Math.max(256, Math.floor(getPositiveNumberFromEnv(process.env.DB_CLIENT_CACHE_MAX_VALUE_BYTES, DEFAULT_CACHE_MAX_VALUE_BYTES)))
 }
 
-function getCacheMaxHeapBytes() {
-  const heapLimitInMb = getPositiveNumberFromEnv(process.env.DB_CLIENT_CACHE_MAX_HEAP_MB, DEFAULT_CACHE_MAX_HEAP_MB)
-  return Math.floor(heapLimitInMb * 1024 * 1024)
-}
-
 function getCacheCleanupIntervalMs() {
+
   return Math.max(1_000, Math.floor(getPositiveNumberFromEnv(process.env.DB_CLIENT_CACHE_CLEANUP_INTERVAL_MS, DEFAULT_CACHE_CLEANUP_INTERVAL_MS)))
 }
 
@@ -182,39 +180,18 @@ function pruneCacheToLimit(maxEntries = getCacheMaxEntries()) {
   })
 }
 
-function clearCacheForMemoryPressure(reason: string) {
-  const cacheSize = prismaCache.size
-  prismaCache.clear()
-  logDbCache("cache cleared for memory pressure", { reason, clearedCount: cacheSize })
-}
-
-function shouldBypassCacheForMemoryPressure() {
-  const heapUsed = process.memoryUsage().heapUsed
-  const heapLimit = getCacheMaxHeapBytes()
-
-  if (heapUsed < heapLimit) {
-    return false
-  }
-
-  clearCacheForMemoryPressure("heapUsed exceeds configured threshold")
-  return true
-}
-
 function ensureCacheMaintenanceTimer() {
+
   if (globalForPrisma.prismaCacheCleanupTimer) {
     return
   }
 
   const timer = setInterval(() => {
     pruneExpiredCacheEntries()
-
-    if (process.memoryUsage().heapUsed >= getCacheMaxHeapBytes()) {
-      clearCacheForMemoryPressure("periodic heap guard")
-      return
-    }
-
     pruneCacheToLimit()
   }, getCacheCleanupIntervalMs())
+
+
 
   timer.unref?.()
   globalForPrisma.prismaCacheCleanupTimer = timer
@@ -243,11 +220,8 @@ function getCachedValue<T>(cacheKey: string): { hit: boolean, value?: T } {
 function setCachedValue(cacheKey: string, value: unknown) {
   pruneExpiredCacheEntries()
 
-  if (shouldBypassCacheForMemoryPressure()) {
-    return
-  }
-
   const byteSize = getApproximateByteSize(value)
+
   if (byteSize === null) {
     logDbCache("cache skipped: serialization failed", { key: cacheKey })
     return
@@ -324,9 +298,10 @@ function createCachedModelDelegate<T extends Record<string, unknown>>(
           const operationContext = { model: operation.model, action: property }
           const cacheKey = buildCacheKey(operationContext, args[0])
 
-          if (!cacheKey || shouldBypassCacheForMemoryPressure()) {
+          if (!cacheKey) {
             return originalMethod.apply(target, args)
           }
+
 
           const cached = getCachedValue(cacheKey)
 

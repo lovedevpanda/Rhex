@@ -18,6 +18,16 @@ export const postListInclude = {
           badge: true,
         },
       },
+      verificationApplications: {
+        where: {
+          status: "APPROVED",
+        },
+        orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }],
+        take: 1,
+        include: {
+          type: true,
+        },
+      },
     },
   },
 } satisfies Prisma.PostInclude

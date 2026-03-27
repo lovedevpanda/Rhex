@@ -1,38 +1,25 @@
-import { NextResponse } from "next/server"
-
-import { requireAdminUser, writeAdminLog } from "@/lib/admin"
-
-
+import { writeAdminLog } from "@/lib/admin"
+import { apiSuccess, createAdminRouteHandler, readJsonBody } from "@/lib/api-route"
 import { getLevelDefinitions, saveLevelDefinitions } from "@/lib/level-system"
 
-export async function GET() {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权访问" }, { status: 403 })
-  }
-
+export const GET = createAdminRouteHandler(async () => {
   const levels = await getLevelDefinitions()
-  return NextResponse.json({ code: 0, data: levels })
-}
+  return apiSuccess(levels)
+}, {
+  errorMessage: "读取等级设置失败",
+  logPrefix: "[api/admin/levels:GET] unexpected error",
+  unauthorizedMessage: "无权访问",
+})
 
-export async function POST(request: Request) {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权操作" }, { status: 403 })
-  }
-
-  const body = await request.json()
-
-
+export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
+  const body = await readJsonBody(request)
   const levels = Array.isArray(body.levels) ? body.levels : []
 
-  try {
-    const saved = await saveLevelDefinitions(levels)
-    await writeAdminLog(admin.id, "site.levels.update", "SITE", "level-system", `管理员更新了 ${saved.length} 个等级定义`)
-    return NextResponse.json({ code: 0, message: "等级系统设置已保存", data: saved })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "保存等级设置失败" }, { status: 400 })
-  }
-}
+  const saved = await saveLevelDefinitions(levels)
+  await writeAdminLog(adminUser.id, "site.levels.update", "SITE", "level-system", `管理员更新了 ${saved.length} 个等级定义`)
+  return apiSuccess(saved, "等级系统设置已保存")
+}, {
+  errorMessage: "保存等级设置失败",
+  logPrefix: "[api/admin/levels:POST] unexpected error",
+  unauthorizedMessage: "无权操作",
+})

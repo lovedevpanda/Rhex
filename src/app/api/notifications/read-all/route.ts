@@ -1,18 +1,12 @@
-import { NextResponse } from "next/server"
-
 import { markAllNotificationsAsRead } from "@/db/notification-queries"
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 
-
-export async function POST() {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
-
-  await markAllNotificationsAsRead(user.id)
-
-
-  return NextResponse.json({ code: 0, message: "全部通知已标记为已读" })
-}
+export const POST = createUserRouteHandler(async ({ currentUser }) => {
+  await markAllNotificationsAsRead(currentUser.id)
+  return apiSuccess(undefined, "全部通知已标记为已读")
+}, {
+  errorMessage: "批量标记通知失败",
+  logPrefix: "[api/notifications/read-all] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

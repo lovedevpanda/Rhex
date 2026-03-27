@@ -1,35 +1,25 @@
-import { NextResponse } from "next/server"
-
-import { getCurrentUser } from "@/lib/auth"
+import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { publishMessageEvent } from "@/lib/message-event-bus"
 import { deleteConversationForUser } from "@/lib/messages"
 
-export async function POST(request: Request) {
-  const currentUser = await getCurrentUser()
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  const body = await readJsonBody(request)
+  const conversationId = requireStringField(body, "conversationId", "缺少会话信息")
 
-  if (!currentUser) {
-    return NextResponse.json({ code: 401, message: "请先登录" }, { status: 401 })
-  }
+  await deleteConversationForUser(conversationId, currentUser.id)
 
-  const body = await request.json()
-  const conversationId = String(body.conversationId ?? "")
 
-  if (!conversationId) {
-    return NextResponse.json({ code: 400, message: "缺少会话信息" }, { status: 400 })
-  }
+  publishMessageEvent([currentUser.id], {
+    type: "conversation.read",
+    conversationId,
+    senderId: currentUser.id,
+    occurredAt: new Date().toISOString(),
+  })
 
-  try {
-    await deleteConversationForUser(conversationId, currentUser.id)
-
-    publishMessageEvent([currentUser.id], {
-      type: "conversation.read",
-      conversationId,
-      senderId: currentUser.id,
-      occurredAt: new Date().toISOString(),
-    })
-
-    return NextResponse.json({ code: 0, message: "会话已删除" })
-  } catch (error) {
-    return NextResponse.json({ code: 400, message: error instanceof Error ? error.message : "删除会话失败" }, { status: 400 })
-  }
-}
+  return apiSuccess(undefined, "会话已删除")
+}, {
+  errorMessage: "删除会话失败",
+  logPrefix: "[api/messages/delete] unexpected error",
+  unauthorizedMessage: "请先登录",
+  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+})

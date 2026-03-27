@@ -80,10 +80,12 @@ function normalizeBoolean(value: unknown, fallback: boolean) {
   return fallback
 }
 
+import { parseSafeInteger } from "@/lib/shared/safe-integer"
+
 function normalizeNumber(value: unknown, fallback: number) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  return parseSafeInteger(value) ?? fallback
 }
+
 
 function normalizeText(value: unknown, fallback: string) {
   const resolved = String(value ?? fallback).trim()

@@ -1,17 +1,22 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 
+import { AdminModal } from "@/components/admin-modal"
+import { BoardSelectField, type BoardSelectGroup } from "@/components/board-select-field"
 import { Button } from "@/components/ui/button"
 
 interface PostAdminPanelProps {
   postId: string
+  postSlug: string
+  currentBoardSlug: string
   postAuthorId: number
   postAuthorUsername: string
   postAuthorStatus?: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   isPinned: boolean
   pinScope?: string | null
   isFeatured: boolean
+  boardOptions: BoardSelectGroup[]
 }
 
 interface AdminQuickAction {
@@ -22,9 +27,43 @@ interface AdminQuickAction {
   extra?: Record<string, unknown>
 }
 
-export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postAuthorStatus, isPinned, isFeatured }: PostAdminPanelProps) {
+export function PostAdminPanel({
+  postId,
+  postSlug,
+  currentBoardSlug,
+  postAuthorId,
+  postAuthorUsername,
+  postAuthorStatus,
+  isPinned,
+  isFeatured,
+  boardOptions,
+}: PostAdminPanelProps) {
   const [feedback, setFeedback] = useState("")
+  const [moveBoardSlug, setMoveBoardSlug] = useState(currentBoardSlug)
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false)
   const [pendingAction, startTransition] = useTransition()
+
+  const currentBoardLabel = useMemo(() => {
+    for (const group of boardOptions) {
+      const board = group.items.find((item) => item.value === currentBoardSlug)
+      if (board) {
+        return `${group.zone} / ${board.label}`
+      }
+    }
+
+    return currentBoardSlug
+  }, [boardOptions, currentBoardSlug])
+
+  const selectedMoveBoardLabel = useMemo(() => {
+    for (const group of boardOptions) {
+      const board = group.items.find((item) => item.value === moveBoardSlug)
+      if (board) {
+        return `${group.zone} / ${board.label}`
+      }
+    }
+
+    return moveBoardSlug
+  }, [boardOptions, moveBoardSlug])
 
   async function runAction(action: string, targetId: string, extra?: Record<string, unknown>) {
     setFeedback("")
@@ -38,9 +77,36 @@ export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postA
       const result = await response.json()
       setFeedback(result.message ?? (response.ok ? "操作成功" : "操作失败"))
       if (response.ok) {
+        if (action === "post.moveBoard") {
+          const slug = typeof result.data?.slug === "string" && result.data.slug ? result.data.slug : postSlug
+          window.location.href = `/posts/${slug}`
+          return
+        }
         window.location.reload()
       }
     })
+  }
+
+  function openMoveDialog() {
+    setMoveBoardSlug(currentBoardSlug)
+    setFeedback("")
+    setMoveDialogOpen(true)
+  }
+
+  function confirmMoveBoard() {
+    if (!moveBoardSlug) {
+      setFeedback("请选择目标节点")
+      return
+    }
+
+    if (moveBoardSlug === currentBoardSlug) {
+      setFeedback("帖子已在当前节点，无需移动")
+      setMoveDialogOpen(false)
+      return
+    }
+
+    setMoveDialogOpen(false)
+    void runAction("post.moveBoard", postId, { boardSlug: moveBoardSlug })
   }
 
   const userActions: AdminQuickAction[] = postAuthorStatus === "BANNED"
@@ -79,6 +145,9 @@ export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postA
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" className="h-8 px-3 text-xs" onClick={openMoveDialog} disabled={pendingAction}>
+          移动节点
+        </Button>
         {actions.map((item) => (
           <Button
             key={`${item.action}-${item.label}`}
@@ -92,6 +161,38 @@ export function PostAdminPanel({ postId, postAuthorId, postAuthorUsername, postA
         ))}
       </div>
       {feedback ? <p className="mt-2 text-xs text-muted-foreground">{feedback}</p> : null}
+
+      <AdminModal
+        open={moveDialogOpen}
+        title="移动帖子节点"
+        description="选择目标节点后确认，帖子会整体迁移到新的节点。"
+        onClose={() => setMoveDialogOpen(false)}
+        footer={(
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" className="h-9 px-4 text-sm" onClick={() => setMoveDialogOpen(false)} disabled={pendingAction}>
+              取消
+            </Button>
+            <Button type="button" className="h-9 px-4 text-sm" onClick={confirmMoveBoard} disabled={pendingAction || !moveBoardSlug}>
+              确定移动
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="rounded-[18px] border border-border bg-card/60 p-4 text-sm text-muted-foreground">
+            <p>当前节点：{currentBoardLabel || "未知节点"}</p>
+            <p className="mt-1">目标节点：{selectedMoveBoardLabel || "请选择目标节点"}</p>
+          </div>
+          <BoardSelectField
+            value={moveBoardSlug}
+            onChange={setMoveBoardSlug}
+            boardOptions={boardOptions}
+            disabled={pendingAction}
+            title="选择目标节点"
+            description="支持按分区、节点名或 slug 搜索，确认后帖子将移动到所选节点。"
+          />
+        </div>
+      </AdminModal>
     </div>
   )
 }

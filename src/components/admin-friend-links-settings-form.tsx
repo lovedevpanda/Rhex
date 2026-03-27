@@ -239,9 +239,18 @@ export function AdminFriendLinksSettingsForm({ initialSettings, items, pendingCo
                     <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setEditingId(activeEditing ? null : item.id)}>
                       {activeEditing ? "收起" : "编辑"}
                     </Button>
-                    <Button type="button" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "approve")}>通过</Button>
-                    <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "reject")}>驳回</Button>
-                    <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "disable")}>停用</Button>
+                    {item.status === "PENDING" ? (
+                      <>
+                        <Button type="button" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "approve")}>通过</Button>
+                        <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "reject")}>驳回</Button>
+                      </>
+                    ) : null}
+                    {item.status === "REJECTED" || item.status === "DISABLED" ? (
+                      <Button type="button" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "approve")}>通过</Button>
+                    ) : null}
+                    {item.status === "APPROVED" ? (
+                      <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" disabled={isPending} onClick={() => submitReview(item.id, "disable")}>停用</Button>
+                    ) : null}
                   </div>
                 </div>
 

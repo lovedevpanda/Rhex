@@ -20,6 +20,7 @@ import { SiteHeader } from "@/components/site-header"
 import { UserAvatar } from "@/components/user-avatar"
 import { UserDisplayedBadges } from "@/components/user-displayed-badges"
 import { UserStatusBadge } from "@/components/user-status-badge"
+import { UserVerificationBadge } from "@/components/user-verification-badge"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { VipBadge } from "@/components/vip-badge"
@@ -190,10 +191,32 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
 
   const sidebarUser = await sidebarUserPromise
 
+  const groupedBoardOptions = zones
+    .map((zone) => ({
+      zone: zone.name,
+      items: boards
+        .filter((board) => zone.boardSlugs.includes(board.slug))
+        .map((board) => ({
+          value: board.slug,
+          label: board.name,
+        })),
+    }))
+    .filter((group) => group.items.length > 0)
 
+  const groupedBoardSlugs = new Set(groupedBoardOptions.flatMap((group) => group.items.map((item) => item.value)))
+  const ungroupedBoards = boards
+    .filter((board) => !groupedBoardSlugs.has(board.slug))
+    .map((board) => ({
+      value: board.slug,
+      label: board.name,
+    }))
 
+  const adminBoardOptions = ungroupedBoards.length > 0
+    ? [...groupedBoardOptions, { zone: "未分区节点", items: ungroupedBoards }]
+    : groupedBoardOptions
 
   const jsonLd = buildArticleJsonLd({
+
     title: displayPost.title,
     description: displayPost.description,
     publishedAt: displayPost.publishedAt,
@@ -252,7 +275,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                         </span>
                       </div>
 
-                      <h1 className={displayPost.isFeatured ? "text-base font-semibold leading-7 text-emerald-700 sm:hidden dark:text-emerald-300" : displayPost.isPinned ? "text-base font-semibold leading-7 text-orange-700 sm:hidden dark:text-orange-300" : "text-base font-semibold leading-7 sm:hidden"}>{displayPost.title}</h1>
+                      <h1 className={displayPost.isFeatured ? "text-[15px] font-semibold leading-7 text-emerald-700 sm:hidden dark:text-emerald-300" : displayPost.isPinned ? "text-[15px] font-semibold leading-7 text-orange-700 sm:hidden dark:text-orange-300" : "text-[15px] font-semibold leading-7 sm:hidden"}>{displayPost.title}</h1>
+
 
                       <div className="hidden sm:flex sm:flex-col sm:gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
                         <div className="flex min-w-0 items-start gap-4">
@@ -266,6 +290,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                                 {displayPost.board}
                               </Link>
                               <span>·</span>
+                              <UserVerificationBadge verification={displayPost.authorVerification ?? null} compact />
                               <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("truncate", getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true }))}>
                                 {displayPost.author}
                               </Link>
@@ -279,7 +304,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                               {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
                             </div>
 
-                            <h1 className={displayPost.isFeatured ? "text-lg font-semibold leading-snug text-emerald-700 sm:text-xl md:text-2xl dark:text-emerald-300" : displayPost.isPinned ? "text-lg font-semibold leading-snug text-orange-700 sm:text-xl md:text-2xl dark:text-orange-300" : "text-lg font-semibold leading-snug sm:text-xl md:text-2xl"}>{displayPost.title}</h1>
+                            <h1 className={displayPost.isFeatured ? "text-base font-semibold leading-snug text-emerald-700 sm:text-lg md:text-xl dark:text-emerald-300" : displayPost.isPinned ? "text-base font-semibold leading-snug text-orange-700 sm:text-lg md:text-xl dark:text-orange-300" : "text-base font-semibold leading-snug sm:text-lg md:text-xl"}>{displayPost.title}</h1>
+
                           </div>
                         </div>
 
@@ -344,7 +370,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                                 <span>{formatRelativeTime(appendix.createdAt)}</span>
                               </div>
                               <div className="mt-2 pl-0.5">
-                                <MarkdownContent content={appendix.content} className="text-[15px] leading-8 text-muted-foreground dark:text-muted-foreground/90" markdownEmojiMap={settings.markdownEmojiMap} />
+                                <MarkdownContent content={appendix.content} className="text-[15px] leading-8 tracking-[0.018em] text-muted-foreground dark:text-muted-foreground/90" markdownEmojiMap={settings.markdownEmojiMap} />
+
 
                               </div>
                             </section>
@@ -389,13 +416,18 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                 {isAdmin ? (
                   <PostAdminPanel
                     postId={displayPost.id}
+                    postSlug={displayPost.slug}
+                    currentBoardSlug={displayPost.boardSlug ?? ""}
                     postAuthorId={displayPost.authorId ?? 0}
                     postAuthorUsername={displayPost.authorUsername ?? displayPost.author}
                     postAuthorStatus={displayPost.authorStatus}
                     isPinned={displayPost.isPinned}
+                    pinScope={displayPost.pinScope}
                     isFeatured={displayPost.isFeatured}
+                    boardOptions={adminBoardOptions}
                   />
                 ) : null}
+
 
 
 

@@ -2,102 +2,91 @@ import { compareSync } from "bcryptjs"
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
+import { apiError, createRouteHandler, apiSuccess } from "@/lib/api-route"
+import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { getRequestIp } from "@/lib/request-ip"
 import { createSessionToken, getSessionCookieName, getSessionCookieOptions } from "@/lib/session"
 import { getSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
-import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { validateAuthPayload } from "@/lib/validators"
-import { isPublicRouteError } from "@/lib/public-route-error"
 
-export async function POST(request: Request) {
+export const POST = createRouteHandler(async ({ request }) => {
   const body = await request.json()
   const validated = validateAuthPayload(body)
 
   if (!validated.success || !validated.data) {
-    return NextResponse.json({ code: 400, message: validated.message ?? "参数错误" }, { status: 400 })
+    apiError(400, validated.message ?? "参数错误")
   }
 
   const { username, password } = validated.data
   const captchaToken = typeof body.captchaToken === "string" ? body.captchaToken.trim() : ""
   const builtinCaptchaCode = typeof body.builtinCaptchaCode === "string" ? body.builtinCaptchaCode.trim() : ""
+  const settings = await getSiteSettings()
 
-  try {
-    const settings = await getSiteSettings()
-
-    if (settings.loginCaptchaMode === "TURNSTILE") {
-      if (!settings.turnstileSiteKey || !process.env.TURNSTILE_SECRET_KEY?.trim()) {
-        return NextResponse.json({ code: 500, message: "站点未完成 Turnstile 验证码配置，请联系管理员" }, { status: 500 })
-      }
-
-      if (!captchaToken) {
-        return NextResponse.json({ code: 400, message: "请先完成验证码验证" }, { status: 400 })
-      }
-
-      await verifyTurnstileToken(captchaToken, getRequestIp(request))
+  if (settings.loginCaptchaMode === "TURNSTILE") {
+    if (!settings.turnstileSiteKey || !process.env.TURNSTILE_SECRET_KEY?.trim()) {
+      apiError(500, "站点未完成 Turnstile 验证码配置，请联系管理员")
     }
 
-    if (settings.loginCaptchaMode === "BUILTIN") {
-      if (!captchaToken || !builtinCaptchaCode) {
-        return NextResponse.json({ code: 400, message: "请先完成图形验证码验证" }, { status: 400 })
-      }
-
-      verifyBuiltinCaptchaToken(captchaToken, builtinCaptchaCode)
+    if (!captchaToken) {
+      apiError(400, "请先完成验证码验证")
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username },
-    })
-
-    if (!user) {
-      return NextResponse.json({ code: 401, message: "用户名或密码错误" }, { status: 401 })
-    }
-
-    if (user.status === "BANNED") {
-      return NextResponse.json({ code: 403, message: "该账号已被拉黑，无法登录" }, { status: 403 })
-    }
-
-    const isValid = compareSync(password, user.passwordHash)
-
-    if (!isValid) {
-      return NextResponse.json({ code: 401, message: "用户名或密码错误" }, { status: 401 })
-    }
-
-    const loginIp = getRequestIp(request)
-
-    await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          lastLoginAt: new Date(),
-          lastLoginIp: loginIp,
-        },
-      })
-
-      await tx.userLoginLog.create({
-        data: {
-          userId: user.id,
-          ip: loginIp,
-          userAgent: request.headers.get("user-agent"),
-        },
-      })
-    })
-
-    const response = NextResponse.json({
-      code: 0,
-      message: "success",
-      data: { username: user.username },
-    })
-
-    const sessionToken = await createSessionToken(user.username)
-    response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
-
-    return response
-  } catch (error) {
-    if (isPublicRouteError(error)) {
-      return NextResponse.json({ code: 400, message: error.message }, { status: error.statusCode })
-    }
-    console.error("[api/auth/login] unexpected error", error)
-    return NextResponse.json({ code: 500, message: error instanceof Error ? error.message : "登录失败" }, { status: 500 })
+    await verifyTurnstileToken(captchaToken, getRequestIp(request))
   }
-}
+
+  if (settings.loginCaptchaMode === "BUILTIN") {
+    if (!captchaToken || !builtinCaptchaCode) {
+      apiError(400, "请先完成图形验证码验证")
+    }
+
+    verifyBuiltinCaptchaToken(captchaToken, builtinCaptchaCode)
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { username },
+  })
+
+  if (!user) {
+    apiError(401, "用户名或密码错误")
+  }
+
+  if (user.status === "BANNED") {
+    apiError(403, "该账号已被拉黑，无法登录")
+  }
+
+  const isValid = compareSync(password, user.passwordHash)
+
+  if (!isValid) {
+    apiError(401, "用户名或密码错误")
+  }
+
+  const loginIp = getRequestIp(request)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        lastLoginIp: loginIp,
+      },
+    })
+
+    await tx.userLoginLog.create({
+      data: {
+        userId: user.id,
+        ip: loginIp,
+        userAgent: request.headers.get("user-agent"),
+      },
+    })
+  })
+
+  const response = NextResponse.json(apiSuccess({ username: user.username }, "success"))
+  const sessionToken = await createSessionToken(user.username)
+  response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
+
+  return response
+}, {
+  errorMessage: "登录失败",
+  logPrefix: "[api/auth/login] unexpected error",
+})

@@ -1,19 +1,19 @@
 import { revalidatePath } from "next/cache"
-import { NextResponse } from "next/server"
 
-import { requireAdminUser } from "@/lib/admin"
 import { prisma } from "@/db/client"
+import { apiError, apiSuccess, createAdminRouteHandler } from "@/lib/api-route"
+import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/markdown-emoji"
+import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import {
   normalizeCaptchaMode,
   normalizeFooterLinks,
 } from "@/lib/shared/config-parsers"
-import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import {
   normalizeHeatColors,
   normalizeHeatThresholds,
+  normalizePositiveInteger,
   normalizeTippingAmounts,
 } from "@/lib/shared/normalizers"
-import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/markdown-emoji"
 
 async function getOrCreateSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })
@@ -27,24 +27,16 @@ async function getOrCreateSettings() {
   })
 }
 
-export async function GET() {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权访问" }, { status: 403 })
-  }
-
+export const GET = createAdminRouteHandler(async () => {
   const settings = await getOrCreateSettings()
-  return NextResponse.json({ code: 0, data: settings })
-}
+  return apiSuccess(settings)
+}, {
+  errorMessage: "读取站点设置失败",
+  logPrefix: "[api/admin/site-settings:GET] unexpected error",
+  unauthorizedMessage: "无权访问",
+})
 
-export async function POST(request: Request) {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权操作" }, { status: 403 })
-  }
-
+export const POST = createAdminRouteHandler(async ({ request }) => {
   const body = await request.json()
   const section = String(body.section ?? "site-profile")
   const existing = await getOrCreateSettings()
@@ -65,7 +57,7 @@ export async function POST(request: Request) {
     const nicknameChangePointCost = Math.max(0, Number(body.nicknameChangePointCost ?? 0) || 0)
 
     if (!siteName || !siteDescription) {
-      return NextResponse.json({ code: 400, message: "站点名称和描述不能为空" }, { status: 400 })
+      apiError(400, "站点名称和描述不能为空")
     }
 
     const settings = await prisma.siteSetting.update({
@@ -91,7 +83,7 @@ export async function POST(request: Request) {
     revalidatePath("/write")
     revalidatePath("/admin")
 
-    return NextResponse.json({ code: 0, message: "基础信息已保存", data: settings })
+    return apiSuccess(settings, "基础信息已保存")
   }
 
   if (section === "site-markdown-emoji") {
@@ -109,7 +101,7 @@ export async function POST(request: Request) {
     revalidatePath("/write")
     revalidatePath("/admin")
 
-    return NextResponse.json({ code: 0, message: "Markdown 表情已保存" })
+    return apiSuccess(undefined, "Markdown 表情已保存")
   }
 
   if (section === "site-footer-links") {
@@ -122,7 +114,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "页脚导航已保存", data: settings })
+    return apiSuccess(settings, "页脚导航已保存")
   }
 
   if (section === "site-registration") {
@@ -157,19 +149,19 @@ export async function POST(request: Request) {
     const smtpSecure = Boolean(body.smtpSecure)
 
     if (inviteCodePurchaseEnabled && inviteCodePrice < 1) {
-      return NextResponse.json({ code: 400, message: "开启积分购买邀请码时，价格必须大于 0" }, { status: 400 })
+      apiError(400, "开启积分购买邀请码时，价格必须大于 0")
     }
 
     if (registrationRequireInviteCode && !registerInviteCodeEnabled) {
-      return NextResponse.json({ code: 400, message: "注册要求必须填写邀请码时，不能关闭邀请码输入框显示" }, { status: 400 })
+      apiError(400, "注册要求必须填写邀请码时，不能关闭邀请码输入框显示")
     }
 
     if ((registerCaptchaMode === "TURNSTILE" || loginCaptchaMode === "TURNSTILE") && !turnstileSiteKey) {
-      return NextResponse.json({ code: 400, message: "启用 Turnstile 验证码时，必须填写 Turnstile Site Key" }, { status: 400 })
+      apiError(400, "启用 Turnstile 验证码时，必须填写 Turnstile Site Key")
     }
 
     if (smtpEnabled && (!smtpHost || !smtpPort || !smtpUser || !smtpPass || !smtpFrom)) {
-      return NextResponse.json({ code: 400, message: "开启 SMTP 时请完整填写主机、端口、账号、密码和发件人地址" }, { status: 400 })
+      apiError(400, "开启 SMTP 时请完整填写主机、端口、账号、密码和发件人地址")
     }
 
     const settings = await prisma.siteSetting.update({
@@ -206,7 +198,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "注册与邀请设置已保存", data: settings })
+    return apiSuccess(settings, "注册与邀请设置已保存")
   }
 
   if (section === "site-interaction") {
@@ -226,19 +218,19 @@ export async function POST(request: Request) {
     const heatStageColors = normalizeHeatColors(body.heatStageColors)
 
     if (tippingEnabled && tippingAmounts.length === 0) {
-      return NextResponse.json({ code: 400, message: "开启打赏后，至少配置一个固定打赏金额" }, { status: 400 })
+      apiError(400, "开启打赏后，至少配置一个固定打赏金额")
     }
 
     if (postRedPacketEnabled && postRedPacketDailyLimit < postRedPacketMaxPoints) {
-      return NextResponse.json({ code: 400, message: "每日发红包积分上限不能小于单个红包上限" }, { status: 400 })
+      apiError(400, "每日发红包积分上限不能小于单个红包上限")
     }
 
     if (heatStageThresholds.length !== 9) {
-      return NextResponse.json({ code: 400, message: "帖子热度阈值必须配置 9 段数值" }, { status: 400 })
+      apiError(400, "帖子热度阈值必须配置 9 段数值")
     }
 
     if (heatStageColors.length !== 9) {
-      return NextResponse.json({ code: 400, message: "帖子热度颜色必须配置 9 段颜色" }, { status: 400 })
+      apiError(400, "帖子热度颜色必须配置 9 段颜色")
     }
 
     const settings = await prisma.siteSetting.update({
@@ -261,7 +253,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "互动与热度设置已保存", data: settings })
+    return apiSuccess(settings, "互动与热度设置已保存")
   }
 
   if (section === "site-friend-links") {
@@ -278,7 +270,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "友情链接设置已保存", data: settings })
+    return apiSuccess(settings, "友情链接设置已保存")
   }
 
   if (section === "vip") {
@@ -303,7 +295,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "VIP设置已保存", data: settings })
+    return apiSuccess(settings, "VIP设置已保存")
   }
 
   if (section === "upload") {
@@ -322,15 +314,15 @@ export async function POST(request: Request) {
           .filter(Boolean),
       ),
     )
-    const uploadMaxFileSizeMb = Math.max(1, Number(body.uploadMaxFileSizeMb ?? 5) || 5)
-    const uploadAvatarMaxFileSizeMb = Math.max(1, Number(body.uploadAvatarMaxFileSizeMb ?? 2) || 2)
+    const uploadMaxFileSizeMb = normalizePositiveInteger(body.uploadMaxFileSizeMb, 5)
+    const uploadAvatarMaxFileSizeMb = normalizePositiveInteger(body.uploadAvatarMaxFileSizeMb, 2)
 
     if (uploadAllowedImageTypes.length === 0) {
-      return NextResponse.json({ code: 400, message: "请至少配置一种允许上传的图片格式" }, { status: 400 })
+      apiError(400, "请至少配置一种允许上传的图片格式")
     }
 
     if (uploadAvatarMaxFileSizeMb > uploadMaxFileSizeMb) {
-      return NextResponse.json({ code: 400, message: "头像上传大小限制不能大于通用上传大小限制" }, { status: 400 })
+      apiError(400, "头像上传大小限制不能大于通用上传大小限制")
     }
 
     const settings = await prisma.siteSetting.update({
@@ -349,8 +341,12 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ code: 0, message: "上传设置已保存", data: settings })
+    return apiSuccess(settings, "上传设置已保存")
   }
 
-  return NextResponse.json({ code: 400, message: "不支持的设置分组" }, { status: 400 })
-}
+  apiError(400, "不支持的设置分组")
+}, {
+  errorMessage: "保存站点设置失败",
+  logPrefix: "[api/admin/site-settings:POST] unexpected error",
+  unauthorizedMessage: "无权操作",
+})

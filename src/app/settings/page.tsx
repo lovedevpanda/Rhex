@@ -20,6 +20,8 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { getUserBoardFollows, getUserFavoritePosts } from "@/lib/user-panel"
 import { getCurrentUserLevelProgressView } from "@/lib/user-level-view"
 import { getUserAccountSettings, getUserProfile } from "@/lib/users"
+import { getCurrentUserVerificationData } from "@/lib/verifications"
+import { VerificationCenter } from "@/components/verification-center"
 
 interface SettingsPageProps {
   searchParams?: {
@@ -28,9 +30,9 @@ interface SettingsPageProps {
   }
 }
 
-type SettingsTabKey = "profile" | "password" | "invite" | "level" | "badges" | "points" | "favorites" | "follows"
+type SettingsTabKey = "profile" | "password" | "invite" | "level" | "badges" | "verifications" | "points" | "favorites" | "follows"
 
-const tabs: SettingsTabKey[] = ["profile", "password", "invite", "level", "badges", "points", "favorites", "follows"]
+const tabs: SettingsTabKey[] = ["profile", "password", "invite", "level", "badges", "verifications", "points", "favorites", "follows"]
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const [currentUser, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])
@@ -53,7 +55,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     : "profile"
   const currentPage = Math.max(1, Number(searchParams?.page ?? "1") || 1)
 
-  const [favoritePosts, followedBoards, levelView, badges, pointLogs] = await Promise.all([
+  const [favoritePosts, followedBoards, levelView, badges, verificationData, pointLogs] = await Promise.all([
     currentTab === "favorites"
       ? getUserFavoritePosts(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserFavoritePosts>> | null>(null),
@@ -62,6 +64,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       : Promise.resolve<Awaited<ReturnType<typeof getUserBoardFollows>> | null>(null),
     currentTab === "level" ? getCurrentUserLevelProgressView() : Promise.resolve(null),
     currentTab === "badges" ? getBadgeCenterData(currentUser.id) : Promise.resolve([]),
+    currentTab === "verifications" ? getCurrentUserVerificationData() : Promise.resolve({ currentUserId: currentUser.id, types: [], approvedVerification: null }),
     currentTab === "points" ? getUserPointLogs(currentUser.id, { page: currentPage, pageSize: 10 }) : Promise.resolve(null),
   ])
 
@@ -184,6 +187,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </Card>
             </div>
           ) : null}
+
+          {currentTab === "verifications" ? <VerificationCenter types={verificationData.types ?? []} approvedVerification={verificationData.approvedVerification ?? null} /> : null}
 
           {currentTab === "points" ? <PointsPanel pointLogs={pointLogs} currentPoints={profile.points} pointName={settings.pointName} /> : null}
 

@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto"
 export { GobangPage } from "@/components/gobang-page"
 export { GobangAdminPage } from "@/components/gobang-admin-page"
 
-
 import { prisma } from "@/lib/prisma"
+import { createGobangMatchRecord, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
+
 import { getGobangAppConfig } from "@/lib/app-config"
 import { getBusinessDayRange } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
+import { isVipActive } from "@/lib/vip-status"
+
 
 
 const BOARD_SIZE = 15
@@ -61,32 +64,11 @@ export type GobangPlayerSummary = {
   challengeStatus: "not_started" | "in_progress"
 }
 
-type GobangMatchRow = {
-
-  id: string
-  creatorId: number
-  challengerId: number | null
-  status: GobangStatus
-  winnerId: number | null
-  ticketCost: number
-  winReward: number
-  createdAt: Date
-  updatedAt: Date
-}
-
-type GobangMoveRow = {
-  id: string
-  matchId: string
-  playerId: number
-  step: number
-  x: number
-  y: number
-  createdAt: Date
-}
-
 type CurrentUser = {
   id: number
-  vipLevel?: number
+  points?: number | null
+  vipLevel?: number | null
+  vipExpiresAt?: Date | null
 }
 
 function normalizePluginNumber(value: boolean | number | string | undefined, fallback: number) {
@@ -257,7 +239,7 @@ function mapMatch(match: GobangMatchRow, moves: GobangMoveRow[]): GobangMatch {
     firstHand,
     createdAt: match.createdAt.toISOString(),
     updatedAt: match.updatedAt.toISOString(),
-    finishedAt: match.updatedAt.toISOString(),
+    finishedAt: match.finishedAt ? match.finishedAt.toISOString() : "",
     currentSide,
 
     moves: moves.map((move) => ({
@@ -362,7 +344,8 @@ export async function getGobangPlayerSummary(user: CurrentUser): Promise<GobangP
     getSiteSettings(),
   ])
 
-  const isVip = (user.vipLevel ?? 0) > 0
+  const isVip = isVipActive(user)
+
   const freeTotal = config.dailyFreeGames + (isVip ? config.dailyVipFreeGames : 0)
   const totalLimit = isVip ? config.dailyVipGameLimit : config.dailyNormalGameLimit
   const paidTotal = Math.max(0, totalLimit - freeTotal)
@@ -370,7 +353,8 @@ export async function getGobangPlayerSummary(user: CurrentUser): Promise<GobangP
 
   return {
     pointName: settings.pointName,
-    points: (user as CurrentUser & { points?: number }).points ?? 0,
+    points: user.points ?? 0,
+
     freeTotal,
     freeUsed: Math.min(todayCounts.total, freeTotal),
     freeRemaining: policy.remainingFree,
@@ -433,24 +417,25 @@ export async function createGobangMatch(user: CurrentUser) {
   const id = randomUUID()
   const playerFirst = Math.random() >= 0.5
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMatch" ("id", "creatorId", "challengerId", "status", "ticketCost", "winReward", "createdAt", "updatedAt") VALUES ($1, $2, NULL, 'ONGOING', $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+  await createGobangMatchRecord({
     id,
-    user.id,
-    policy.ticketCost,
-    policy.winReward,
-  )
+    creatorId: user.id,
+    ticketCost: policy.ticketCost,
+    winReward: policy.winReward,
+  })
 
   if (!playerFirst) {
     const center = chooseAiMove(Array.from({ length: BOARD_SIZE }, () => Array.from({ length: BOARD_SIZE }, () => 0)), config.aiLevel)
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "GobangMove" ("id", "matchId", "playerId", "step", "x", "y", "createdAt") VALUES ($1, $2, 0, 1, $3, $4, CURRENT_TIMESTAMP)`,
-      randomUUID(),
-      id,
-      center.x,
-      center.y,
-    )
+    await insertGobangMoveNow({
+      id: randomUUID(),
+      matchId: id,
+      playerId: AI_PLAYER_ID,
+      step: 1,
+      x: center.x,
+      y: center.y,
+    })
   }
+
 
   return {
     matches: await listGobangMatches(user.id),
@@ -459,15 +444,13 @@ export async function createGobangMatch(user: CurrentUser) {
 }
 
 export async function listGobangMatches(userId: number): Promise<GobangMatch[]> {
-
-  const matches = await prisma.$queryRawUnsafe<GobangMatchRow[]>(`SELECT * FROM "GobangMatch" WHERE "creatorId" = $1 ORDER BY "createdAt" DESC LIMIT 20`, userId)
+  const matches = await listGobangMatchRows(userId)
 
   if (matches.length === 0) {
     return []
   }
 
-  const ids = matches.map((match) => `'${match.id}'`).join(",")
-  const moves = await prisma.$queryRawUnsafe<GobangMoveRow[]>(`SELECT * FROM "GobangMove" WHERE "matchId" IN (${ids}) ORDER BY "step" ASC`)
+  const moves = await listGobangMovesByMatchIds(matches.map((match) => match.id))
   const moveMap = new Map<string, GobangMoveRow[]>()
 
   moves.forEach((move) => {
@@ -499,12 +482,11 @@ export async function makeGobangMove(input: { matchId: string; user: CurrentUser
   }
 
   const config = await getGobangPluginConfig()
-  const [matches, moves] = await Promise.all([
-    prisma.$queryRawUnsafe<GobangMatchRow[]>(`SELECT * FROM "GobangMatch" WHERE "id" = $1 LIMIT 1`, input.matchId),
-    prisma.$queryRawUnsafe<GobangMoveRow[]>(`SELECT * FROM "GobangMove" WHERE "matchId" = $1 ORDER BY "step" ASC`, input.matchId),
+  const [match, moves] = await Promise.all([
+    getGobangMatchRow(input.matchId),
+    getGobangMoves(input.matchId),
   ])
 
-  const match = matches[0]
   if (!match) {
     throw new Error("对局不存在")
   }
@@ -534,24 +516,24 @@ export async function makeGobangMove(input: { matchId: string; user: CurrentUser
   const board = buildBoard(moves)
   board[input.y][input.x] = PLAYER_MARKER
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMove" ("id", "matchId", "playerId", "step", "x", "y", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-    randomUUID(),
-    input.matchId,
-    input.user.id,
-    moves.length + 1,
-    input.x,
-    input.y,
-  )
+  await insertGobangMoveNow({
+    id: randomUUID(),
+    matchId: input.matchId,
+    playerId: input.user.id,
+    step: moves.length + 1,
+    x: input.x,
+    y: input.y,
+  })
+
 
   const challengeMode = resolveChallengeMode(match)
 
   if (isWinningMove(board, input.x, input.y, PLAYER_MARKER)) {
-    await prisma.$executeRawUnsafe(
-      `UPDATE "GobangMatch" SET "status" = 'FINISHED', "winnerId" = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
-      input.matchId,
-      input.user.id,
-    )
+    await finishGobangMatchNow({
+      matchId: input.matchId,
+      winnerId: input.user.id,
+    })
+
 
     if (challengeMode === "FREE") {
       await creditUserPoints(input.user.id, config.winReward, "[app:五子棋] 免费挑战获胜奖励")
@@ -568,31 +550,35 @@ export async function makeGobangMove(input: { matchId: string; user: CurrentUser
   const aiMove = chooseAiMove(board, config.aiLevel)
   board[aiMove.y][aiMove.x] = AI_MARKER
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMove" ("id", "matchId", "playerId", "step", "x", "y", "createdAt") VALUES ($1, $2, 0, $3, $4, $5, CURRENT_TIMESTAMP)`,
-    randomUUID(),
-    input.matchId,
-    moves.length + 2,
-    aiMove.x,
-    aiMove.y,
-  )
+  const aiMoveTime = new Date()
+
+  await insertGobangMove({
+    id: randomUUID(),
+    matchId: input.matchId,
+    playerId: AI_PLAYER_ID,
+    step: moves.length + 2,
+    x: aiMove.x,
+    y: aiMove.y,
+    createdAt: aiMoveTime,
+  })
 
   let winnerId: number | null = null
   const filledCells = board.flat().filter((cell) => cell !== 0).length
 
   if (isWinningMove(board, aiMove.x, aiMove.y, AI_MARKER)) {
     winnerId = AI_PLAYER_ID
-    await prisma.$executeRawUnsafe(
-      `UPDATE "GobangMatch" SET "status" = 'FINISHED', "winnerId" = 0, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
-      input.matchId,
-    )
+    await finishGobangMatch({
+      matchId: input.matchId,
+      winnerId: AI_PLAYER_ID,
+      updatedAt: new Date(),
+    })
   } else if (filledCells >= BOARD_SIZE * BOARD_SIZE) {
     winnerId = input.user.id
-    await prisma.$executeRawUnsafe(
-      `UPDATE "GobangMatch" SET "status" = 'FINISHED', "winnerId" = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
-      input.matchId,
-      input.user.id,
-    )
+    await finishGobangMatch({
+      matchId: input.matchId,
+      winnerId: input.user.id,
+      updatedAt: new Date(),
+    })
 
     if (challengeMode === "FREE") {
       await creditUserPoints(input.user.id, config.winReward, "[app:五子棋] 免费挑战平局按玩家胜奖励")
@@ -600,10 +586,7 @@ export async function makeGobangMove(input: { matchId: string; user: CurrentUser
       await creditUserPoints(input.user.id, config.ticketCost + config.winReward, "[app:五子棋] 付费挑战平局按玩家胜返本与奖励")
     }
   } else {
-    await prisma.$executeRawUnsafe(
-      `UPDATE "GobangMatch" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
-      input.matchId,
-    )
+    await updateGobangMatchTimestamp(input.matchId, new Date())
   }
 
   return {

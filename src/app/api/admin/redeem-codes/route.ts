@@ -1,49 +1,38 @@
-import { NextResponse } from "next/server"
-
-import { requireAdminUser } from "@/lib/admin"
+import { apiError, apiSuccess, createAdminRouteHandler } from "@/lib/api-route"
 import { createRedeemCodes, getRedeemCodeList } from "@/lib/redeem-codes"
 
-export async function GET() {
-  const admin = await requireAdminUser()
-
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权访问" }, { status: 403 })
-  }
-
+export const GET = createAdminRouteHandler(async () => {
   const redeemCodes = await getRedeemCodeList()
-  return NextResponse.json({ code: 0, data: redeemCodes })
-}
+  return apiSuccess(redeemCodes)
+}, {
+  errorMessage: "读取兑换码失败",
+  logPrefix: "[api/admin/redeem-codes:GET] unexpected error",
+  unauthorizedMessage: "无权访问",
+})
 
-export async function POST(request: Request) {
-  const admin = await requireAdminUser()
+export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
+  const body = await request.json()
+  const count = Math.max(1, Math.min(100, Number(body.count ?? 1) || 1))
+  const points = Math.max(1, Number(body.points ?? 0) || 0)
+  const note = typeof body.note === "string" ? body.note.trim() : ""
+  const expiresAtInput = typeof body.expiresAt === "string" ? body.expiresAt.trim() : ""
+  const expiresAt = expiresAtInput ? new Date(expiresAtInput) : null
 
-  if (!admin) {
-    return NextResponse.json({ code: 403, message: "无权操作" }, { status: 403 })
+  if (Number.isNaN(expiresAt?.getTime())) {
+    apiError(400, "过期时间格式不正确")
   }
 
-  try {
-    const body = await request.json()
-    const count = Math.max(1, Math.min(100, Number(body.count ?? 1) || 1))
-    const points = Math.max(1, Number(body.points ?? 0) || 0)
-    const note = typeof body.note === "string" ? body.note.trim() : ""
-    const expiresAtInput = typeof body.expiresAt === "string" ? body.expiresAt.trim() : ""
-    const expiresAt = expiresAtInput ? new Date(expiresAtInput) : null
+  const rows = await createRedeemCodes({
+    count,
+    points,
+    createdById: adminUser.id,
+    note,
+    expiresAt,
+  })
 
-    if (Number.isNaN(expiresAt?.getTime())) {
-      return NextResponse.json({ code: 400, message: "过期时间格式不正确" }, { status: 400 })
-    }
-
-    const rows = await createRedeemCodes({
-      count,
-      points,
-      createdById: admin.id,
-      note,
-      expiresAt,
-    })
-
-    return NextResponse.json({ code: 0, message: `已生成 ${rows.length} 个兑换码`, data: rows })
-  } catch (error) {
-    const message = error instanceof Error && error.message ? error.message : "兑换码生成失败"
-    return NextResponse.json({ code: 400, message }, { status: 400 })
-  }
-}
+  return apiSuccess(rows, `已生成 ${rows.length} 个兑换码`)
+}, {
+  errorMessage: "兑换码生成失败",
+  logPrefix: "[api/admin/redeem-codes:POST] unexpected error",
+  unauthorizedMessage: "无权操作",
+})

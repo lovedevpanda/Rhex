@@ -11,6 +11,8 @@ import {
 } from "@/lib/shared/config-parsers"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
+import { normalizePositiveInteger } from "@/lib/shared/normalizers"
+
 
 export type { FooterLinkItem } from "@/lib/shared/config-parsers"
 
@@ -294,8 +296,9 @@ export async function getSiteSettings(): Promise<SiteSettingsData> {
 }
 
 export async function getSensitiveWordPage(options: { page?: number; pageSize?: number } = {}) {
-  const pageSize = [20, 50, 100].includes(Number(options.pageSize)) ? Number(options.pageSize) : 20
-  const requestedPage = Math.max(1, Number(options.page) || 1)
+  const requestedPageSize = normalizePositiveInteger(options.pageSize, 20)
+  const pageSize = [20, 50, 100].includes(requestedPageSize) ? requestedPageSize : 20
+  const requestedPage = normalizePositiveInteger(options.page, 1)
 
   const { total, active, reject, review } = await getSensitiveWordStats()
 

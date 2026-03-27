@@ -14,12 +14,19 @@ export interface SiteCommentReplyItem {
   authorStatus: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   authorIsVip?: boolean
   authorVipLevel?: number
+  authorVerification?: {
+    id: string
+    name: string
+    color: string
+    iconText?: string | null
+  } | null
   authorDisplayedBadges?: Array<{
     id: string
     name: string
     color: string
     iconText?: string | null
   }>
+  isPostAuthor: boolean
   replyToAuthor?: string
   content: string
   createdAt: string
@@ -36,12 +43,19 @@ export interface SiteCommentItem {
   authorStatus: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   authorIsVip?: boolean
   authorVipLevel?: number
+  authorVerification?: {
+    id: string
+    name: string
+    color: string
+    iconText?: string | null
+  } | null
   authorDisplayedBadges?: Array<{
     id: string
     name: string
     color: string
     iconText?: string | null
   }>
+  isPostAuthor: boolean
   content: string
   createdAt: string
   likes: number
@@ -83,6 +97,14 @@ interface CommentQueryUser {
       status: boolean
     }
   }>
+  verificationApplications?: Array<{
+    type: {
+      id: string
+      name: string
+      color: string
+      iconText?: string | null
+    }
+  }>
 }
 
 interface CommentQueryLike {
@@ -108,6 +130,20 @@ function mapDisplayedBadges(user: CommentQueryUser) {
     }))
 }
 
+function mapVerification(user: CommentQueryUser) {
+  const item = user.verificationApplications?.[0]
+  if (!item) {
+    return null
+  }
+
+  return {
+    id: item.type.id,
+    name: item.type.name,
+    color: item.type.color,
+    iconText: item.type.iconText,
+  }
+}
+
 export async function getCommentsByPostId(
   postId: string,
   options: GetCommentsOptions = {},
@@ -130,7 +166,7 @@ export async function getCommentsByPostId(
       return viewer.userId !== viewer.postAuthorId && viewer.userId !== authorId
     }
 
-    const [total, rootComments] = await Promise.all([
+    const [total, rawRootComments] = await Promise.all([
       countRootCommentsByPostId(postId),
       findRootCommentsByPostId({
         postId,
@@ -141,13 +177,25 @@ export async function getCommentsByPostId(
       }),
     ])
 
+    const rootComments = rawRootComments as unknown as Array<{
+      id: string
+      userId: number
+      content: string
+      likeCount: number
+      isAcceptedAnswer: boolean
+      isPinnedByAuthor: boolean
+      createdAt: Date
+      user: CommentQueryUser
+      likes?: CommentQueryLike[]
+    }>
+
     const rootIds = rootComments.map((comment) => comment.id)
     const replies = await findRepliesByParentIds({
       postId,
       parentIds: rootIds,
       sort,
       viewerUserId: viewer?.userId,
-    }) as Array<{
+    }) as unknown as Array<{
       id: string
       userId: number
       parentId: string | null
@@ -177,7 +225,9 @@ export async function getCommentsByPostId(
         authorStatus: comment.user.status,
         authorIsVip: replyVipState.authorIsVip,
         authorVipLevel: replyVipState.authorVipLevel,
+        authorVerification: mapVerification(comment.user),
         authorDisplayedBadges: mapDisplayedBadges(comment.user),
+        isPostAuthor: comment.userId === viewer?.postAuthorId,
         replyToAuthor: comment.replyToUser ? comment.replyToUser.nickname ?? comment.replyToUser.username : undefined,
         content: shouldMaskComment(comment.userId) ? AUTHOR_ONLY_COMMENT_PLACEHOLDER : comment.content,
         createdAt: formatRelativeTime(comment.createdAt),
@@ -202,11 +252,13 @@ export async function getCommentsByPostId(
         authorStatus: comment.user.status,
         authorIsVip: isVipActive(comment.user),
         authorVipLevel: getVipLevel(comment.user),
+        authorVerification: mapVerification(comment.user),
         authorDisplayedBadges: mapDisplayedBadges(comment.user),
+        isPostAuthor: comment.userId === viewer?.postAuthorId,
         content: shouldMaskComment(comment.userId) ? AUTHOR_ONLY_COMMENT_PLACEHOLDER : comment.content,
         createdAt: formatRelativeTime(comment.createdAt),
         likes: comment.likeCount,
-        viewerLiked: Boolean(viewer?.userId && comment.likes?.some((item) => item.userId === viewer.userId)),
+        viewerLiked: Boolean(viewer?.userId && comment.likes?.some((item: CommentQueryLike) => item.userId === viewer.userId)),
         floor,
         isAcceptedAnswer: comment.isAcceptedAnswer,
         isPinnedByAuthor: comment.isPinnedByAuthor,
