@@ -1,8 +1,18 @@
-import { BoardStatus } from "@/db/types"
 import { Prisma } from "@/db/types"
+import {
+  BoardStatus,
+  countBoardsByZone,
+  countPostsByBoard,
+  createBoard,
+  createZone,
+  deleteBoard,
+  deleteZone,
+  updateBoard,
+  updateZone,
+} from "@/db/admin-structure-queries"
 
-import { prisma } from "@/db/client"
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
+
 import { DEFAULT_ALLOWED_POST_TYPES_VALUE, serializePostTypes } from "@/lib/post-types"
 
 
@@ -112,9 +122,8 @@ export async function createStructureItem(params: {
   if (type === "zone") {
     try {
       const icon = readOptionalStringField(rawBody, "icon") || "📚"
-      const zone = await prisma.zone.create({
-        data: buildZonePayload(rawBody, sortOrder, name, slug, description, icon),
-      })
+      const zone = await createZone(buildZonePayload(rawBody, sortOrder, name, slug, description, icon))
+
       return { message: "分区已创建", data: { id: zone.id }, action: "zone.create", targetType: "ZONE", targetId: zone.id, detail: `创建分区 ${name}` }
     } catch (error) {
       handleStructureMutationError(type, error)
@@ -129,18 +138,17 @@ export async function createStructureItem(params: {
 
     try {
       const icon = readOptionalStringField(rawBody, "icon") || "💬"
-      const board = await prisma.board.create({
-        data: {
-          zoneId,
-          name,
-          slug,
-          description: description || undefined,
-          iconPath: icon,
-          sortOrder,
-          status: BoardStatus.ACTIVE,
-          ...buildBoardAdvancedPayload(rawBody),
-        },
+      const board = await createBoard({
+        zoneId,
+        name,
+        slug,
+        description: description || undefined,
+        iconPath: icon,
+        sortOrder,
+        status: BoardStatus.ACTIVE,
+        ...buildBoardAdvancedPayload(rawBody),
       })
+
       return { message: "节点已创建", data: { id: board.id }, action: "board.create", targetType: "BOARD", targetId: board.id, detail: `创建节点 ${name}` }
     } catch (error) {
       handleStructureMutationError(type, error)
@@ -169,10 +177,8 @@ export async function updateStructureItem(params: {
   if (type === "zone") {
     try {
       const icon = readOptionalStringField(rawBody, "icon") || "📚"
-      await prisma.zone.update({
-        where: { id },
-        data: buildZonePayload(rawBody, sortOrder, name, slug, description, icon),
-      })
+      await updateZone(id, buildZonePayload(rawBody, sortOrder, name, slug, description, icon))
+
       return { message: "分区已更新", action: "zone.update", targetType: "ZONE", targetId: id, detail: `更新分区 ${name}` }
     } catch (error) {
       handleStructureMutationError(type, error)
@@ -183,20 +189,18 @@ export async function updateStructureItem(params: {
     try {
       const zoneId = readOptionalStringField(rawBody, "zoneId")
       const icon = readOptionalStringField(rawBody, "icon") || "💬"
-      await prisma.board.update({
-        where: { id },
-        data: {
-          name,
-          slug,
-          description: description || undefined,
-          iconPath: icon,
-          sortOrder,
-          zoneId: zoneId || null,
-          status: rawBody.status === "HIDDEN" || rawBody.status === "DISABLED" ? rawBody.status as BoardStatus : BoardStatus.ACTIVE,
-          allowPost: rawBody.allowPost === undefined ? undefined : Boolean(rawBody.allowPost),
-          ...buildBoardAdvancedPayload(rawBody),
-        },
+      await updateBoard(id, {
+        name,
+        slug,
+        description: description || undefined,
+        iconPath: icon,
+        sortOrder,
+        zoneId: zoneId || null,
+        status: rawBody.status === "HIDDEN" || rawBody.status === "DISABLED" ? rawBody.status as BoardStatus : BoardStatus.ACTIVE,
+        allowPost: rawBody.allowPost === undefined ? undefined : Boolean(rawBody.allowPost),
+        ...buildBoardAdvancedPayload(rawBody),
       })
+
       return { message: "节点已更新", action: "board.update", targetType: "BOARD", targetId: id, detail: `更新节点 ${name}` }
     } catch (error) {
       handleStructureMutationError(type, error)
@@ -220,22 +224,26 @@ export async function deleteStructureItem(params: {
   }
 
   if (type === "zone") {
-    const boardCount = await prisma.board.count({ where: { zoneId: id } })
+    const boardCount = await countBoardsByZone(id)
+
     if (boardCount > 0) {
       apiError(400, "请先删除或迁移该分区下的节点")
     }
 
-    await prisma.zone.delete({ where: { id } })
+    await deleteZone(id)
+
     return { message: "分区已删除", action: "zone.delete", targetType: "ZONE", targetId: id, detail: "删除分区" }
   }
 
   if (type === "board") {
-    const postCount = await prisma.post.count({ where: { boardId: id } })
+    const postCount = await countPostsByBoard(id)
+
     if (postCount > 0) {
       apiError(400, "该节点下仍有帖子，不能直接删除")
     }
 
-    await prisma.board.delete({ where: { id } })
+    await deleteBoard(id)
+
     return { message: "节点已删除", action: "board.delete", targetType: "BOARD", targetId: id, detail: "删除节点" }
   }
 

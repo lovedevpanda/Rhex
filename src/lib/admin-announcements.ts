@@ -1,9 +1,16 @@
 import { AnnouncementStatus } from "@/db/types"
-
-import { prisma } from "@/db/client"
+import {
+  createAdminAnnouncement,
+  deleteAdminAnnouncementById,
+  findAdminAnnouncements,
+  type AdminAnnouncementRecord,
+  updateAdminAnnouncementById,
+} from "@/db/admin-announcement-queries"
 
 import { requireAdminUser } from "@/lib/admin"
 import { serializeDateTime } from "@/lib/formatters"
+
+
 
 
 export interface AdminAnnouncementItem {
@@ -46,12 +53,8 @@ function mapRequiredDateTime(input: string | Date): string {
   return value
 }
 
-function mapAnnouncement(item: Awaited<ReturnType<typeof prisma.announcement.findMany>>[number] & {
-  creator: {
-    username: string
-    nickname: string | null
-  }
-}): AdminAnnouncementItem {
+function mapAnnouncement(item: AdminAnnouncementRecord): AdminAnnouncementItem {
+
   return {
     id: item.id,
     title: item.title,
@@ -71,21 +74,8 @@ export async function getAdminAnnouncementList(): Promise<AdminAnnouncementItem[
     throw new Error("无权限访问公告数据")
   }
 
-  const items = await prisma.announcement.findMany({
-    orderBy: [
-      { isPinned: "desc" },
-      { publishedAt: "desc" },
-      { createdAt: "desc" },
-    ],
-    include: {
-      creator: {
-        select: {
-          username: true,
-          nickname: true,
-        },
-      },
-    },
-  })
+  const items = await findAdminAnnouncements()
+
 
   return items.map(mapAnnouncement)
 }
@@ -112,42 +102,22 @@ export async function saveAdminAnnouncement(input: AdminAnnouncementInput): Prom
   const publishedAt = status === AnnouncementStatus.PUBLISHED ? new Date() : null
 
   const record = input.id
-    ? await prisma.announcement.update({
-        where: { id: String(input.id) },
-        data: {
-          title,
-          content,
-          status,
-          isPinned,
-          publishedAt,
-        },
-        include: {
-          creator: {
-            select: {
-              username: true,
-              nickname: true,
-            },
-          },
-        },
+    ? await updateAdminAnnouncementById(String(input.id), {
+        title,
+        content,
+        status,
+        isPinned,
+        publishedAt,
       })
-    : await prisma.announcement.create({
-        data: {
-          title,
-          content,
-          status,
-          isPinned,
-          publishedAt,
-          createdBy: currentUser.id,
-        },
-        include: {
-          creator: {
-            select: {
-              username: true,
-              nickname: true,
-            },
-          },
-        },
+    : await createAdminAnnouncement({
+        title,
+        content,
+        status,
+        isPinned,
+        publishedAt,
+        createdBy: currentUser.id,
       })
+
 
   return mapAnnouncement(record)
 }
@@ -162,7 +132,8 @@ export async function removeAdminAnnouncement(id: string) {
     throw new Error("公告不存在")
   }
 
-  await prisma.announcement.delete({ where: { id } })
+  await deleteAdminAnnouncementById(id)
+
 }
 
 export async function toggleAdminAnnouncementPin(id: string, isPinned: boolean) {
@@ -175,18 +146,8 @@ export async function toggleAdminAnnouncementPin(id: string, isPinned: boolean) 
     throw new Error("公告不存在")
   }
 
-  const updated = await prisma.announcement.update({
-    where: { id },
-    data: { isPinned },
-    include: {
-      creator: {
-        select: {
-          username: true,
-          nickname: true,
-        },
-      },
-    },
-  })
+  const updated = await updateAdminAnnouncementById(id, { isPinned })
+
 
   return mapAnnouncement(updated)
 }
@@ -202,21 +163,11 @@ export async function updateAdminAnnouncementStatus(id: string, status: string) 
   }
 
   const normalizedStatus = normalizeStatus(status)
-  const updated = await prisma.announcement.update({
-    where: { id },
-    data: {
-      status: normalizedStatus,
-      publishedAt: normalizedStatus === AnnouncementStatus.PUBLISHED ? new Date() : normalizedStatus === AnnouncementStatus.DRAFT ? null : undefined,
-    },
-    include: {
-      creator: {
-        select: {
-          username: true,
-          nickname: true,
-        },
-      },
-    },
+  const updated = await updateAdminAnnouncementById(id, {
+    status: normalizedStatus,
+    publishedAt: normalizedStatus === AnnouncementStatus.PUBLISHED ? new Date() : normalizedStatus === AnnouncementStatus.DRAFT ? null : undefined,
   })
+
 
   return mapAnnouncement(updated)
 }

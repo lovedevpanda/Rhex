@@ -1,7 +1,18 @@
 import type { Prisma } from "@/db/types"
 
-import { prisma } from "@/db/client"
+import {
+  countAdminLogs,
+  countAdminLogTabs,
+  countPointLogs,
+  countUserLoginLogs,
+  findAdminLogsPage,
+  findPointLogsPage,
+  findUploadLogs,
+  findUserLoginLogsPage,
+  findVipOrders,
+} from "@/db/admin-log-queries"
 import { serializeDate, serializeDateTime } from "@/lib/formatters"
+
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
 
 
@@ -133,13 +144,8 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
   const requestedPage = normalizePositiveInteger(options.page, 1)
   const pageSize = normalizePageSize(options.pageSize)
 
-  const [adminCount, loginCount, pointCount, uploadCount, orderCount] = await Promise.all([
-    prisma.adminLog.count(),
-    prisma.userLoginLog.count(),
-    prisma.pointLog.count(),
-    prisma.upload.count(),
-    prisma.vipOrder.count(),
-  ])
+  const [adminCount, loginCount, pointCount, uploadCount, orderCount] = await countAdminLogTabs()
+
 
   const summary = [
     { key: "admin" as const, label: "管理员日志", count: adminCount },
@@ -166,22 +172,10 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
         : {}),
     }
 
-    const total = await prisma.adminLog.count({ where })
+    const total = await countAdminLogs(where)
     const pagination = buildPagination(total, requestedPage, pageSize)
-    const rows = await prisma.adminLog.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: {
-        admin: {
-          select: {
-            username: true,
-            nickname: true,
-          },
-        },
-      },
-      skip: (pagination.page - 1) * pagination.pageSize,
-      take: pagination.pageSize,
-    })
+    const rows = await findAdminLogsPage(where, (pagination.page - 1) * pagination.pageSize, pagination.pageSize)
+
 
     return {
       activeTab,
@@ -219,24 +213,10 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
         }
       : {}
 
-    const total = await prisma.userLoginLog.count({ where: baseWhere })
+    const total = await countUserLoginLogs(baseWhere)
     const pagination = buildPagination(total, requestedPage, pageSize)
-    const rows = await prisma.userLoginLog.findMany({
-      where: baseWhere,
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: {
-          select: {
-            username: true,
-            nickname: true,
-            email: true,
-            status: true,
-          },
-        },
-      },
-      skip: (pagination.page - 1) * pagination.pageSize,
-      take: pagination.pageSize,
-    })
+    const rows = await findUserLoginLogsPage(baseWhere, (pagination.page - 1) * pagination.pageSize, pagination.pageSize)
+
 
     return {
       activeTab,
@@ -275,22 +255,10 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
         : {}),
     }
 
-    const total = await prisma.pointLog.count({ where })
+    const total = await countPointLogs(where)
     const pagination = buildPagination(total, requestedPage, pageSize)
-    const rows = await prisma.pointLog.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: {
-          select: {
-            username: true,
-            nickname: true,
-          },
-        },
-      },
-      skip: (pagination.page - 1) * pagination.pageSize,
-      take: pagination.pageSize,
-    })
+    const rows = await findPointLogsPage(where, (pagination.page - 1) * pagination.pageSize, pagination.pageSize)
+
 
     return {
       activeTab,
@@ -315,17 +283,8 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
   }
 
   if (activeTab === "uploads") {
-    const rawRows = await prisma.upload.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: {
-          select: {
-            username: true,
-            nickname: true,
-          },
-        },
-      },
-    })
+    const rawRows = await findUploadLogs()
+
 
     const filteredRows = rawRows.filter((item) => {
       const bucketMatched = bucketType === "ALL" || item.bucketType === bucketType
@@ -358,17 +317,8 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
     }
   }
 
-  const rawRows = await prisma.vipOrder.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      user: {
-        select: {
-          username: true,
-          nickname: true,
-        },
-      },
-    },
-  })
+  const rawRows = await findVipOrders()
+
 
   const filteredRows = rawRows.filter((item) => {
     return includesKeyword([item.orderType, item.user.username, item.user.nickname, item.remark], keyword)

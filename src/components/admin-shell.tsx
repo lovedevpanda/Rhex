@@ -1,5 +1,6 @@
 import { Settings, ShieldAlert, Flag, LayoutGrid, Settings2, Sparkles, Users, BookText, Logs, Megaphone, AppWindow } from "lucide-react"
 import Link from "next/link"
+import type { CSSProperties } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -20,6 +21,23 @@ const adminNavigation = [
   { href: "/admin?tab=settings&section=profile", label: "站点设置", icon: Settings },
 ]
 
+const adminThemeStyle: CSSProperties = {
+  colorScheme: "light",
+  ["--background" as string]: "35 33% 98%",
+  ["--foreground" as string]: "222.2 47.4% 11.2%",
+  ["--card" as string]: "0 0% 100%",
+  ["--card-foreground" as string]: "222.2 47.4% 11.2%",
+  ["--primary" as string]: "24 95% 53%",
+  ["--primary-foreground" as string]: "210 40% 98%",
+  ["--secondary" as string]: "32 57% 94%",
+  ["--secondary-foreground" as string]: "222.2 47.4% 11.2%",
+  ["--muted" as string]: "30 25% 94%",
+  ["--muted-foreground" as string]: "215.4 16.3% 46.9%",
+  ["--accent" as string]: "28 100% 95%",
+  ["--accent-foreground" as string]: "24 95% 25%",
+  ["--border" as string]: "28 20% 88%",
+  ["--ring" as string]: "24 95% 53%",
+}
 
 interface AdminShellProps {
   currentTab: string
@@ -29,7 +47,10 @@ interface AdminShellProps {
 
 export function AdminShell({ currentTab, adminName, children }: AdminShellProps) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_24%),linear-gradient(180deg,#fffdf8_0%,#f6efe5_100%)] text-foreground">
+    <div
+      style={adminThemeStyle}
+      className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.12),_transparent_24%),linear-gradient(180deg,#fffdf8_0%,#f6efe5_100%)] text-foreground"
+    >
       <div className="mx-auto grid max-w-[1480px] gap-6 px-4 py-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
         <aside className="space-y-5">
           <Card className="overflow-hidden border-none bg-[#17120d] text-white shadow-soft">
@@ -78,3 +99,4 @@ export function AdminShell({ currentTab, adminName, children }: AdminShellProps)
     </div>
   )
 }
+

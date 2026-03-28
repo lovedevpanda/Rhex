@@ -1,7 +1,8 @@
 import { VerificationChannel, ChangeType, RelatedType } from "@/db/types"
 
 import { prisma } from "@/db/client"
-import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
+
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { getRequestIp } from "@/lib/request-ip"
 import { validateProfilePayload } from "@/lib/validators"
@@ -42,7 +43,8 @@ function toProfileUpdateResponse(input: {
 
 export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ request, currentUser }) => {
 
-  const body = await request.json()
+  const body = await readJsonBody(request)
+
   const validated = validateProfilePayload(body)
 
   if (!validated.success || !validated.data) {

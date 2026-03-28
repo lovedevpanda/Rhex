@@ -5,10 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   clearPostDraftFromStorage,
+  createEmptyLocalPostDraft,
   loadPostDraftFromStorage,
   savePostDraftToStorage,
   type LocalPostDraft,
 } from "@/lib/post-draft"
+
 import { multiplyPositiveSafeIntegers, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
 
 
@@ -280,8 +282,44 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   const selectedBoard = allBoards.find((item) => item.value === boardSlug) ?? allBoards[0]
   const allowedPostTypes = useMemo<LocalPostType[]>(() => (selectedBoard?.allowedPostTypes ?? DEFAULT_ALLOWED_POST_TYPES) as LocalPostType[], [selectedBoard])
   const storageMode = mode === "edit" ? "edit" : "create"
+  const initialDraftData = useMemo<LocalPostDraft>(() => {
+    if (initialValues) {
+      return {
+        title: initialValues.title,
+        content: initialValues.content,
+        boardSlug: initialValues.boardSlug,
+        postType: initialValues.postType,
+        bountyPoints: String(initialValues.bountyPoints ?? 100),
+        pollOptions: initialValues.pollOptions && initialValues.pollOptions.length > 0 ? initialValues.pollOptions : ["", ""],
+        pollExpiresAt: initialValues.pollExpiresAt ?? "",
+        commentsVisibleToAuthorOnly: Boolean(initialValues.commentsVisibleToAuthorOnly),
+        replyUnlockContent: initialValues.replyUnlockContent ?? "",
+        purchaseUnlockContent: initialValues.purchaseUnlockContent ?? "",
+        purchasePrice: String(initialValues.purchasePrice ?? 20),
+        minViewLevel: String(initialValues.minViewLevel ?? 0),
+        lotteryStartsAt: initialValues.lotteryConfig?.startsAt ?? "",
+        lotteryEndsAt: initialValues.lotteryConfig?.endsAt ?? "",
+        lotteryParticipantGoal: String(initialValues.lotteryConfig?.participantGoal ?? ""),
+        lotteryPrizes: initialValues.lotteryConfig?.prizes && initialValues.lotteryConfig.prizes.length > 0
+          ? initialValues.lotteryConfig.prizes.map((item) => ({ title: item.title, quantity: String(item.quantity), description: item.description }))
+          : [{ title: "一等奖", quantity: "1", description: "填写奖品描述" }],
+        lotteryConditions: initialValues.lotteryConfig?.conditions && initialValues.lotteryConfig.conditions.length > 0
+          ? initialValues.lotteryConfig.conditions.map((item) => ({ type: item.type, value: item.value, operator: item.operator ?? "GTE", description: item.description ?? "", groupKey: item.groupKey ?? "default" }))
+          : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)],
+        redPacketEnabled: Boolean(initialValues.redPacketConfig?.enabled),
+        redPacketGrantMode: initialValues.redPacketConfig?.grantMode ?? "FIXED",
+        redPacketTriggerType: initialValues.redPacketConfig?.triggerType ?? "REPLY",
+        redPacketUnitPoints: String(initialValues.redPacketConfig?.unitPoints ?? initialValues.redPacketConfig?.totalPoints ?? 10),
+        redPacketTotalPoints: String(initialValues.redPacketConfig?.totalPoints ?? 10),
+        redPacketPacketCount: String(initialValues.redPacketConfig?.packetCount ?? 1),
+      }
+    }
+
+    return createEmptyLocalPostDraft(boardOptions[0]?.items[0]?.value ?? "")
+  }, [boardOptions, initialValues, pointName])
 
   const draftData = useMemo<LocalPostDraft>(() => ({
+
     title,
     content,
     boardSlug,
@@ -369,14 +407,18 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     }
 
     const timer = window.setTimeout(() => {
-      const payload = savePostDraftToStorage(storageMode, draftData, postId)
+      const payload = savePostDraftToStorage(storageMode, draftData, initialDraftData, postId)
       if (payload) {
         setLastSavedDraftAt(payload.updatedAt)
+      } else {
+        setLastSavedDraftAt(null)
       }
     }, 800)
 
+
     return () => window.clearTimeout(timer)
-  }, [draftData, postId, storageMode])
+  }, [draftData, initialDraftData, postId, storageMode])
+
 
   function restoreDraft(draft: LocalPostDraft) {
     setTitle(draft.title)
@@ -423,7 +465,8 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   }
 
   function handleManualDraftSave() {
-    const payload = savePostDraftToStorage(storageMode, draftData, postId)
+    const payload = savePostDraftToStorage(storageMode, draftData, initialDraftData, postId)
+
     if (!payload) {
       setLastSavedDraftAt(null)
       setDraftRestored(false)

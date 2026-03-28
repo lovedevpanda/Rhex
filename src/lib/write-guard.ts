@@ -2,8 +2,9 @@ import { createHash } from "crypto"
 
 import { Prisma } from "@/db/types"
 
-import { prisma } from "@/db/client"
+import { createRequestControl, purgeExpiredRequestControls } from "@/db/write-guard-queries"
 import { apiError } from "@/lib/api-route"
+
 
 import { logRequestFailed, logRequestStarted, logRequestSucceeded } from "@/lib/request-log"
 import { getRequestIp } from "@/lib/request-ip"
@@ -24,14 +25,7 @@ export interface WriteGuardOptions {
   dedupeWindowMs?: number
 }
 
-type ExtendedPrismaClient = typeof prisma & {
-  requestControl: {
-    deleteMany: (args: { where: { expiresAt: { lte: Date } } }) => Promise<unknown>
-    create: (args: { data: { scope: string; identity: string; kind: string; fingerprint: string | null; expiresAt: Date } }) => Promise<unknown>
-  }
-}
 
-const extendedPrisma = prisma as ExtendedPrismaClient
 
 const DEFAULT_COOLDOWN_MS = 3_000
 const DEFAULT_DEDUPE_WINDOW_MS = 5_000
@@ -68,23 +62,16 @@ async function createRequestControlRecord(params: {
   message: string
 }) {
   try {
-    await extendedPrisma.requestControl.deleteMany({
-      where: {
-        expiresAt: {
-          lte: new Date(),
-        },
-      },
+    await purgeExpiredRequestControls(new Date())
+
+    await createRequestControl({
+      scope: params.scope,
+      identity: params.identity,
+      kind: params.kind,
+      fingerprint: params.fingerprint ?? null,
+      expiresAt: params.expiresAt,
     })
 
-    await extendedPrisma.requestControl.create({
-      data: {
-        scope: params.scope,
-        identity: params.identity,
-        kind: params.kind,
-        fingerprint: params.fingerprint ?? null,
-        expiresAt: params.expiresAt,
-      },
-    })
 
   } catch (error) {
     if (isUniqueConstraintError(error)) {

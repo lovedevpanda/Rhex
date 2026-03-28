@@ -25,26 +25,47 @@ export interface GobangMoveRow {
   createdAt: Date
 }
 
+function mapGobangMatchRow(match: {
+  id: string
+  creatorId: number
+  challengerId: number | null
+  status: GobangStatus
+  winnerId: number | null
+  ticketCost: number
+  winReward: number
+  createdAt: Date
+  updatedAt: Date
+}) {
+  return {
+    ...match,
+    finishedAt: match.status === "FINISHED" ? match.updatedAt : null,
+  } satisfies GobangMatchRow
+}
+
 export async function countGobangMatchesInRange(userId: number, start: Date, end: Date) {
-  const [totalRows, paidRows] = await Promise.all([
-    prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*)::bigint AS count FROM "GobangMatch" WHERE "creatorId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3`,
-      userId,
-      start,
-      end,
-    ),
-    prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*)::bigint AS count FROM "GobangMatch" WHERE "creatorId" = $1 AND "ticketCost" > 0 AND "createdAt" >= $2 AND "createdAt" < $3`,
-      userId,
-      start,
-      end,
-    ),
+  const [total, paid] = await Promise.all([
+    prisma.gobangMatch.count({
+      where: {
+        creatorId: userId,
+        createdAt: {
+          gte: start,
+          lt: end,
+        },
+      },
+    }),
+    prisma.gobangMatch.count({
+      where: {
+        creatorId: userId,
+        ticketCost: { gt: 0 },
+        createdAt: {
+          gte: start,
+          lt: end,
+        },
+      },
+    }),
   ])
 
-  return {
-    total: Number(totalRows[0]?.count ?? 0),
-    paid: Number(paidRows[0]?.count ?? 0),
-  }
+  return { total, paid }
 }
 
 export async function createGobangMatchRecord(params: {
@@ -56,19 +77,21 @@ export async function createGobangMatchRecord(params: {
 }) {
   const createdAt = params.createdAt ?? new Date()
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMatch" ("id", "creatorId", "challengerId", "status", "ticketCost", "winReward", "createdAt", "updatedAt") VALUES ($1, $2, NULL, 'ONGOING', $3, $4, $5, $5)`,
-    params.id,
-    params.creatorId,
-    params.ticketCost,
-    params.winReward,
-    createdAt,
-  )
+  await prisma.gobangMatch.create({
+    data: {
+      id: params.id,
+      creatorId: params.creatorId,
+      challengerId: null,
+      status: "ONGOING",
+      ticketCost: params.ticketCost,
+      winReward: params.winReward,
+      createdAt,
+      updatedAt: createdAt,
+    },
+  })
 }
 
-
 export const insertGobangMatch = createGobangMatchRecord
-
 
 export async function insertGobangMove(params: {
   id: string
@@ -79,16 +102,17 @@ export async function insertGobangMove(params: {
   y: number
   createdAt: Date
 }) {
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMove" ("id", "matchId", "playerId", "step", "x", "y", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    params.id,
-    params.matchId,
-    params.playerId,
-    params.step,
-    params.x,
-    params.y,
-    params.createdAt,
-  )
+  await prisma.gobangMove.create({
+    data: {
+      id: params.id,
+      matchId: params.matchId,
+      playerId: params.playerId,
+      step: params.step,
+      x: params.x,
+      y: params.y,
+      createdAt: params.createdAt,
+    },
+  })
 }
 
 export async function insertGobangMoveNow(params: {
@@ -100,27 +124,23 @@ export async function insertGobangMoveNow(params: {
   y: number
   createdAt?: Date
 }) {
-  const createdAt = params.createdAt ?? new Date()
-
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "GobangMove" ("id", "matchId", "playerId", "step", "x", "y", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    params.id,
-    params.matchId,
-    params.playerId,
-    params.step,
-    params.x,
-    params.y,
-    createdAt,
-  )
+  await insertGobangMove({
+    ...params,
+    createdAt: params.createdAt ?? new Date(),
+  })
 }
 
-
-
 export async function listGobangMatchRows(userId: number, limit = 20) {
-  return prisma.$queryRawUnsafe<GobangMatchRow[]>(
-    `SELECT *, CASE WHEN "status" = 'FINISHED' THEN "updatedAt" ELSE NULL END AS "finishedAt" FROM "GobangMatch" WHERE "creatorId" = $1 ORDER BY COALESCE(CASE WHEN "status" = 'FINISHED' THEN "updatedAt" END, "createdAt") DESC LIMIT ${Math.max(1, Math.min(limit, 100))}`,
-    userId,
-  )
+  const matches = await prisma.gobangMatch.findMany({
+    where: { creatorId: userId },
+    orderBy: [
+      { updatedAt: "desc" },
+      { createdAt: "desc" },
+    ],
+    take: Math.max(1, Math.min(limit, 100)),
+  })
+
+  return matches.map(mapGobangMatchRow)
 }
 
 export async function listGobangMovesByMatchIds(matchIds: string[]) {
@@ -128,45 +148,59 @@ export async function listGobangMovesByMatchIds(matchIds: string[]) {
     return [] as GobangMoveRow[]
   }
 
-  const ids = matchIds.map((matchId) => `'${matchId}'`).join(",")
-  return prisma.$queryRawUnsafe<GobangMoveRow[]>(`SELECT * FROM "GobangMove" WHERE "matchId" IN (${ids}) ORDER BY "step" ASC`)
+  return prisma.gobangMove.findMany({
+    where: {
+      matchId: {
+        in: matchIds,
+      },
+    },
+    orderBy: {
+      step: "asc",
+    },
+  })
 }
 
 export async function getGobangMatchRow(matchId: string) {
-  const rows = await prisma.$queryRawUnsafe<GobangMatchRow[]>(`SELECT *, CASE WHEN "status" = 'FINISHED' THEN "updatedAt" ELSE NULL END AS "finishedAt" FROM "GobangMatch" WHERE "id" = $1 LIMIT 1`, matchId)
-  return rows[0] ?? null
+  const match = await prisma.gobangMatch.findUnique({
+    where: { id: matchId },
+  })
+
+  return match ? mapGobangMatchRow(match) : null
 }
 
 export async function getGobangMoves(matchId: string) {
-  return prisma.$queryRawUnsafe<GobangMoveRow[]>(`SELECT * FROM "GobangMove" WHERE "matchId" = $1 ORDER BY "step" ASC`, matchId)
+  return prisma.gobangMove.findMany({
+    where: { matchId },
+    orderBy: {
+      step: "asc",
+    },
+  })
 }
 
 export async function updateGobangMatchTimestamp(matchId: string, updatedAt: Date) {
-  await prisma.$executeRawUnsafe(
-    `UPDATE "GobangMatch" SET "updatedAt" = $2 WHERE "id" = $1`,
-    matchId,
-    updatedAt,
-  )
+  await prisma.gobangMatch.update({
+    where: { id: matchId },
+    data: { updatedAt },
+  })
 }
 
 export async function finishGobangMatch(params: { matchId: string; winnerId: number; updatedAt: Date }) {
-  await prisma.$executeRawUnsafe(
-    `UPDATE "GobangMatch" SET "status" = 'FINISHED', "winnerId" = $2, "updatedAt" = $3 WHERE "id" = $1`,
-    params.matchId,
-    params.winnerId,
-    params.updatedAt,
-  )
+  await prisma.gobangMatch.update({
+    where: { id: params.matchId },
+    data: {
+      status: "FINISHED",
+      winnerId: params.winnerId,
+      updatedAt: params.updatedAt,
+    },
+  })
 }
 
 export async function finishGobangMatchNow(params: { matchId: string; winnerId: number; updatedAt?: Date }) {
-  const updatedAt = params.updatedAt ?? new Date()
-
-  await prisma.$executeRawUnsafe(
-    `UPDATE "GobangMatch" SET "status" = 'FINISHED', "winnerId" = $2, "updatedAt" = $3 WHERE "id" = $1`,
-    params.matchId,
-    params.winnerId,
-    updatedAt,
-  )
+  await finishGobangMatch({
+    ...params,
+    updatedAt: params.updatedAt ?? new Date(),
+  })
 }
+
 
 

@@ -5,6 +5,7 @@ import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { normalizeCaptchaMode, normalizeFooterLinks } from "@/lib/shared/config-parsers"
 import { normalizeHeatColors, normalizeHeatThresholds, normalizePositiveInteger, normalizeTippingAmounts } from "@/lib/shared/normalizers"
+import { createSiteSettingsRecordWithFullData } from "@/db/site-settings-write-queries"
 
 export async function getOrCreateSiteSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })
@@ -12,9 +13,8 @@ export async function getOrCreateSiteSettings() {
     return existing
   }
 
-  return prisma.siteSetting.create({
-    data: defaultSiteSettingsCreateInput,
-  })
+  return createSiteSettingsRecordWithFullData(defaultSiteSettingsCreateInput)
+
 }
 
 export async function updateSiteSettingsBySection(body: JsonObject) {

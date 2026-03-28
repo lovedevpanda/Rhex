@@ -13,7 +13,6 @@ export const DEFAULT_MARKDOWN_EMOJI_ITEMS: MarkdownEmojiItem[] = [
   { shortcode: "rocket", label: "火箭", icon: "🚀" },
   { shortcode: "fire", label: "火焰", icon: "🔥" },
   { shortcode: "sparkles", label: "闪光", icon: "✨" },
-  { shortcode: "sparklesa", label: "闪光", icon: "✨" },
 
 ]
 

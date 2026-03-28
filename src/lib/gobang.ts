@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto"
 export { GobangPage } from "@/components/gobang-page"
 export { GobangAdminPage } from "@/components/gobang-admin-page"
 
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/db/client"
+
 import { countGobangMatchesInRange, createGobangMatchRecord, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
 
 
@@ -11,6 +12,7 @@ import { getGobangAppConfig } from "@/lib/app-config"
 import { getBusinessDayRange } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
 import { isVipActive } from "@/lib/vip-status"
+import { createPointLog, decrementUserPoints } from "@/db/point-log-queries"
 
 
 
@@ -377,23 +379,15 @@ export async function createGobangMatch(user: CurrentUser) {
   const policy = resolveChallengePolicy(user, todayCounts, config)
 
   if (policy.ticketCost > 0) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        points: {
-          decrement: policy.ticketCost,
-        },
-      },
+    await decrementUserPoints(user.id, policy.ticketCost)
+
+    await createPointLog({
+      userId: user.id,
+      changeType: "DECREASE",
+      changeValue: policy.ticketCost,
+      reason: "[app:五子棋] 付费挑战扣除门票",
     })
 
-    await prisma.pointLog.create({
-      data: {
-        userId: user.id,
-        changeType: "DECREASE",
-        changeValue: policy.ticketCost,
-        reason: "[app:五子棋] 付费挑战扣除门票",
-      },
-    })
   }
 
   const id = randomUUID()
@@ -427,10 +421,10 @@ export async function createGobangMatch(user: CurrentUser) {
 
 export async function listGobangMatches(userId: number): Promise<GobangMatch[]> {
   const matches = await listGobangMatchRows(userId)
-console.log(new Date())
   if (matches.length === 0) {
     return []
   }
+
 
   const moves = await listGobangMovesByMatchIds(matches.map((match) => match.id))
   const moveMap = new Map<string, GobangMoveRow[]>()
@@ -445,17 +439,17 @@ console.log(new Date())
 }
 
 export async function getGobangMatch(matchId: string) {
-  const [matches, moves] = await Promise.all([
-    prisma.$queryRawUnsafe<GobangMatchRow[]>(`SELECT * FROM "GobangMatch" WHERE "id" = $1 LIMIT 1`, matchId),
-    prisma.$queryRawUnsafe<GobangMoveRow[]>(`SELECT * FROM "GobangMove" WHERE "matchId" = $1 ORDER BY "step" ASC`, matchId),
+  const [match, moves] = await Promise.all([
+    getGobangMatchRow(matchId),
+    getGobangMoves(matchId),
   ])
 
-  const match = matches[0]
   if (!match) {
     throw new Error("对局不存在")
   }
 
   return mapMatch(match, moves)
+
 }
 
 export async function makeGobangMove(input: { matchId: string; user: CurrentUser; x: number; y: number }) {

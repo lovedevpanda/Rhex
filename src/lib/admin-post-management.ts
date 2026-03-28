@@ -36,7 +36,9 @@ export interface AdminPostListResult {
   boardOptions: Array<{
     slug: string
     name: string
+    zoneName: string | null
   }>
+
   filters: {
     type: string
     status: string

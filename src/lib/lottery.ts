@@ -1,11 +1,19 @@
-import { NotificationType, type Comment, type Favorite, type Like, LotteryStatus, LotteryTriggerMode, type Post, type Prisma, type User } from "@/db/types"
+import { type Comment, type Favorite, type Like, LotteryStatus, LotteryTriggerMode, type Post, type Prisma, type User } from "@/db/types"
 import crypto from "node:crypto"
 
+import {
+  executeLotteryDrawTransaction,
+  findLotteryAutoDrawStatus,
+  findLotteryDrawContext,
+  findLotteryEnrollmentContext,
+  findLotteryInteractionState,
+  upsertLotteryParticipantEligibility,
+} from "@/db/lottery-queries"
 import { canSendEmail } from "@/lib/mailer"
-import { prisma } from "@/db/client"
 
 import { parseBusinessDateTime } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
+
 
 
 
@@ -348,25 +356,11 @@ async function checkLotteryEligibility(input: {
     return { eligible: false, reason: "抽奖已截止" }
   }
 
-  const [existingLike, existingFavorite] = await Promise.all([
-    prisma.like.findUnique({
-      where: {
-        userId_targetType_targetId: {
-          userId: input.user.id,
-          targetType: "POST",
-          targetId: input.post.id,
-        },
-      },
-    }),
-    prisma.favorite.findUnique({
-      where: {
-        userId_postId: {
-          userId: input.user.id,
-          postId: input.post.id,
-        },
-      },
-    }),
-  ])
+  const [existingLike, existingFavorite] = await findLotteryInteractionState({
+    postId: input.post.id,
+    userId: input.user.id,
+  })
+
 
   const grouped = new Map<string, typeof input.post.lotteryConditions>()
   for (const condition of input.post.lotteryConditions) {
@@ -412,30 +406,7 @@ async function checkLotteryEligibility(input: {
 }
 
 export async function enrollUserInLotteryPool(input: { postId: string; userId: number; replyCommentId?: string | null }) {
-  const [post, user, replyComment] = await Promise.all([
-    prisma.post.findUnique({
-      where: { id: input.postId },
-      select: {
-        id: true,
-        authorId: true,
-        lotteryStatus: true,
-        lotteryStartsAt: true,
-        lotteryEndsAt: true,
-        lotteryLockedAt: true,
-        lotteryConditions: {
-          orderBy: [{ groupKey: "asc" }, { sortOrder: "asc" }],
-          select: {
-            type: true,
-            operator: true,
-            value: true,
-            groupKey: true,
-          },
-        },
-      },
-    }),
-    prisma.user.findUnique({ where: { id: input.userId } }),
-    input.replyCommentId ? prisma.comment.findUnique({ where: { id: input.replyCommentId } }) : Promise.resolve(null),
-  ])
+  const [post, user, replyComment] = await findLotteryEnrollmentContext(input)
 
   if (!post || !user) {
     return { joined: false, reason: "帖子或用户不存在" }
@@ -443,54 +414,30 @@ export async function enrollUserInLotteryPool(input: { postId: string; userId: n
 
   const eligibility = await checkLotteryEligibility({ post, user, replyComment })
   if (!eligibility.eligible) {
-    await prisma.lotteryParticipant.upsert({
-      where: {
-        postId_userId: {
-          postId: input.postId,
-          userId: input.userId,
-        },
-      },
-      update: {
-        isEligible: false,
-        ineligibleReason: eligibility.reason,
-        sourceCommentId: input.replyCommentId ?? undefined,
-      },
-      create: {
-        postId: input.postId,
-        userId: input.userId,
-        sourceCommentId: input.replyCommentId ?? undefined,
-        isEligible: false,
-        ineligibleReason: eligibility.reason,
-      },
+    await upsertLotteryParticipantEligibility({
+      postId: input.postId,
+      userId: input.userId,
+      replyCommentId: input.replyCommentId,
+      isEligible: false,
+      ineligibleReason: eligibility.reason,
     })
 
     return { joined: false, reason: eligibility.reason }
   }
 
-  await prisma.lotteryParticipant.upsert({
-    where: {
-      postId_userId: {
-        postId: input.postId,
-        userId: input.userId,
-      },
-    },
-    update: {
-      isEligible: true,
-      ineligibleReason: null,
-      sourceCommentId: input.replyCommentId ?? undefined,
-      joinedAt: new Date(),
-    },
-    create: {
-      postId: input.postId,
-      userId: input.userId,
-      sourceCommentId: input.replyCommentId ?? undefined,
-      isEligible: true,
-    },
+  await upsertLotteryParticipantEligibility({
+    postId: input.postId,
+    userId: input.userId,
+    replyCommentId: input.replyCommentId,
+    isEligible: true,
+    ineligibleReason: null,
+    joinedAt: new Date(),
   })
 
   await maybeAutoDrawLottery(input.postId)
   return { joined: true, reason: null }
 }
+
 
 
 
@@ -575,31 +522,8 @@ async function sendLotteryWinnerEmails(input: {
 }
 
 export async function drawLotteryWinners(postId: string, options?: { force?: boolean; actorId?: number | null }) {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: {
-      author: true,
-      lotteryPrizes: {
-        orderBy: { sortOrder: "asc" },
-      },
-      lotteryConditions: {
-        orderBy: [{ groupKey: "asc" }, { sortOrder: "asc" }],
-      },
-      lotteryParticipants: {
-        where: {
-          isEligible: true,
-          user: {
-            status: "ACTIVE",
-          },
-        },
-        include: {
-          user: true,
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-      lotteryWinners: true,
-    },
-  })
+  const post = await findLotteryDrawContext(postId)
+
 
   if (!post || post.type !== "LOTTERY") {
     throw new Error("抽奖帖不存在")
@@ -646,91 +570,35 @@ export async function drawLotteryWinners(postId: string, options?: { force?: boo
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    await tx.post.update({
-      where: { id: post.id },
-      data: {
-        lotteryStatus: LotteryStatus.LOCKED,
-        lotteryLockedAt: lockedAt,
-      },
-    })
+  const prizeSummary = post.lotteryPrizes.map((prize) => ({
+    title: prize.title,
+    quantity: prize.quantity,
+    winners: winnersToCreate
+      .filter((winner) => winner.prizeId === prize.id)
+      .map((winner) => {
+        const matchedParticipant = post.lotteryParticipants.find((participant) => participant.id === winner.participantId)
+        return {
+          username: matchedParticipant?.user.username ?? "",
+          nickname: matchedParticipant?.user.nickname ?? null,
+        }
+      }),
+  }))
 
-    await tx.lotteryParticipant.updateMany({
-      where: {
-        postId: post.id,
-        isEligible: true,
-      },
-      data: {
-        lockedAt,
-        lockVersion: {
-          increment: 1,
-        },
-      },
-    })
-
-    if (post.lotteryWinners.length > 0) {
-      await tx.lotteryWinner.deleteMany({ where: { postId: post.id } })
-    }
-
-    if (winnersToCreate.length > 0) {
-      await tx.lotteryWinner.createMany({ data: winnersToCreate })
-    }
-
-    const finalWinners = await tx.lotteryWinner.findMany({
-      where: { postId: post.id },
-      include: {
-        prize: true,
-        user: true,
-      },
-      orderBy: [{ prize: { sortOrder: "asc" } }, { createdAt: "asc" }],
-    })
-
-    const prizeSummary = post.lotteryPrizes.map((prize) => ({
-      title: prize.title,
-      quantity: prize.quantity,
-      winners: finalWinners
-        .filter((winner) => winner.prizeId === prize.id)
-        .map((winner) => ({
-          username: winner.user.username,
-          nickname: winner.user.nickname,
-        })),
-    }))
-
-    const announcement = buildLotteryAnnouncement({
-      postTitle: post.title,
-      participantCount: post.lotteryParticipants.length,
-      prizes: prizeSummary,
-      drawnAt: lockedAt,
-    })
-
-    await tx.post.update({
-      where: { id: post.id },
-      data: {
-        lotteryStatus: LotteryStatus.DRAWN,
-        lotteryAnnouncement: announcement,
-        lotteryDrawnAt: lockedAt,
-      },
-    })
-
-    const notifications = finalWinners.map((winner) => ({
-      userId: winner.userId,
-      type: NotificationType.SYSTEM,
-      senderId: options?.actorId ?? null,
-      relatedType: "POST" as const,
-      relatedId: post.id,
-      title: "你在抽奖帖中中奖了",
-      content: `恭喜你在《${post.title}》中获得 ${winner.prize.title}，请前往帖子查看开奖结果。`,
-    }))
-
-    if (notifications.length > 0) {
-      await tx.notification.createMany({ data: notifications })
-    }
-
-    return {
-      announcement,
-      winners: finalWinners,
-    }
+  const announcement = buildLotteryAnnouncement({
+    postTitle: post.title,
+    participantCount: post.lotteryParticipants.length,
+    prizes: prizeSummary,
+    drawnAt: lockedAt,
   })
+
+  const updated = await executeLotteryDrawTransaction({
+    post,
+    lockedAt,
+    winnersToCreate,
+    actorId: options?.actorId,
+    announcement,
+  })
+
 
   await sendLotteryWinnerEmails({
     postSlug: post.slug,
@@ -751,25 +619,7 @@ export async function drawLotteryWinners(postId: string, options?: { force?: boo
 }
 
 export async function maybeAutoDrawLottery(postId: string) {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    select: {
-      id: true,
-      type: true,
-      lotteryStatus: true,
-      lotteryTriggerMode: true,
-      lotteryParticipantGoal: true,
-      lotteryParticipants: {
-        where: {
-          isEligible: true,
-          user: {
-            status: "ACTIVE",
-          },
-        },
-        select: { id: true },
-      },
-    },
-  })
+  const post = await findLotteryAutoDrawStatus(postId)
 
   if (!post || post.type !== "LOTTERY" || post.lotteryStatus === LotteryStatus.DRAWN || post.lotteryTriggerMode !== LotteryTriggerMode.AUTO_PARTICIPANT_COUNT) {
     return false
@@ -784,6 +634,7 @@ export async function maybeAutoDrawLottery(postId: string) {
   return false
 }
 
+
 export function mapLotteryView(post: LotteryPostRelations, currentUserId?: number): LotteryViewModel | undefined {
   if (post.type !== "LOTTERY") {
     return undefined
@@ -793,9 +644,11 @@ export function mapLotteryView(post: LotteryPostRelations, currentUserId?: numbe
   const participantCount = post.lotteryParticipants?.filter((item) => item.isEligible).length ?? 0
   const totalPrizeQuantity = post.lotteryPrizes.reduce((sum, prize) => sum + prize.quantity, 0)
   const canEvaluateCurrentUser = Boolean(currentUserId)
+  const hasParticipantRecord = Boolean(participant)
   const matchedDescriptions = participant?.ineligibleReason && participant.ineligibleReason.startsWith("未满足：")
     ? new Set(participant.ineligibleReason.replace(/^未满足：/, "").split("；").map((item) => item.trim()).filter(Boolean))
     : null
+
   const grouped = Array.from(
 
     post.lotteryConditions.reduce((map, condition) => {
@@ -848,7 +701,8 @@ export function mapLotteryView(post: LotteryPostRelations, currentUserId?: numbe
             operator: condition.operator,
             value: condition.value,
             description,
-            matched: canEvaluateCurrentUser ? !matchedDescriptions?.has(description) : null,
+            matched: canEvaluateCurrentUser ? (hasParticipantRecord ? !matchedDescriptions?.has(description) : null) : null,
+
           }
         }),
 

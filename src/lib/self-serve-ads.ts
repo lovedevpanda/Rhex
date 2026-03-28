@@ -5,9 +5,9 @@ export { SelfServeAdsPurchasePage } from "@/components/self-serve-ads-purchase-p
 export { SelfServeAdsSidebar } from "@/components/self-serve-ads-sidebar"
 export { getSelfServeAdsAppConfig, updateSelfServeAdsAppConfig } from "@/lib/app-config"
 
-import { NotificationType } from "@/db/types"
-import { prisma } from "@/db/client"
-import { countPendingSelfServeOrders, createSelfServeOrder, findSelfServeApprovedAds, findSelfServeOrderById, findSelfServeOrdersForAdmin, updateSelfServeOrder } from "@/db/self-serve-ads"
+import { countPendingSelfServeOrders, findSelfServeApprovedAds, findSelfServeOrderById, findSelfServeOrdersForAdmin, updateSelfServeOrder } from "@/db/self-serve-ads"
+import { createSystemNotification, submitSelfServeAdOrderTransaction } from "@/db/self-serve-ads-write-queries"
+
 import { getCurrentUser } from "@/lib/auth"
 import { getSelfServeAdsAppConfig as loadSelfServeAdsAppConfig } from "@/lib/app-config"
 import { serializeDateTime } from "@/lib/formatters"
@@ -129,16 +129,28 @@ export async function submitSelfServeAdOrder(input: SelfServeAdPurchaseDraft) {
   if (occupied.some((item: Awaited<ReturnType<typeof findSelfServeApprovedAds>>[number]) => item.slotType === slotType && item.slotIndex === slotIndex)) throw new Error("该广告位已被租用，请选择其他广告位")
 
   const orderId = randomUUID()
-  return prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({ where: { id: user.id }, select: { id: true, points: true } })
-    if (!latestUser) throw new Error("用户不存在")
-    if (latestUser.points < pricePoints) throw new Error(`${settings.pointName}不足，无法购买广告位`)
-
-    await tx.user.update({ where: { id: latestUser.id }, data: { points: { decrement: pricePoints } } })
-    await tx.pointLog.create({ data: { userId: latestUser.id, changeType: "DECREASE", changeValue: pricePoints, reason: `[app:self-serve-ads] 购买${slotType === "IMAGE" ? "图片" : "文字"}广告位 ${durationMonths} 个月` } })
-
-    return createSelfServeOrder({ id: orderId, appCode: "self-serve-ads", userId: latestUser.id, slotType, slotIndex, title: slotType === "TEXT" ? title : null, linkUrl, imageUrl, textColor, backgroundColor, durationMonths, pricePoints, status: "PENDING" })
+  const result = await submitSelfServeAdOrderTransaction({
+    orderId,
+    userId: user.id,
+    appCode: "self-serve-ads",
+    slotType,
+    slotIndex,
+    title: slotType === "TEXT" ? title : null,
+    linkUrl,
+    imageUrl,
+    textColor,
+    backgroundColor,
+    durationMonths,
+    pricePoints,
+    pointReason: `[app:self-serve-ads] 购买${slotType === "IMAGE" ? "图片" : "文字"}广告位 ${durationMonths} 个月`,
   })
+
+  if (result.error === "POINTS_NOT_ENOUGH") {
+    throw new Error(`${settings.pointName}不足，无法购买广告位`)
+  }
+
+  return result.order
+
 }
 
 export async function getSelfServeAdsAdminData() {
@@ -190,14 +202,26 @@ export async function reviewSelfServeAdOrder(input: {
     const endsAt = new Date(startsAt)
     endsAt.setMonth(endsAt.getMonth() + durationMonths)
     const updated = await updateSelfServeOrder(existing.id, { slotIndex, title, linkUrl, imageUrl, textColor, backgroundColor, durationMonths, status: "APPROVED", reviewNote, startsAt, endsAt })
-    await prisma.notification.create({ data: { userId: existing.userId, type: NotificationType.SYSTEM, senderId: null, relatedType: "ANNOUNCEMENT", relatedId: existing.id, title: "你的广告位申请已通过审核", content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位申请已通过审核，现已开始展示。${reviewNote ? ` 审核备注：${reviewNote}` : ""}` } })
+    await createSystemNotification({
+      userId: existing.userId,
+      relatedId: existing.id,
+      title: "你的广告位申请已通过审核",
+      content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位申请已通过审核，现已开始展示。${reviewNote ? ` 审核备注：${reviewNote}` : ""}`,
+    })
     return updated
+
   }
 
   if (input.action === "reject") {
     const updated = await updateSelfServeOrder(existing.id, { slotIndex, title, linkUrl, imageUrl, textColor, backgroundColor, durationMonths, status: "REJECTED", reviewNote })
-    await prisma.notification.create({ data: { userId: existing.userId, type: NotificationType.SYSTEM, senderId: null, relatedType: "ANNOUNCEMENT", relatedId: existing.id, title: "你的广告位申请未通过审核", content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位申请未通过审核。${reviewNote ? ` 审核备注：${reviewNote}` : ""}` } })
+    await createSystemNotification({
+      userId: existing.userId,
+      relatedId: existing.id,
+      title: "你的广告位申请未通过审核",
+      content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位申请未通过审核。${reviewNote ? ` 审核备注：${reviewNote}` : ""}`,
+    })
     return updated
+
   }
 
   if (input.action === "expire") {
@@ -219,18 +243,14 @@ export async function reviewSelfServeAdOrder(input: {
   })
 
   if (existing.status === "APPROVED") {
-    await prisma.notification.create({
-      data: {
-        userId: existing.userId,
-        type: NotificationType.SYSTEM,
-        senderId: null,
-        relatedType: "ANNOUNCEMENT",
-        relatedId: existing.id,
-        title: "你的广告位内容已更新，等待重新审核",
-        content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位内容已修改，已重新进入审核队列，审核通过后才会重新展示。${reviewNote ? ` 审核备注：${reviewNote}` : ""}`,
-      },
+    await createSystemNotification({
+      userId: existing.userId,
+      relatedId: existing.id,
+      title: "你的广告位内容已更新，等待重新审核",
+      content: `你提交的${existing.slotType === "IMAGE" ? "图片" : "文字"}广告位内容已修改，已重新进入审核队列，审核通过后才会重新展示。${reviewNote ? ` 审核备注：${reviewNote}` : ""}`,
     })
   }
+
 
   return updated
 }

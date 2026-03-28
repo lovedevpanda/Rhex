@@ -1,11 +1,11 @@
-import { prisma } from "@/db/client"
+import {
+  createSiteSettingsAppStateRecord,
+  findSiteSettingsAppStateRecord,
+  updateSiteSettingsAppState,
+} from "@/db/app-config-queries"
 
-import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 
-const SITE_SETTINGS_SELECT = {
-  id: true,
-  appStateJson: true,
-} as const
+
 
 const APP_CONFIG_KEYS = {
   gobang: "app.gobang",
@@ -47,20 +47,15 @@ function serializePluginState(state: PluginStateMap) {
 }
 
 async function getOrCreateSiteSettingsRecord() {
-  const existing = await prisma.siteSetting.findFirst({
-    orderBy: { createdAt: "asc" },
-    select: SITE_SETTINGS_SELECT,
-  })
+  const existing = await findSiteSettingsAppStateRecord()
 
   if (existing) {
     return existing
   }
 
-  return prisma.siteSetting.create({
-    data: defaultSiteSettingsCreateInput,
-    select: SITE_SETTINGS_SELECT,
-  })
+  return createSiteSettingsAppStateRecord()
 }
+
 
 async function readStateMap() {
   const settings = await getOrCreateSiteSettingsRecord()
@@ -131,10 +126,8 @@ async function upsertAppConfig(configKey: string, defaults: AppConfigValue, inpu
     failureCount: 0,
   }
 
-  await prisma.siteSetting.update({
-    where: { id: settings.id },
-    data: { appStateJson: serializePluginState(state) },
-  })
+  await updateSiteSettingsAppState(settings.id, serializePluginState(state))
+
 
   return nextConfig
 }

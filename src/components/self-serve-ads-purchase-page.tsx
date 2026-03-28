@@ -27,12 +27,19 @@ const INITIAL_FORM = {
   durationMonths: 1 as 1 | 3 | 6 | 12,
 }
 
-export function SelfServeAdsPurchasePage({  slotType, slotIndex, pointName, prices }: SelfServeAdsPurchasePageProps) {
+export function SelfServeAdsPurchasePage({ slotType, slotIndex, pointName, prices }: SelfServeAdsPurchasePageProps) {
   const [form, setForm] = useState(INITIAL_FORM)
+  const [successMessage, setSuccessMessage] = useState("")
   const [isPending, startTransition] = useTransition()
   const currentPrice = useMemo(() => prices[slotType][form.durationMonths], [form.durationMonths, prices, slotType])
 
   function submitPurchase() {
+    const confirmationMessage = `确认购买第 ${slotIndex + 1} 个${slotType === "IMAGE" ? "图片" : "文字"}广告位吗？\n购买时长：${form.durationMonths} 个月\n需支付：${currentPrice} ${pointName}\n提交后将进入后台审核。`
+    if (!window.confirm(confirmationMessage)) {
+      return
+    }
+
+    setSuccessMessage("")
     startTransition(async () => {
       const response = await fetch(`/api/self-serve-ads`, {
         method: "POST",
@@ -44,7 +51,10 @@ export function SelfServeAdsPurchasePage({  slotType, slotIndex, pointName, pric
         toast.error(result.message ?? "广告申请提交失败", "提交失败")
         return
       }
-      toast.success(result.message ?? "广告申请已提交", "提交成功")
+      const message = result.message ?? "广告申请已提交，待管理员审核"
+      setSuccessMessage(`${message} 已扣除 ${currentPrice} ${pointName}。`)
+      setForm(INITIAL_FORM)
+      toast.success(message, "提交成功")
     })
   }
 
@@ -59,6 +69,12 @@ export function SelfServeAdsPurchasePage({  slotType, slotIndex, pointName, pric
           <Link href="/" className="inline-flex items-center justify-center rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground">返回首页</Link>
         </div>
       </section>
+
+      {successMessage ? (
+        <section className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+          {successMessage}
+        </section>
+      ) : null}
 
       <section className="rounded-[24px] border border-border bg-card p-5 space-y-4">
         <Field label="广告链接" hint="必须以 http:// 或 https:// 开头。">
@@ -97,6 +113,11 @@ export function SelfServeAdsPurchasePage({  slotType, slotIndex, pointName, pric
           </div>
         </Field>
 
+        <div className="rounded-[16px] border border-dashed border-border bg-accent/40 px-4 py-3 text-xs leading-6 text-muted-foreground">
+          <p>提交前请确认广告内容、链接地址与购买时长无误。</p>
+          <p>点击“提交购买申请”后，会先进行二次确认；确认提交后将立即扣除 {currentPrice} {pointName}，并进入后台审核。</p>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={submitPurchase}>{isPending ? "提交中..." : "提交购买申请"}</Button>
           <Link href="/" className="inline-flex h-8 items-center rounded-lg px-3 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground">取消</Link>
@@ -128,3 +149,4 @@ function ColorPicker({ label, value, presets, onChange }: { label: string; value
     </div>
   )
 }
+

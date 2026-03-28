@@ -6,6 +6,7 @@ import { resolveBoardSettings } from "@/lib/board-settings"
 import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
 import { prisma } from "@/db/client"
 import { mapListPost } from "@/lib/post-map"
+import { findActiveBoardsWithZoneAndPostCount } from "@/db/board-read-queries"
 
 
 
@@ -34,24 +35,8 @@ export interface SiteBoardItem {
 
 
 const getCachedBoards = cache(async (): Promise<SiteBoardItem[]> => {
-  const boards = await prisma.board.findMany({
-    where: {
-      status: "ACTIVE",
-    },
-    include: {
-      zone: true,
-      _count: {
-        select: {
-          posts: {
-            where: {
-              status: "NORMAL",
-            },
-          },
-        },
-      },
-    },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-  })
+  const boards = await findActiveBoardsWithZoneAndPostCount()
+
 
   return boards.map((board) => {
     const settings = resolveBoardSettings(board.zone, board)

@@ -1,15 +1,18 @@
-import { AnnouncementStatus, BoardStatus, CommentStatus, PostStatus, ReportStatus, UserRole, UserStatus } from "@/db/types"
+import { AnnouncementStatus, BoardStatus, PostStatus, ReportStatus, UserRole, UserStatus } from "@/db/types"
+
 
 import type { Prisma } from "@/db/types"
 
 import { getCurrentUser } from "@/lib/auth"
 import { resolveBoardSettings } from "@/lib/board-settings"
 import type { AdminPostListResult } from "@/lib/admin-post-management"
-import { getBusinessDayRange, serializeDateTime } from "@/lib/formatters"
+import { serializeDateTime } from "@/lib/formatters"
 
 import { getPostStatusLabel, getPostTypeLabel, isLocalPostType, type LocalPostType } from "@/lib/post-types"
 import { prisma } from "@/db/client"
+import { getAdminDashboardRawData } from "@/db/admin-dashboard-queries"
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
+
 
 
 
@@ -60,7 +63,33 @@ interface AdminDashboardData {
     reportCount: number
     pendingReportCount: number
     announcementCount: number
+    pendingPostCount: number
+    pendingCommentCount: number
+    pendingVerificationCount: number
+    pendingFriendLinkCount: number
+    pendingAdOrderCount: number
+    activeUserCount7d: number
+
+    newUserCount7d: number
+    newPostCount7d: number
+    newCommentCount7d: number
+    totalViewCount: number
+    totalLikeCount: number
+    totalFavoriteCount: number
+    totalFollowerCount: number
+    vipOrderCount30d: number
+    todayCheckInUserCount: number
   }
+  trends: Array<{
+    date: string
+    userCount: number
+    postCount: number
+    commentCount: number
+    reportCount: number
+  }>
+
+
+
   recentUsers: Array<{
     id: number
     username: string
@@ -195,187 +224,19 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     throw new Error("无权限访问后台数据")
   }
 
-  const { start: todayStart } = getBusinessDayRange()
-
-
-  const [
-    userCount,
-    postCount,
-    commentCount,
-    reportCount,
-    pendingReportCount,
-    announcementCount,
-    recentUsers,
-    recentPosts,
-    recentReports,
-    zones,
-    boards,
-    todayBoardPostStats,
-    recentAnnouncements,
-    sensitiveWords,
-    vipOrders,
-  ] = await Promise.all([
-    prisma.user.count(),
-    prisma.post.count(),
-    prisma.comment.count(),
-    prisma.report.count(),
-    prisma.report.count({ where: { status: ReportStatus.PENDING } }),
-    prisma.announcement.count(),
-    prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      select: {
-        id: true,
-        username: true,
-        nickname: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        postCount: true,
-        commentCount: true,
-      },
-    }),
-    prisma.post.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: {
-        board: { select: { name: true } },
-        author: { select: { username: true, nickname: true } },
-      },
-    }),
-    prisma.report.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      select: {
-        id: true,
-        targetType: true,
-        targetId: true,
-        reasonType: true,
-        reasonDetail: true,
-        status: true,
-        createdAt: true,
-        reporter: { select: { username: true, nickname: true } },
-      },
-    }),
-    prisma.zone.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        icon: true,
-        sortOrder: true,
-        requirePostReview: true,
-        postPointDelta: true,
-        replyPointDelta: true,
-        postIntervalSeconds: true,
-        replyIntervalSeconds: true,
-        allowedPostTypes: true,
-        minViewPoints: true,
-        minViewLevel: true,
-        minPostPoints: true,
-        minPostLevel: true,
-        minReplyPoints: true,
-        minReplyLevel: true,
-        minViewVipLevel: true,
-        minPostVipLevel: true,
-        minReplyVipLevel: true,
-        _count: { select: { boards: true } },
-      },
-    }),
-    prisma.board.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      take: 50,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        iconPath: true,
-        sortOrder: true,
-        status: true,
-        allowPost: true,
-        postCount: true,
-        followerCount: true,
-        requirePostReview: true,
-        postPointDelta: true,
-        replyPointDelta: true,
-        postIntervalSeconds: true,
-        replyIntervalSeconds: true,
-        allowedPostTypes: true,
-        minViewPoints: true,
-        minViewLevel: true,
-        minPostPoints: true,
-        minPostLevel: true,
-        minReplyPoints: true,
-        minReplyLevel: true,
-        minViewVipLevel: true,
-        minPostVipLevel: true,
-        minReplyVipLevel: true,
-        zoneId: true,
-        zone: {
-          select: { id: true, name: true },
-        },
-      },
-    }),
-    prisma.post.groupBy({
-      by: ["boardId"],
-      where: {
-        createdAt: {
-          gte: todayStart,
-        },
-      },
-      _count: {
-        boardId: true,
-      },
-    }),
-    prisma.announcement.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        isPinned: true,
-        createdAt: true,
-        publishedAt: true,
-        creator: { select: { username: true, nickname: true } },
-      },
-    }),
-    prisma.sensitiveWord.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 12,
-      select: {
-        id: true,
-        word: true,
-        matchType: true,
-        actionType: true,
-        status: true,
-        createdAt: true,
-      },
-    }),
-    prisma.vipOrder.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: {
-        user: {
-          select: { username: true, nickname: true },
-        },
-      },
-    }),
-  ])
+  const data = await getAdminDashboardRawData()
 
   return {
-    overview: {
-      userCount,
-      postCount,
-      commentCount,
-      reportCount,
-      pendingReportCount,
-      announcementCount,
-    },
-    recentUsers: recentUsers.map((user) => ({
+    overview: data.overview,
+    trends: data.trends.map((item) => ({
+      date: serializeDateTime(item.date) ?? item.date.toISOString(),
+      userCount: item.userCount,
+      postCount: item.postCount,
+      commentCount: item.commentCount,
+      reportCount: item.reportCount,
+    })),
+    recentUsers: data.recentUsers.map((user) => ({
+
       id: user.id,
       username: user.username,
       displayName: user.nickname ?? user.username,
@@ -386,7 +247,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       postCount: user.postCount,
       commentCount: user.commentCount,
     })),
-    recentPosts: recentPosts.map((post) => ({
+    recentPosts: data.recentPosts.map((post) => ({
+
       id: post.id,
       title: post.title,
       slug: post.slug,
@@ -404,7 +266,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       isFeatured: post.isFeatured,
     })),
 
-    recentReports: recentReports.map((report) => ({
+    recentReports: data.recentReports.map((report) => ({
+
       id: report.id,
       targetType: report.targetType,
       targetId: report.targetId,
@@ -414,9 +277,11 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       createdAt: report.createdAt.toISOString(),
       reporterName: report.reporter.nickname ?? report.reporter.username,
     })),
-    zones: zones.map((zone) => {
+    zones: data.zones.map((zone) => {
+
       const settings = resolveBoardSettings(zone, null)
-      const relatedBoards = boards.filter((board) => board.zoneId === zone.id)
+      const relatedBoards = data.boards.filter((board) => board.zoneId === zone.id)
+
 
       return {
         id: zone.id,
@@ -446,7 +311,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         requirePostReview: settings.requirePostReview,
       }
     }),
-    boardStatus: boards.map((board) => ({
+    boardStatus: data.boards.map((board) => ({
+
       id: board.id,
       name: board.name,
       slug: board.slug,
@@ -454,7 +320,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       status: board.status,
       postCount: board.postCount,
       followerCount: board.followerCount,
-      todayPostCount: todayBoardPostStats.find((item) => item.boardId === board.id)?._count.boardId ?? 0,
+      todayPostCount: data.todayBoardPostStats.find((item) => item.boardId === board.id)?._count.boardId ?? 0,
+
       allowPost: board.allowPost,
       zoneId: board.zoneId ?? null,
       zoneName: board.zone?.name ?? null,
@@ -478,7 +345,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       minReplyVipLevel: board.minReplyVipLevel ?? null,
       requirePostReview: board.requirePostReview ?? null,
     })),
-    recentAnnouncements: recentAnnouncements.map((announcement) => ({
+    recentAnnouncements: data.recentAnnouncements.map((announcement) => ({
+
       id: announcement.id,
       title: announcement.title,
       status: announcement.status,
@@ -487,7 +355,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       publishedAt: announcement.publishedAt?.toISOString() ?? null,
       creatorName: announcement.creator.nickname ?? announcement.creator.username,
     })),
-    sensitiveWords: sensitiveWords.map((word) => ({
+    sensitiveWords: data.sensitiveWords.map((word) => ({
+
       id: word.id,
       word: word.word,
       matchType: word.matchType,
@@ -496,7 +365,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       createdAt: serializeDateTime(word.createdAt) ?? word.createdAt.toISOString(),
     })),
 
-    vipOrders: vipOrders.map((item) => ({
+    vipOrders: data.vipOrders.map((item) => ({
+
       id: item.id,
       username: item.user.username,
       displayName: item.user.nickname ?? item.user.username,
@@ -570,9 +440,10 @@ export async function getAdminPosts(query: AdminPostQuery = {}): Promise<AdminPo
     prisma.post.count({ where: { ...where, isAnnouncement: true } }),
     prisma.board.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      select: { slug: true, name: true },
+      select: { slug: true, name: true, zone: { select: { name: true } } },
       take: 200,
     }),
+
   ])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -625,7 +496,12 @@ export async function getAdminPosts(query: AdminPostQuery = {}): Promise<AdminPo
       isFeatured: post.isFeatured,
       isAnnouncement: post.isAnnouncement,
     })),
-    boardOptions,
+    boardOptions: boardOptions.map((board) => ({
+      slug: board.slug,
+      name: board.name,
+      zoneName: board.zone?.name ?? null,
+    })),
+
     filters: {
       type: query.type && query.type !== "" ? query.type : "ALL",
       status: query.status && query.status !== "" ? query.status : "ALL",
@@ -697,7 +573,7 @@ export const adminEnums = {
   UserStatus,
   BoardStatus,
   PostStatus,
-  CommentStatus,
   ReportStatus,
   AnnouncementStatus,
 }
+

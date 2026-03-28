@@ -36,49 +36,38 @@ export interface StoredLocalPostDraft {
 
 const STORAGE_KEY_PREFIX = "bbs:post-draft"
 
-function hasMeaningfulPostDraftContent(draft: LocalPostDraft) {
-  if (draft.title.trim() || draft.content.trim()) {
-    return true
+export function createEmptyLocalPostDraft(boardSlug = ""): LocalPostDraft {
+  return {
+    title: "",
+    content: "",
+    boardSlug,
+    postType: "NORMAL",
+    bountyPoints: "100",
+    pollOptions: ["", ""],
+    pollExpiresAt: "",
+    commentsVisibleToAuthorOnly: false,
+    replyUnlockContent: "",
+    purchaseUnlockContent: "",
+    purchasePrice: "20",
+    minViewLevel: "0",
+    lotteryStartsAt: "",
+    lotteryEndsAt: "",
+    lotteryParticipantGoal: "",
+    lotteryPrizes: [{ title: "一等奖", quantity: "1", description: "填写奖品描述" }],
+    lotteryConditions: [{ type: "REPLY_CONTENT_LENGTH", value: "10", operator: "GTE", description: "回帖内容至少 10 字", groupKey: "default" }],
+    redPacketEnabled: false,
+    redPacketGrantMode: "FIXED",
+    redPacketTriggerType: "REPLY",
+    redPacketUnitPoints: "10",
+    redPacketTotalPoints: "10",
+    redPacketPacketCount: "1",
   }
-
-  if (draft.replyUnlockContent.trim() || draft.purchaseUnlockContent.trim()) {
-    return true
-  }
-
-  if (draft.commentsVisibleToAuthorOnly || draft.redPacketEnabled) {
-    return true
-  }
-
-  if (draft.postType !== "NORMAL") {
-    return true
-  }
-
-  if (draft.pollOptions.some((item) => item.trim()) || draft.pollExpiresAt.trim()) {
-    return true
-  }
-
-  if (Number(draft.minViewLevel) > 0 || draft.lotteryStartsAt.trim() || draft.lotteryEndsAt.trim() || draft.lotteryParticipantGoal.trim()) {
-    return true
-  }
-
-  if (draft.lotteryPrizes.some((item) => item.title.trim() || item.description.trim() || item.quantity.trim() !== "1")) {
-    return true
-  }
-
-  if (draft.lotteryConditions.some((item) => item.type !== "REPLY_CONTENT_LENGTH" || item.value.trim() !== "10" || item.operator !== "GTE" || item.description.trim() !== "回帖内容至少 10 字" || item.groupKey.trim() !== "default")) {
-    return true
-  }
-
-  if (draft.redPacketGrantMode !== "FIXED" || draft.redPacketTriggerType !== "REPLY") {
-    return true
-  }
-
-  if (draft.redPacketUnitPoints.trim() !== "10" || draft.redPacketTotalPoints.trim() !== "10" || draft.redPacketPacketCount.trim() !== "1") {
-    return true
-  }
-
-  return false
 }
+
+function hasMeaningfulPostDraftContent(draft: LocalPostDraft, initialDraft: LocalPostDraft) {
+  return JSON.stringify(draft) !== JSON.stringify(initialDraft)
+}
+
 
 function buildDraftStorageKey(mode: PostDraftMode, postId?: string) {
   if (mode === "edit" && postId) {
@@ -92,16 +81,17 @@ export function getPostDraftStorageKey(mode: PostDraftMode, postId?: string) {
   return buildDraftStorageKey(mode, postId)
 }
 
-export function savePostDraftToStorage(mode: PostDraftMode, draft: LocalPostDraft, postId?: string) {
+export function savePostDraftToStorage(mode: PostDraftMode, draft: LocalPostDraft, initialDraft: LocalPostDraft, postId?: string) {
   if (typeof window === "undefined") {
     return null
   }
 
   const storageKey = buildDraftStorageKey(mode, postId)
-  if (!hasMeaningfulPostDraftContent(draft)) {
+  if (!hasMeaningfulPostDraftContent(draft, initialDraft)) {
     window.localStorage.removeItem(storageKey)
     return null
   }
+
 
   const payload: StoredLocalPostDraft = {
     version: 1,

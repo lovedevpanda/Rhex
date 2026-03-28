@@ -1,7 +1,8 @@
 import { ChangeType } from "@/db/types"
 
-import { prisma } from "@/db/client"
+import { countUserPointLogs, findUserPointLogsPage } from "@/db/point-log-queries"
 import { formatDateTime } from "@/lib/formatters"
+
 import { withRuntimeFallback } from "@/lib/runtime-errors"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
 
@@ -32,19 +33,12 @@ export async function getUserPointLogs(userId: number, options: { page?: number;
   const requestedPage = normalizePositiveInteger(options.page, 1)
 
   return withRuntimeFallback(async () => {
-    const total = await prisma.pointLog.count({
-      where: { userId },
-    })
+    const total = await countUserPointLogs(userId)
+
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
     const page = Math.min(requestedPage, totalPages)
-    const logs = await prisma.pointLog.findMany({
-      where: { userId },
-      orderBy: {
-        createdAt: "desc",
-      },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    })
+    const logs = await findUserPointLogsPage(userId, (page - 1) * pageSize, pageSize)
+
 
     return {
       items: logs.map((log) => ({

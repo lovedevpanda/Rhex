@@ -9,6 +9,7 @@ import {
   writeAdminActionLog,
   type AdminActionDefinition,
 } from "@/lib/admin-action-types"
+import { updatePostStatus } from "@/db/admin-post-action-queries"
 
 export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
   "post.feature": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员切换推荐状态" }, async (context) => {
@@ -34,7 +35,8 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     return { message: "帖子已下线" }
   }),
   "post.show": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员上线帖子" }, async (context) => {
-    await prisma.post.update({ where: { id: context.targetId }, data: { status: PostStatus.NORMAL, reviewNote: null } })
+    await updatePostStatus(context.targetId, PostStatus.NORMAL, null)
+
     await writeAdminActionLog(context, adminPostActionHandlers["post.show"].metadata)
     return { message: "帖子已上线" }
   }),
@@ -56,7 +58,8 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     }
   }),
   "post.approve": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员审核通过帖子" }, async (context) => {
-    await prisma.post.update({ where: { id: context.targetId }, data: { status: PostStatus.NORMAL, publishedAt: new Date(), reviewNote: context.message || null } })
+    await updatePostStatus(context.targetId, PostStatus.NORMAL, context.message || null, new Date())
+
     await writeAdminActionLog(context, adminPostActionHandlers["post.approve"].metadata)
     return { message: "帖子已审核通过" }
   }),

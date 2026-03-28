@@ -1,6 +1,10 @@
+import { NotificationType } from "@/db/types"
 import { prisma } from "@/db/client"
 import { getBusinessDayRange } from "@/lib/formatters"
+import { PublicRouteError } from "@/lib/public-route-error"
 import { getSiteSettings } from "@/lib/site-settings"
+
+
 
 
 export interface PostTipLeaderboardItem {
@@ -126,21 +130,26 @@ export async function getPostTipSummary(postId: string, currentUserId?: number):
   }
 }
 
+function postTipError(statusCode: number, message: string): never {
+  throw new PublicRouteError(message, statusCode)
+}
+
+
 export async function tipPost(input: { postId: string; senderId: number; amount: number }) {
   const settings = await getSiteSettings()
 
   if (!settings.tippingEnabled) {
-    throw new Error("当前未开启帖子打赏")
+    postTipError(403, "当前未开启帖子打赏")
   }
 
   if (!settings.tippingAmounts.includes(input.amount)) {
-    throw new Error(`仅支持固定打赏金额：${settings.tippingAmounts.join(" / ")}`)
+    postTipError(400, `仅支持固定打赏金额：${settings.tippingAmounts.join(" / ")}`)
   }
 
   const { start, end } = getTodayRange()
 
   return prisma.$transaction(async (tx) => {
-    const [post, sender] = await Promise.all([
+    const [postRecord, senderRecord] = await Promise.all([
       tx.post.findUnique({
         where: { id: input.postId },
         select: { id: true, status: true, authorId: true, title: true },
@@ -151,24 +160,32 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
       }),
     ])
 
-    if (!post || post.status !== "NORMAL") {
-      throw new Error("帖子不存在或暂不可打赏")
+    if (!postRecord) {
+      postTipError(404, "帖子不存在或暂不可打赏")
     }
 
-    if (!sender) {
-      throw new Error("用户不存在")
+    if (postRecord.status !== "NORMAL") {
+      postTipError(404, "帖子不存在或暂不可打赏")
     }
+
+    if (!senderRecord) {
+      postTipError(404, "用户不存在")
+    }
+
+    const post = postRecord
+    const sender = senderRecord
+
 
     if (post.authorId === sender.id) {
-      throw new Error("不能给自己的帖子打赏")
+      postTipError(400, "不能给自己的帖子打赏")
     }
 
     if (sender.status === "MUTED" || sender.status === "BANNED") {
-      throw new Error("当前账号状态不可进行打赏")
+      postTipError(403, "当前账号状态不可进行打赏")
     }
 
     if (sender.points < input.amount) {
-      throw new Error(`${settings.pointName}不足，无法完成打赏`)
+      postTipError(400, `${settings.pointName}不足，无法完成打赏`)
     }
 
     const [dailyCount, postCount] = await Promise.all([
@@ -190,11 +207,11 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
     ])
 
     if (dailyCount >= settings.tippingDailyLimit) {
-      throw new Error(`今日打赏次数已达上限（${settings.tippingDailyLimit} 次）`)
+      postTipError(400, `今日打赏次数已达上限（${settings.tippingDailyLimit} 次）`)
     }
 
     if (postCount >= settings.tippingPerPostLimit) {
-      throw new Error(`该帖子打赏次数已达上限（${settings.tippingPerPostLimit} 次）`)
+      postTipError(400, `该帖子打赏次数已达上限（${settings.tippingPerPostLimit} 次）`)
     }
 
     await tx.user.update({
@@ -257,10 +274,24 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
       ],
     })
 
+    await tx.notification.create({
+      data: {
+        userId: post.authorId,
+        type: NotificationType.SYSTEM,
+        senderId: sender.id,
+        relatedType: "POST",
+        relatedId: post.id,
+        title: "你的帖子收到了打赏",
+        content: `${sender.username} 打赏了你的帖子《${post.title}》，你已收到 ${input.amount} ${settings.pointName}。`,
+      },
+    })
+
     return {
       pointName: settings.pointName,
       amount: input.amount,
     }
+
   })
 }
+
 

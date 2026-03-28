@@ -6,7 +6,9 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 
 import { UserAvatar } from "@/components/user-avatar"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+
 
 interface PostTipPanelProps {
   postId: string
@@ -58,7 +60,9 @@ export function PostTipPanel({ postId, enabled, pointName, currentUserPoints, al
   const [todayUsed, setTodayUsed] = useState(usedDailyCount)
   const [postUsed, setPostUsed] = useState(usedPostCount)
   const [supporters, setSupporters] = useState(topSupporters)
+  const [message, setMessage] = useState("")
   const [isPending, startTransition] = useTransition()
+
 
 
   useEffect(() => {
@@ -96,21 +100,39 @@ export function PostTipPanel({ postId, enabled, pointName, currentUserPoints, al
       return
     }
 
+    setMessage("")
 
     startTransition(async () => {
+      try {
+        const response = await fetch("/api/posts/tip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId, amount: selectedAmount }),
+        })
+        const result = await response.json()
 
-      const response = await fetch("/api/posts/tip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId, amount: selectedAmount }),
-      })
-      const result = await response.json()
-      if (response.ok && result.data) {
+        if (!response.ok) {
+          const errorMessage = result.message ?? "打赏失败，请稍后重试"
+          setMessage(errorMessage)
+          toast.error(errorMessage, "打赏失败")
+          return
+        }
 
-        syncSummary(result.data)
+        if (result.data) {
+          syncSummary(result.data)
+        }
+
+        const successMessage = result.message ?? `已成功打赏 ${selectedAmount} ${pointName}`
+        setMessage(successMessage)
+        toast.success(successMessage, "打赏成功")
+      } catch {
+        const errorMessage = "打赏失败，请稍后重试"
+        setMessage(errorMessage)
+        toast.error(errorMessage, "打赏失败")
       }
     })
   }
+
 
   return (
     <div className="relative">
@@ -161,7 +183,9 @@ export function PostTipPanel({ postId, enabled, pointName, currentUserPoints, al
             <div className="mt-4 rounded-[20px] bg-secondary/40 px-4 py-3 text-xs leading-6 text-muted-foreground">
               <p>{helperText}</p>
               <p>本帖累计获得 {tipTotalPoints} {pointName}</p>
+              {message ? <p className="text-foreground">{message}</p> : null}
             </div>
+
 
             <div className="mt-4 flex items-center justify-between gap-3">
               <Button type="button" onClick={handleTip} disabled={!canTip || isPending} className="h-10 rounded-xl px-5">

@@ -2,10 +2,10 @@ import { UserRole, UserStatus } from "@/db/types"
 
 import type { Prisma } from "@/db/types"
 
-import { prisma } from "@/db/client"
-import { resolveCountMap } from "@/db/helpers"
+import { buildAdminUserSummary, findAdminUsersPage } from "@/db/admin-user-queries"
 
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
+
 import type { AdminUserListResult } from "@/lib/admin-user-management"
 import { isVipActive } from "@/lib/vip-status"
 
@@ -83,15 +83,8 @@ export async function getAdminUsers(options: GetAdminUsersOptions = {}): Promise
               ? [{ points: "desc" }, { createdAt: "desc" }]
               : [{ createdAt: "desc" }]
 
-  const userSummary = await resolveCountMap([
-    ["total", prisma.user.count({ where })],
-    ["active", prisma.user.count({ where: { ...where, status: UserStatus.ACTIVE } })],
-    ["muted", prisma.user.count({ where: { ...where, status: UserStatus.MUTED } })],
-    ["banned", prisma.user.count({ where: { ...where, status: UserStatus.BANNED } })],
-    ["inactive", prisma.user.count({ where: { ...where, status: UserStatus.INACTIVE } })],
-    ["admin", prisma.user.count({ where: { ...where, role: UserRole.ADMIN } })],
-    ["moderator", prisma.user.count({ where: { ...where, role: UserRole.MODERATOR } })],
-  ] as const)
+  const userSummary = await buildAdminUserSummary(where)
+
 
   const { total, active, muted, banned, inactive, admin, moderator } = userSummary
 
@@ -100,30 +93,8 @@ export async function getAdminUsers(options: GetAdminUsersOptions = {}): Promise
   const page = Math.min(requestedPage, totalPages)
   const skip = (page - 1) * pageSize
 
-  const users = await prisma.user.findMany({
-    where,
-    orderBy,
-    include: {
-      inviter: {
-        select: {
-          username: true,
-          nickname: true,
-        },
-      },
-      levelProgress: {
-        select: {
-          checkInDays: true,
-        },
-      },
-      favorites: true,
-      loginLogs: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      },
-    },
-    skip,
-    take: pageSize,
-  })
+  const users = await findAdminUsersPage(where, orderBy, skip, pageSize)
+
 
   const mappedUsers = users.map((user) => ({
     id: user.id,

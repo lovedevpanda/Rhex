@@ -7,6 +7,7 @@ import { useMemo } from "react"
 import { AdminPostActionButton } from "@/components/admin-post-action-button"
 import { AdminPostPreviewModal } from "@/components/admin-post-preview-modal"
 import type { AdminPostListResult } from "@/lib/admin-post-management"
+import { AdminPostMoveBoardButton } from "./admin-post-move-board-button"
 
 interface AdminPostListProps {
   data: AdminPostListResult
@@ -59,7 +60,21 @@ const binaryFilters = {
 const pageSizeOptions = [20, 50, 100]
 
 export function AdminPostList({ data }: AdminPostListProps) {
+  const groupedBoardOptions = useMemo(() => {
+    const groups = new Map<string, Array<{ value: string; label: string }>>()
+
+    for (const board of data.boardOptions) {
+      const zoneName = board.zoneName ?? "未分区"
+      const currentItems = groups.get(zoneName) ?? []
+      currentItems.push({ value: board.slug, label: board.name })
+      groups.set(zoneName, currentItems)
+    }
+
+    return Array.from(groups.entries()).map(([zone, items]) => ({ zone, items }))
+  }, [data.boardOptions])
+
   const statCards = useMemo(
+
     () => [
       { label: "帖子总数", value: data.summary.total, icon: <MessageSquare className="h-4 w-4" /> },
       { label: "待审核", value: data.summary.pending, icon: <TrendingUp className="h-4 w-4" /> },
@@ -181,6 +196,8 @@ export function AdminPostList({ data }: AdminPostListProps) {
                 前台
               </Link>
               <AdminPostPreviewModal post={post} />
+              <AdminPostMoveBoardButton postId={post.id} postTitle={post.title} currentBoardSlug={post.boardSlug} boardOptions={groupedBoardOptions} className="h-7 rounded-full px-2.5 text-xs" />
+
               {post.status === "PENDING" ? (
                 <>
                   <AdminPostActionButton action="post.approve" targetId={post.id} label="通过" modalTitle="确认通过审核" modalDescription={`帖子：${post.title}`} placeholder="填写审核备注（可选）" confirmText="确认通过" className="h-7 rounded-full px-2.5 text-xs" />
