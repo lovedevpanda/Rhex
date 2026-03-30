@@ -18,6 +18,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select"
+import { useImageUpload } from "@/hooks/use-image-upload"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
 
@@ -45,6 +46,20 @@ type FloatingPanelPosition = {
   left: number
   width: number
   maxHeight: number
+}
+
+function useFloatingPanel() {
+  const [position, setPosition] = useState<FloatingPanelPosition | null>(null)
+  const [isReady, setIsReady] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  return {
+    position,
+    setPosition,
+    isReady,
+    setIsReady,
+    ref,
+  }
 }
 
 const EDITOR_LINE_HEIGHT_REM = 1.75
@@ -387,42 +402,39 @@ export function RefinedRichPostEditor({
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const mediaPanelRef = useRef<HTMLDivElement | null>(null)
-  const emojiPanelRef = useRef<HTMLDivElement | null>(null)
-  const tablePanelRef = useRef<HTMLDivElement | null>(null)
-  const linkPanelRef = useRef<HTMLDivElement | null>(null)
+  const mediaPanel = useFloatingPanel()
+  const emojiPanel = useFloatingPanel()
+  const tablePanel = useFloatingPanel()
+  const linkPanel = useFloatingPanel()
+  const uploadPanel = useFloatingPanel()
   const mediaButtonRef = useRef<HTMLDivElement | null>(null)
   const emojiButtonRef = useRef<HTMLDivElement | null>(null)
   const tableButtonRef = useRef<HTMLDivElement | null>(null)
   const linkButtonRef = useRef<HTMLDivElement | null>(null)
+  const imageButtonRef = useRef<HTMLDivElement | null>(null)
   const selectionRef = useRef({ start: 0, end: 0 })
 
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write")
 
-  const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState("")
   const [showEmojiPanel, setShowEmojiPanel] = useState(false)
   const [showMediaPanel, setShowMediaPanel] = useState(false)
   const [showTablePanel, setShowTablePanel] = useState(false)
   const [showLinkPanel, setShowLinkPanel] = useState(false)
+  const [showUploadPanel, setShowUploadPanel] = useState(false)
   const [mediaUrl, setMediaUrl] = useState("")
   const [linkText, setLinkText] = useState("")
   const [linkUrl, setLinkUrl] = useState("")
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [mediaPanelPosition, setMediaPanelPosition] = useState<FloatingPanelPosition | null>(null)
-  const [emojiPanelPosition, setEmojiPanelPosition] = useState<FloatingPanelPosition | null>(null)
-  const [tablePanelPosition, setTablePanelPosition] = useState<FloatingPanelPosition | null>(null)
-  const [linkPanelPosition, setLinkPanelPosition] = useState<FloatingPanelPosition | null>(null)
   const [isClient, setIsClient] = useState(false)
-  const [isMediaPanelReady, setIsMediaPanelReady] = useState(false)
-  const [isEmojiPanelReady, setIsEmojiPanelReady] = useState(false)
-  const [isTablePanelReady, setIsTablePanelReady] = useState(false)
-  const [isLinkPanelReady, setIsLinkPanelReady] = useState(false)
   const [editorScrollTop, setEditorScrollTop] = useState(0)
   const [activeLineNumber, setActiveLineNumber] = useState(1)
   const [tableHoverSize, setTableHoverSize] = useState({ rows: 0, columns: 0 })
   const markdownEmojiMap = useMarkdownEmojiMap(externalMarkdownEmojiMap)
-
+  const { uploading, uploadResults, uploadImageFiles, clearUploadResults } = useImageUpload({
+    uploadFolder,
+    onInsert: insertTemplate,
+  })
 
   const contentMinHeight = isFullscreen ? "calc(100vh - 220px)" : minHeight
   const lineCount = useMemo(() => {
@@ -535,46 +547,28 @@ export function RefinedRichPostEditor({
   }, [])
 
 
+  const syncFloatingPanel = useCallback((panel: ReturnType<typeof useFloatingPanel>, show: boolean, anchor: HTMLDivElement | null, width: number) => {
+    if (!show) {
+      panel.setPosition(null)
+      panel.setIsReady(false)
+      return
+    }
+
+    const nextPosition = updateFloatingPanelPosition(anchor, panel.ref.current, width)
+    panel.setPosition(nextPosition)
+    panel.setIsReady(Boolean(nextPosition && panel.ref.current?.offsetHeight))
+  }, [updateFloatingPanelPosition])
+
   const syncFloatingPanels = useCallback(() => {
-    if (showMediaPanel) {
-      const nextMediaPosition = updateFloatingPanelPosition(mediaButtonRef.current, mediaPanelRef.current, 320)
-      setMediaPanelPosition(nextMediaPosition)
-      setIsMediaPanelReady(Boolean(nextMediaPosition && mediaPanelRef.current?.offsetHeight))
-    } else {
-      setMediaPanelPosition(null)
-      setIsMediaPanelReady(false)
-    }
-
-    if (showEmojiPanel) {
-      const nextEmojiPosition = updateFloatingPanelPosition(emojiButtonRef.current, emojiPanelRef.current, 260)
-      setEmojiPanelPosition(nextEmojiPosition)
-      setIsEmojiPanelReady(Boolean(nextEmojiPosition && emojiPanelRef.current?.offsetHeight))
-    } else {
-      setEmojiPanelPosition(null)
-      setIsEmojiPanelReady(false)
-    }
-
-    if (showTablePanel) {
-      const nextTablePosition = updateFloatingPanelPosition(tableButtonRef.current, tablePanelRef.current, 292)
-      setTablePanelPosition(nextTablePosition)
-      setIsTablePanelReady(Boolean(nextTablePosition && tablePanelRef.current?.offsetHeight))
-    } else {
-      setTablePanelPosition(null)
-      setIsTablePanelReady(false)
-    }
-
-    if (showLinkPanel) {
-      const nextLinkPosition = updateFloatingPanelPosition(linkButtonRef.current, linkPanelRef.current, 320)
-      setLinkPanelPosition(nextLinkPosition)
-      setIsLinkPanelReady(Boolean(nextLinkPosition && linkPanelRef.current?.offsetHeight))
-    } else {
-      setLinkPanelPosition(null)
-      setIsLinkPanelReady(false)
-    }
-  }, [showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, updateFloatingPanelPosition])
+    syncFloatingPanel(mediaPanel, showMediaPanel, mediaButtonRef.current, 320)
+    syncFloatingPanel(emojiPanel, showEmojiPanel, emojiButtonRef.current, 260)
+    syncFloatingPanel(tablePanel, showTablePanel, tableButtonRef.current, 292)
+    syncFloatingPanel(linkPanel, showLinkPanel, linkButtonRef.current, 320)
+    syncFloatingPanel(uploadPanel, showUploadPanel, imageButtonRef.current, 320)
+  }, [emojiPanel, linkPanel, mediaPanel, showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, showUploadPanel, syncFloatingPanel, tablePanel, uploadPanel])
 
   useLayoutEffect(() => {
-    if (!showMediaPanel && !showEmojiPanel && !showTablePanel && !showLinkPanel) {
+    if (!showMediaPanel && !showEmojiPanel && !showTablePanel && !showLinkPanel && !showUploadPanel) {
       return
     }
 
@@ -587,12 +581,12 @@ export function RefinedRichPostEditor({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, syncFloatingPanels])
+  }, [emojiPanel.ref, linkPanel.ref, mediaPanel.ref, showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, showUploadPanel, syncFloatingPanels, tablePanel.ref, uploadPanel.ref])
 
 
 
   useEffect(() => {
-    if (!showMediaPanel && !showEmojiPanel && !showTablePanel && !showLinkPanel) {
+    if (!showMediaPanel && !showEmojiPanel && !showTablePanel && !showLinkPanel && !showUploadPanel) {
       return
     }
 
@@ -600,7 +594,7 @@ export function RefinedRichPostEditor({
       const target = event.target as Node
       if (showMediaPanel) {
         const clickedMediaButton = mediaButtonRef.current?.contains(target)
-        const clickedMediaPanel = mediaPanelRef.current?.contains(target)
+        const clickedMediaPanel = mediaPanel.ref.current?.contains(target)
         if (!clickedMediaButton && !clickedMediaPanel) {
           setShowMediaPanel(false)
         }
@@ -608,7 +602,7 @@ export function RefinedRichPostEditor({
 
       if (showEmojiPanel) {
         const clickedEmojiButton = emojiButtonRef.current?.contains(target)
-        const clickedEmojiPanel = emojiPanelRef.current?.contains(target)
+        const clickedEmojiPanel = emojiPanel.ref.current?.contains(target)
         if (!clickedEmojiButton && !clickedEmojiPanel) {
           setShowEmojiPanel(false)
         }
@@ -616,7 +610,7 @@ export function RefinedRichPostEditor({
 
       if (showTablePanel) {
         const clickedTableButton = tableButtonRef.current?.contains(target)
-        const clickedTablePanel = tablePanelRef.current?.contains(target)
+        const clickedTablePanel = tablePanel.ref.current?.contains(target)
         if (!clickedTableButton && !clickedTablePanel) {
           setShowTablePanel(false)
           setTableHoverSize({ rows: 0, columns: 0 })
@@ -625,9 +619,17 @@ export function RefinedRichPostEditor({
 
       if (showLinkPanel) {
         const clickedLinkButton = linkButtonRef.current?.contains(target)
-        const clickedLinkPanel = linkPanelRef.current?.contains(target)
+        const clickedLinkPanel = linkPanel.ref.current?.contains(target)
         if (!clickedLinkButton && !clickedLinkPanel) {
           setShowLinkPanel(false)
+        }
+      }
+
+      if (showUploadPanel) {
+        const clickedImageButton = imageButtonRef.current?.contains(target)
+        const clickedUploadPanel = uploadPanel.ref.current?.contains(target)
+        if (!clickedImageButton && !clickedUploadPanel) {
+          setShowUploadPanel(false)
         }
       }
     }
@@ -644,7 +646,7 @@ export function RefinedRichPostEditor({
       window.removeEventListener("scroll", handleViewportChange, true)
       document.removeEventListener("mousedown", handlePointerDown)
     }
-  }, [showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, syncFloatingPanels])
+  }, [emojiPanel.ref, linkPanel.ref, mediaPanel.ref, showEmojiPanel, showLinkPanel, showMediaPanel, showTablePanel, showUploadPanel, syncFloatingPanels, tablePanel.ref, uploadPanel.ref])
 
 
   const syncSelection = useCallback(() => {
@@ -705,6 +707,7 @@ export function RefinedRichPostEditor({
     setShowEmojiPanel(false)
     setShowTablePanel(false)
     setShowLinkPanel(false)
+    setShowUploadPanel(false)
     setShowMediaPanel((current) => !current)
   }, [])
 
@@ -712,6 +715,7 @@ export function RefinedRichPostEditor({
     setShowMediaPanel(false)
     setShowTablePanel(false)
     setShowLinkPanel(false)
+    setShowUploadPanel(false)
     setShowEmojiPanel((current) => !current)
   }, [])
 
@@ -719,6 +723,7 @@ export function RefinedRichPostEditor({
     setShowMediaPanel(false)
     setShowEmojiPanel(false)
     setShowLinkPanel(false)
+    setShowUploadPanel(false)
     setTableHoverSize({ rows: 0, columns: 0 })
     setShowTablePanel((current) => !current)
   }, [])
@@ -727,6 +732,7 @@ export function RefinedRichPostEditor({
     setShowMediaPanel(false)
     setShowEmojiPanel(false)
     setShowTablePanel(false)
+    setShowUploadPanel(false)
     setShowLinkPanel((current) => {
       const nextOpen = !current
       if (nextOpen) {
@@ -738,6 +744,14 @@ export function RefinedRichPostEditor({
       return nextOpen
     })
   }, [value])
+
+  const toggleUploadPanel = useCallback(() => {
+    setShowMediaPanel(false)
+    setShowEmojiPanel(false)
+    setShowTablePanel(false)
+    setShowLinkPanel(false)
+    setShowUploadPanel((current) => !current)
+  }, [])
 
   const updateActiveLineNumber = useCallback((element: HTMLTextAreaElement | null) => {
     if (!element) {
@@ -918,36 +932,31 @@ export function RefinedRichPostEditor({
       return
     }
 
-    setUploading(true)
     setMessage("")
+    setShowUploadPanel(true)
+    const insertedCount = await uploadImageFiles(files)
+    if (insertedCount > 0) {
+      setMessage(`已插入 ${insertedCount} 张图片`)
+    }
+    event.target.value = ""
+  }
 
-    try {
-      const uploadedMarkdown: string[] = []
-      for (const file of files) {
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("folder", uploadFolder)
+  async function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const imageFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
 
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        })
-        const result = await response.json()
+    if (imageFiles.length === 0) {
+      return
+    }
 
-        if (!response.ok) {
-          throw new Error(result.message ?? `${file.name} 上传失败`)
-        }
-
-        uploadedMarkdown.push(`![${file.name}](${result.data?.urlPath ?? ""})`)
-      }
-
-      insertTemplate(uploadedMarkdown.join("\n\n"))
-      setMessage(`已插入 ${uploadedMarkdown.length} 张图片`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "图片上传失败")
-    } finally {
-      setUploading(false)
-      event.target.value = ""
+    event.preventDefault()
+    setMessage("")
+    setShowUploadPanel(true)
+    const insertedCount = await uploadImageFiles(imageFiles)
+    if (insertedCount > 0) {
+      setMessage(`已插入 ${insertedCount} 张图片`)
     }
   }
 
@@ -1050,6 +1059,7 @@ export function RefinedRichPostEditor({
                   onKeyUp={handleTextareaSelect}
                   onClick={handleTextareaSelect}
                   onSelect={handleTextareaSelect}
+                  onPaste={handlePaste}
                   disabled={disabled}
                   className="w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent pl-2 pr-0 py-1 font-mono text-sm leading-7 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder={placeholder}
@@ -1134,11 +1144,24 @@ export function RefinedRichPostEditor({
                   </div>
 
 
-                  <ToolButton title="添加图片" onMouseDown={handleToolbarMouseDown} onClick={() => fileInputRef.current?.click()} disabled={disabled || uploading}>
-
-                    <ImageIcon className="h-4 w-4" />
-                  </ToolButton>
-                  <input ref={fileInputRef} accept="image/*" multiple className="hidden" type="file" onChange={handleUpload} disabled={disabled || uploading} />
+                  <div className="relative" ref={imageButtonRef}>
+                    <ToolButton
+                      title="添加图片"
+                      onMouseDown={handleToolbarMouseDown}
+                      onClick={() => {
+                        if (uploadResults.length > 0 && !uploading) {
+                          toggleUploadPanel()
+                        } else {
+                          fileInputRef.current?.click()
+                        }
+                      }}
+                      disabled={disabled || uploading}
+                      active={showUploadPanel}
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </ToolButton>
+                    <input ref={fileInputRef} accept="image/*" multiple className="hidden" type="file" onChange={handleUpload} disabled={disabled || uploading} />
+                  </div>
 
                 </div>
 
@@ -1150,19 +1173,19 @@ export function RefinedRichPostEditor({
           </div>
         </div>
       </div>
-      {isClient && showMediaPanel && mediaPanelPosition && !disabled ? createPortal(
+      {isClient && showMediaPanel && mediaPanel.position && !disabled ? createPortal(
         <div
-          ref={mediaPanelRef}
+          ref={mediaPanel.ref}
           className="fixed z-[90] overflow-y-auto rounded-2xl border border-border bg-background p-4 shadow-2xl"
           style={{
-            left: mediaPanelPosition.left,
-            top: mediaPanelPosition.top,
-            width: mediaPanelPosition.width,
-            maxHeight: mediaPanelPosition.maxHeight,
-            opacity: isMediaPanelReady ? 1 : 0,
-            pointerEvents: isMediaPanelReady ? "auto" : "none",
+            left: mediaPanel.position.left,
+            top: mediaPanel.position.top,
+            width: mediaPanel.position.width,
+            maxHeight: mediaPanel.position.maxHeight,
+            opacity: mediaPanel.isReady ? 1 : 0,
+            pointerEvents: mediaPanel.isReady ? "auto" : "none",
           }}
-          aria-hidden={!isMediaPanelReady}
+          aria-hidden={!mediaPanel.isReady}
         >
 
 
@@ -1201,19 +1224,19 @@ export function RefinedRichPostEditor({
         </div>,
         document.body,
       ) : null}
-      {isClient && showLinkPanel && linkPanelPosition && !disabled ? createPortal(
+      {isClient && showLinkPanel && linkPanel.position && !disabled ? createPortal(
         <div
-          ref={linkPanelRef}
+          ref={linkPanel.ref}
           className="fixed z-[90] overflow-y-auto rounded-2xl border border-border bg-background p-4 shadow-2xl"
           style={{
-            left: linkPanelPosition.left,
-            top: linkPanelPosition.top,
-            width: linkPanelPosition.width,
-            maxHeight: linkPanelPosition.maxHeight,
-            opacity: isLinkPanelReady ? 1 : 0,
-            pointerEvents: isLinkPanelReady ? "auto" : "none",
+            left: linkPanel.position.left,
+            top: linkPanel.position.top,
+            width: linkPanel.position.width,
+            maxHeight: linkPanel.position.maxHeight,
+            opacity: linkPanel.isReady ? 1 : 0,
+            pointerEvents: linkPanel.isReady ? "auto" : "none",
           }}
-          aria-hidden={!isLinkPanelReady}
+          aria-hidden={!linkPanel.isReady}
         >
           <div className="mb-3 space-y-1">
             <div className="text-sm font-medium text-foreground">插入链接</div>
@@ -1260,19 +1283,19 @@ export function RefinedRichPostEditor({
         </div>,
         document.body,
       ) : null}
-      {isClient && showTablePanel && tablePanelPosition && !disabled ? createPortal(
+      {isClient && showTablePanel && tablePanel.position && !disabled ? createPortal(
         <div
-          ref={tablePanelRef}
+          ref={tablePanel.ref}
           className="fixed z-[90] overflow-y-auto rounded-2xl border border-border bg-background p-4 shadow-2xl"
           style={{
-            left: tablePanelPosition.left,
-            top: tablePanelPosition.top,
-            width: tablePanelPosition.width,
-            maxHeight: tablePanelPosition.maxHeight,
-            opacity: isTablePanelReady ? 1 : 0,
-            pointerEvents: isTablePanelReady ? "auto" : "none",
+            left: tablePanel.position.left,
+            top: tablePanel.position.top,
+            width: tablePanel.position.width,
+            maxHeight: tablePanel.position.maxHeight,
+            opacity: tablePanel.isReady ? 1 : 0,
+            pointerEvents: tablePanel.isReady ? "auto" : "none",
           }}
-          aria-hidden={!isTablePanelReady}
+          aria-hidden={!tablePanel.isReady}
         >
           <div className="mb-3 space-y-1">
             <div className="text-sm font-medium text-foreground">插入表格</div>
@@ -1317,19 +1340,19 @@ export function RefinedRichPostEditor({
         </div>,
         document.body,
       ) : null}
-      {isClient && showEmojiPanel && emojiPanelPosition && !disabled ? createPortal(
+      {isClient && showEmojiPanel && emojiPanel.position && !disabled ? createPortal(
         <div
-          ref={emojiPanelRef}
+          ref={emojiPanel.ref}
           className="fixed z-[90] overflow-y-auto rounded-2xl border border-border bg-background p-3 shadow-2xl"
           style={{
-            left: emojiPanelPosition.left,
-            top: emojiPanelPosition.top,
-            width: emojiPanelPosition.width,
-            maxHeight: emojiPanelPosition.maxHeight,
-            opacity: isEmojiPanelReady ? 1 : 0,
-            pointerEvents: isEmojiPanelReady ? "auto" : "none",
+            left: emojiPanel.position.left,
+            top: emojiPanel.position.top,
+            width: emojiPanel.position.width,
+            maxHeight: emojiPanel.position.maxHeight,
+            opacity: emojiPanel.isReady ? 1 : 0,
+            pointerEvents: emojiPanel.isReady ? "auto" : "none",
           }}
-          aria-hidden={!isEmojiPanelReady}
+          aria-hidden={!emojiPanel.isReady}
         >
 
 
@@ -1346,6 +1369,78 @@ export function RefinedRichPostEditor({
             }}
           />
 
+        </div>,
+        document.body,
+      ) : null}
+      {isClient && showUploadPanel && uploadPanel.position ? createPortal(
+        <div
+          ref={uploadPanel.ref}
+          className="fixed z-[90] overflow-y-auto rounded-2xl border border-border bg-background p-4 shadow-2xl"
+          style={{
+            left: uploadPanel.position.left,
+            top: uploadPanel.position.top,
+            width: uploadPanel.position.width,
+            maxHeight: uploadPanel.position.maxHeight,
+            opacity: uploadPanel.isReady ? 1 : 0,
+            pointerEvents: uploadPanel.isReady ? "auto" : "none",
+          }}
+          aria-hidden={!uploadPanel.isReady}
+        >
+          <div className="mb-3 space-y-1">
+            <div className="text-sm font-medium text-foreground">图片上传</div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {uploading ? "正在上传图片，请稍候…" : "以下是本次上传结果。"}
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {uploadResults.map((item, index) => (
+              <li key={index} className="flex items-start gap-2 text-xs">
+                <span
+                  className={[
+                    "mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                    item.status === "success" && "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+                    item.status === "error" && "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+                    item.status === "pending" && "bg-muted text-muted-foreground",
+                  ].filter(Boolean).join(" ")}
+                >
+                  {item.status === "success" && "✓"}
+                  {item.status === "error" && "✗"}
+                  {item.status === "pending" && "…"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-foreground">{item.name}</span>
+                  {item.status === "error" && item.errorMessage && (
+                    <span className="block text-red-600 dark:text-red-400">{item.errorMessage}</span>
+                  )}
+                  {item.status === "success" && item.urlPath && (
+                    <span className="block truncate text-muted-foreground">{item.urlPath}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!uploading && (
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent"
+                onClick={() => {
+                  clearUploadResults()
+                  setShowUploadPanel(false)
+                  requestAnimationFrame(() => fileInputRef.current?.click())
+                }}
+              >
+                继续上传
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                onClick={() => setShowUploadPanel(false)}
+              >
+                关闭
+              </button>
+            </div>
+          )}
         </div>,
         document.body,
       ) : null}

@@ -27,6 +27,7 @@ export interface SiteCommentReplyItem {
     iconText?: string | null
   }>
   isPostAuthor: boolean
+  postId: string
   replyToAuthor?: string
   content: string
   createdAt: string
@@ -56,6 +57,7 @@ export interface SiteCommentItem {
     iconText?: string | null
   }>
   isPostAuthor: boolean
+  postId: string
   content: string
   createdAt: string
   likes: number
@@ -218,6 +220,7 @@ export async function getCommentsByPostId(
 
       currentReplies.push({
         id: comment.id,
+        postId,
         author: comment.user.nickname ?? comment.user.username,
         authorId: comment.userId,
         authorUsername: comment.user.username,
@@ -245,6 +248,7 @@ export async function getCommentsByPostId(
 
       return {
         id: comment.id,
+        postId,
         author: getUserDisplayName(comment.user),
         authorId: comment.userId,
         authorUsername: comment.user.username,

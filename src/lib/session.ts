@@ -1,5 +1,6 @@
 const SESSION_COOKIE_NAME = "bbs_session"
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
+const SESSION_RENEW_THRESHOLD_SECONDS = 60 * 60 * 24 * 3
 
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET?.trim()
@@ -126,11 +127,14 @@ export async function parseSessionToken(token: string | undefined) {
       return null
     }
 
-
     return parsed
   } catch {
     return null
   }
+}
+
+export function shouldRenewSession(session: SessionUser, now = Math.floor(Date.now() / 1000)) {
+  return session.expiresAt - now < SESSION_RENEW_THRESHOLD_SECONDS
 }
 
 export function getSessionCookieName() {

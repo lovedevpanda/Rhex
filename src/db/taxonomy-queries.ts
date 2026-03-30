@@ -56,6 +56,7 @@ export function findTagPostsBySlugOrName(normalized: string) {
 }
 
 export function findTagListPage(options: { page: number; pageSize: number; sort: "hot" | "new" }) {
+  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
   const orderBy = options.sort === "new"
     ? [{ createdAt: "desc" as const }, { name: "asc" as const }]
     : [{ posts: { _count: "desc" as const } }, { createdAt: "desc" as const }, { name: "asc" as const }]
@@ -69,8 +70,8 @@ export function findTagListPage(options: { page: number; pageSize: number; sort:
       },
     },
     orderBy,
-    skip: (options.page - 1) * options.pageSize,
-    take: options.pageSize,
+    skip: (options.page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 
@@ -178,6 +179,8 @@ function getZonePinnedOrderBy(): Prisma.PostOrderByWithRelationInput[] {
 }
 
 export function findGlobalPinnedPosts(pageSize?: number) {
+  const normalizedPageSize = typeof pageSize === "number" ? Math.min(Math.max(1, pageSize), 50) : undefined
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
@@ -193,11 +196,13 @@ export function findGlobalPinnedPosts(pageSize?: number) {
       },
     },
     orderBy: getZonePinnedOrderBy(),
-    take: pageSize,
+    take: normalizedPageSize,
   })
 }
 
 export function findZonePinnedPosts(boardIds: string[], pageSize?: number) {
+  const normalizedPageSize = typeof pageSize === "number" ? Math.min(Math.max(1, pageSize), 50) : undefined
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
@@ -211,11 +216,13 @@ export function findZonePinnedPosts(boardIds: string[], pageSize?: number) {
       author: true,
     },
     orderBy: getZonePinnedOrderBy(),
-    take: pageSize,
+    take: normalizedPageSize,
   })
 }
 
 export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[], page: number, pageSize: number) {
+  const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
@@ -229,12 +236,14 @@ export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[
       author: true,
     },
     orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-    skip: (page - 1) * pageSize,
-    take: pageSize,
+    skip: (page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 
 export function findBoardPinnedPosts(boardId: string, zoneBoardIds: string[], pageSize?: number) {
+  const normalizedPageSize = typeof pageSize === "number" ? Math.min(Math.max(1, pageSize), 50) : undefined
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
@@ -249,11 +258,13 @@ export function findBoardPinnedPosts(boardId: string, zoneBoardIds: string[], pa
       author: true,
     },
     orderBy: getZonePinnedOrderBy(),
-    take: pageSize,
+    take: normalizedPageSize,
   })
 }
 
 export function findBoardNormalPosts(boardId: string, excludedPostIds: string[], page: number, pageSize: number) {
+  const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
@@ -265,8 +276,8 @@ export function findBoardNormalPosts(boardId: string, excludedPostIds: string[],
       author: true,
     },
     orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-    skip: (page - 1) * pageSize,
-    take: pageSize,
+    skip: (page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 

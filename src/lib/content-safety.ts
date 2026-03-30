@@ -1,10 +1,10 @@
-import { findActiveSensitiveWords } from "@/db/content-safety-queries"
+import { cache } from "react"
 
+import { findActiveSensitiveWords } from "@/db/content-safety-queries"
 
 export type SensitiveMatchType = "EXACT" | "CONTAINS" | "REGEX"
 export type SensitiveActionType = "REJECT" | "REVIEW" | "REPLACE"
 export type SensitiveScene = "post.title" | "post.content" | "post.tags" | "comment.content" | "profile.nickname" | "profile.bio" | "yinyang.question" | "yinyang.answer"
-
 
 export interface SensitiveWordRule {
   id: string
@@ -12,6 +12,10 @@ export interface SensitiveWordRule {
   matchType: SensitiveMatchType
   actionType: SensitiveActionType
   status: boolean
+}
+
+export interface CompiledSensitiveWordRule extends SensitiveWordRule {
+  matcher: RegExp | null
 }
 
 export interface SensitiveScanInput {
@@ -48,6 +52,11 @@ export class ContentSafetyError extends Error {
 }
 
 const DEFAULT_REPLACEMENT = "**"
+const SENSITIVE_WORD_RULES_CACHE_TTL_MS = 60_000
+
+let cachedSensitiveWordRules: CompiledSensitiveWordRule[] | null = null
+let sensitiveWordRulesCacheExpiry = 0
+let sensitiveWordRulesCachePromise: Promise<CompiledSensitiveWordRule[]> | null = null
 
 function normalizeMatchType(value: string): SensitiveMatchType {
   if (value === "EXACT" || value === "REGEX") {
@@ -83,32 +92,81 @@ function buildMatcher(rule: SensitiveWordRule) {
   return new RegExp(escapeRegExp(rule.word), "giu")
 }
 
-export async function getSensitiveWordRules() {
-  const rules = await findActiveSensitiveWords()
+function compileSensitiveWordRules(rules: Awaited<ReturnType<typeof findActiveSensitiveWords>>): CompiledSensitiveWordRule[] {
+  return rules.map((rule) => {
+    const normalizedRule: SensitiveWordRule = {
+      id: rule.id,
+      word: rule.word,
+      matchType: normalizeMatchType(rule.matchType),
+      actionType: normalizeActionType(rule.actionType),
+      status: rule.status,
+    }
 
-
-  return rules.map((rule) => ({
-    id: rule.id,
-    word: rule.word,
-    matchType: normalizeMatchType(rule.matchType),
-    actionType: normalizeActionType(rule.actionType),
-    status: rule.status,
-  }))
+    return {
+      ...normalizedRule,
+      matcher: buildMatcher(normalizedRule),
+    }
+  })
 }
 
-export async function scanSensitiveText(input: SensitiveScanInput): Promise<SensitiveScanResult> {
+function setSensitiveWordRulesCache(rules: CompiledSensitiveWordRule[]) {
+  cachedSensitiveWordRules = rules
+  sensitiveWordRulesCacheExpiry = Date.now() + SENSITIVE_WORD_RULES_CACHE_TTL_MS
+}
+
+async function readSensitiveWordRulesFromDB(): Promise<CompiledSensitiveWordRule[]> {
+  const rules = await findActiveSensitiveWords()
+  return compileSensitiveWordRules(rules)
+}
+
+export function invalidateSensitiveWordRulesCache() {
+  cachedSensitiveWordRules = null
+  sensitiveWordRulesCacheExpiry = 0
+  sensitiveWordRulesCachePromise = null
+}
+
+async function getMemoryCachedSensitiveWordRules(): Promise<CompiledSensitiveWordRule[]> {
+  if (cachedSensitiveWordRules && Date.now() < sensitiveWordRulesCacheExpiry) {
+    return cachedSensitiveWordRules
+  }
+
+  if (!sensitiveWordRulesCachePromise) {
+    sensitiveWordRulesCachePromise = readSensitiveWordRulesFromDB()
+      .then((rules) => {
+        setSensitiveWordRulesCache(rules)
+        return rules
+      })
+      .finally(() => {
+        sensitiveWordRulesCachePromise = null
+      })
+  }
+
+  return sensitiveWordRulesCachePromise
+}
+
+const getCachedSensitiveWordRules = cache(async (): Promise<CompiledSensitiveWordRule[]> => {
+  return getMemoryCachedSensitiveWordRules()
+})
+
+export async function getSensitiveWordRules(): Promise<CompiledSensitiveWordRule[]> {
+  return getCachedSensitiveWordRules()
+}
+
+export async function scanSensitiveText(
+  input: SensitiveScanInput,
+  rules?: CompiledSensitiveWordRule[],
+): Promise<SensitiveScanResult> {
   const text = input.text.trim()
-  const rules = await getSensitiveWordRules()
+  const activeRules = rules ?? await getSensitiveWordRules()
   let sanitizedText = text
   const hits: SensitiveHit[] = []
 
-  for (const rule of rules) {
-    const matcher = buildMatcher(rule)
-    if (!matcher || !text) {
+  for (const rule of activeRules) {
+    if (!rule.matcher || !text) {
       continue
     }
 
-    if (!matcher.test(text)) {
+    if (!rule.matcher.test(text)) {
       continue
     }
 
@@ -120,10 +178,7 @@ export async function scanSensitiveText(input: SensitiveScanInput): Promise<Sens
     })
 
     if (rule.actionType === "REPLACE") {
-      const replaceMatcher = buildMatcher(rule)
-      if (replaceMatcher) {
-        sanitizedText = sanitizedText.replace(replaceMatcher, DEFAULT_REPLACEMENT)
-      }
+      sanitizedText = sanitizedText.replace(rule.matcher, DEFAULT_REPLACEMENT)
     }
   }
 
@@ -137,12 +192,14 @@ export async function scanSensitiveText(input: SensitiveScanInput): Promise<Sens
   }
 }
 
-export async function enforceSensitiveText(input: SensitiveScanInput) {
-  const result = await scanSensitiveText(input)
+export async function enforceSensitiveText(
+  input: SensitiveScanInput,
+  rules?: CompiledSensitiveWordRule[],
+) {
+  const result = await scanSensitiveText(input, rules)
   if (result.shouldReject) {
     const first = result.hits.find((item) => item.actionType === "REJECT")
     throw new ContentSafetyError(first ? `内容包含敏感词：${first.word}` : "内容包含敏感词")
   }
   return result
 }
-

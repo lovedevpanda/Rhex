@@ -49,12 +49,14 @@ function buildFeedWhere(excludedPostIds: string[] = []): Prisma.PostWhereInput {
 }
 
 export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQuerySort, excludedPostIds: string[] = []) {
+  const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
+
   return prisma.post.findMany({
     where: buildFeedWhere(excludedPostIds),
     include: feedPostInclude,
     orderBy: getFeedOrderBy(sort),
-    skip: (page - 1) * pageSize,
-    take: pageSize,
+    skip: (page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 

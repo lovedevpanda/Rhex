@@ -5,7 +5,7 @@ import type { Board, Comment, LotteryCondition, LotteryParticipant, LotteryPrize
 import type { LocalPostType } from "@/lib/post-types"
 import { mapLotteryView } from "@/lib/lottery"
 
-import { parsePostContentDocument } from "@/lib/post-content"
+import { getPublicPostContentText, parsePostContentDocument } from "@/lib/post-content"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 import type { PostTipSummary } from "@/lib/post-tips"
 import { withRuntimeFallback } from "@/lib/runtime-errors"
@@ -86,6 +86,7 @@ export interface SitePostItem {
   }>
 
   editableUntil?: string | null
+  createdAt?: string
   appendedContent?: string | null
   lastAppendedAt?: string | null
   appendices?: Array<{
@@ -203,6 +204,7 @@ function mapPostDetail(
     contentBlocks,
 
     editableUntil: post.editableUntil?.toISOString() ?? null,
+    createdAt: post.createdAt.toISOString(),
     appendedContent: post.appendedContent ?? null,
     lastAppendedAt: post.lastAppendedAt?.toISOString() ?? null,
     appendices: post.appendices
@@ -210,7 +212,7 @@ function mapPostDetail(
       .map((item, index) => ({
         id: item.id,
         floor: index + 1,
-        content: item.content,
+        content: getPublicPostContentText(item.content),
         createdAt: item.createdAt.toISOString(),
       })),
 

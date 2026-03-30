@@ -17,11 +17,10 @@ import { UserVerificationBadge } from "@/components/user-verification-badge"
 import { Button } from "@/components/ui/button"
 import { VipBadge } from "@/components/vip-badge"
 
-import type { SiteCommentItem } from "@/lib/comments"
+import type { SiteCommentItem, SiteCommentReplyItem } from "@/lib/comments"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
 import { getVipNameClass } from "@/lib/vip-status"
-
 
 interface CommentThreadProps {
   comments: SiteCommentItem[]
@@ -37,16 +36,16 @@ interface CommentThreadProps {
   isAdmin?: boolean
   canPinComment?: boolean
   markdownEmojiMap?: MarkdownEmojiItem[]
+  commentEditWindowMinutes?: number
 }
-
 
 const INITIAL_VISIBLE_REPLIES = 10
 
-export function CommentThread({ comments, postId, canReply, currentPage, pageSize, total, currentSort, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, isAdmin = false, canPinComment = false, markdownEmojiMap }: CommentThreadProps) {
-
+export function CommentThread({ comments, postId, canReply, currentPage, pageSize, total, currentSort, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, isAdmin = false, canPinComment = false, markdownEmojiMap, commentEditWindowMinutes = 5 }: CommentThreadProps) {
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [submittingAnswerId, setSubmittingAnswerId] = useState<string | null>(null)
   const [pinningCommentId, setPinningCommentId] = useState<string | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState("")
   const [replyTarget, setReplyTarget] = useState<{ parentId: string; replyToUserName: string } | null>(null)
   const [showOnlyAuthorComments, setShowOnlyAuthorComments] = useState(false)
@@ -67,7 +66,6 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
   }, [comments, showOnlyAuthorComments])
 
   const replyHint = replyTarget ? `正在回复 @${replyTarget.replyToUserName}` : null
-
 
   function scrollToReplyBox(nextTarget?: { parentId: string; replyToUserName: string } | null) {
     setReplyTarget(nextTarget ?? null)
@@ -144,6 +142,23 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
     }
   }
 
+  function startEdit(commentId: string) {
+    setEditingCommentId(commentId)
+    setActionMessage("")
+  }
+
+  function stopEdit() {
+    setEditingCommentId(null)
+  }
+
+  function canEditComment(comment: SiteCommentItem | SiteCommentReplyItem) {
+    return Boolean(currentUserId && currentUserId === comment.authorId)
+  }
+
+  function getEditButtonLabel(comment: SiteCommentItem | SiteCommentReplyItem) {
+    return editingCommentId === comment.id ? "取消编辑" : "编辑"
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -170,11 +185,10 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
       ) : null}
 
       {filteredComments.map((comment, index) => {
-
         const isExpanded = expandedReplies[comment.id] ?? false
         const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, INITIAL_VISIBLE_REPLIES)
         const canAcceptCurrentComment = canAcceptAnswer && !comment.isAcceptedAnswer && currentUserId !== comment.authorId
-
+        const canEditCurrentComment = canEditComment(comment)
         const isRestrictedCommentAuthor = comment.authorStatus === "BANNED" || comment.authorStatus === "MUTED"
         const commentActions = [
           ...(canPinComment
@@ -207,7 +221,6 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
             : []),
         ]
 
-
         return (
           <div id={`comment-${comment.id}`} key={comment.id} className={index === 0 ? "group relative py-5" : "group relative border-t border-border/70 py-5"}>
             <div className="flex items-start justify-between gap-3 text-sm text-muted-foreground">
@@ -222,21 +235,36 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                     {comment.isPostAuthor ? <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">楼主</span> : null}
                     <UserDisplayedBadges badges={comment.authorDisplayedBadges} compact />
                     {comment.authorIsVip ? <VipBadge level={comment.authorVipLevel} compact /> : null}
-
                     {isRestrictedCommentAuthor ? <UserStatusBadge status={comment.authorStatus} compact /> : null}
                     <span>·</span>
                     <span>{comment.createdAt}</span>
                     {comment.isPinnedByAuthor ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">楼主置顶</span> : null}
                     {comment.isAcceptedAnswer ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">已采纳答案</span> : null}
+                    {canEditCurrentComment ? (
+                      <button type="button" className="text-xs transition-colors hover:text-foreground" onClick={() => editingCommentId === comment.id ? stopEdit() : startEdit(comment.id)}>
+                        {getEditButtonLabel(comment)}
+                      </button>
+                    ) : null}
                   </div>
-                  <MarkdownContent content={comment.content} className="text-sm leading-7 text-foreground/90 dark:text-foreground/85" />
+                  {editingCommentId === comment.id ? (
+                    <CommentForm
+                      postId={comment.postId}
+                      commentId={comment.id}
+                      initialContent={comment.content}
+                      mode="edit"
+                      onCancel={stopEdit}
+                      markdownEmojiMap={markdownEmojiMap}
+                      editWindowMinutes={commentEditWindowMinutes}
+                    />
+                  ) : (
+                    <MarkdownContent content={comment.content} className="text-sm leading-7 text-foreground/90 dark:text-foreground/85" />
+                  )}
                 </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <CommentLikeButton commentId={comment.id} initialCount={comment.likes} initialLiked={comment.viewerLiked} />
-
                   {currentUserId && currentUserId !== comment.authorId ? (
                     <ReportDialog
                       targetType="COMMENT"
@@ -269,6 +297,7 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
             {comment.replies.length > 0 ? (
               <div className="mt-4 space-y-3 rounded-[20px] bg-background/70 p-2">
                 {visibleReplies.map((reply) => {
+                  const canEditCurrentReply = canEditComment(reply)
                   const isRestrictedReplyAuthor = reply.authorStatus === "BANNED" || reply.authorStatus === "MUTED"
                   const replyActions = isAdmin
                     ? reply.authorStatus === "BANNED"
@@ -302,14 +331,31 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
                               {reply.isPostAuthor ? <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">楼主</span> : null}
                               <UserDisplayedBadges badges={reply.authorDisplayedBadges} compact />
                               {reply.authorIsVip ? <VipBadge level={reply.authorVipLevel} compact /> : null}
-
                               {isRestrictedReplyAuthor ? <UserStatusBadge status={reply.authorStatus} compact /> : null}
                               {reply.replyToAuthor ? <span>回复 @{reply.replyToAuthor}</span> : null}
                               <span>·</span>
                               <span>{reply.createdAt}</span>
+                              {canEditCurrentReply ? (
+                                <button type="button" className="text-[11px] transition-colors hover:text-foreground" onClick={() => editingCommentId === reply.id ? stopEdit() : startEdit(reply.id)}>
+                                  {getEditButtonLabel(reply)}
+                                </button>
+                              ) : null}
                             </div>
                             <div className="mt-2">
-                              <MarkdownContent content={reply.content} className="text-sm leading-7 text-foreground/90 dark:text-foreground/85" markdownEmojiMap={markdownEmojiMap} />
+                              {editingCommentId === reply.id ? (
+                                <CommentForm
+                                  postId={reply.postId}
+                                  commentId={reply.id}
+                                  initialContent={reply.content}
+                                  mode="edit"
+                                  compact
+                                  onCancel={stopEdit}
+                                  markdownEmojiMap={markdownEmojiMap}
+                                  editWindowMinutes={commentEditWindowMinutes}
+                                />
+                              ) : (
+                                <MarkdownContent content={reply.content} className="text-sm leading-7 text-foreground/90 dark:text-foreground/85" markdownEmojiMap={markdownEmojiMap} />
+                              )}
                             </div>
                           </div>
                         </div>
@@ -362,7 +408,6 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
 
                 {comment.replies.length > INITIAL_VISIBLE_REPLIES ? (
                   <button type="button" title={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`} aria-label={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`} onClick={() => toggleReplies(comment.id)} className="text-xs text-primary transition-opacity hover:opacity-80">
-
                     {isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`}
                   </button>
                 ) : null}
@@ -433,7 +478,6 @@ export function CommentThread({ comments, postId, canReply, currentPage, pageSiz
             commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly}
             markdownEmojiMap={markdownEmojiMap}
           />
-
         </div>
       ) : null}
     </div>

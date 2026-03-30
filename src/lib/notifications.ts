@@ -1,6 +1,6 @@
 import { NotificationType, RelatedType } from "@/db/types"
 
-import { countNotificationsByUserId, countUnreadNotifications, findCommentPostSlugById, findNotificationsByUserId, findPostSlugById } from "@/db/notification-read-queries"
+import { countNotificationsByUserId, countUnreadNotifications, findCommentsWithPostByIds, findNotificationsByUserId, findPostsByIds } from "@/db/notification-read-queries"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { getPostCommentPath, getPostPath } from "@/lib/post-links"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -44,21 +44,37 @@ export async function getUserUnreadNotificationCount(userId: number) {
 }
 
 
-async function resolveNotificationUrl(relatedType: RelatedType, relatedId: string) {
-  const settings = await getSiteSettings()
+type NotificationPostTarget = Awaited<ReturnType<typeof findPostsByIds>>[number]
+type NotificationCommentTarget = Awaited<ReturnType<typeof findCommentsWithPostByIds>>[number]
 
+async function preloadNotificationTargets(notifications: Awaited<ReturnType<typeof findNotificationsByUserId>>) {
+  const postIds = notifications.filter((item) => item.relatedType === RelatedType.POST).map((item) => item.relatedId)
+  const commentIds = notifications.filter((item) => item.relatedType === RelatedType.COMMENT).map((item) => item.relatedId)
+
+  const [posts, comments] = await Promise.all([findPostsByIds(postIds), findCommentsWithPostByIds(commentIds)])
+
+  return {
+    postMap: new Map<string, NotificationPostTarget>(posts.map((post) => [post.id, post])),
+    commentMap: new Map<string, NotificationCommentTarget>(comments.map((comment) => [comment.id, comment])),
+  }
+}
+
+function resolveNotificationUrl(
+  relatedType: RelatedType,
+  relatedId: string,
+  settings: Awaited<ReturnType<typeof getSiteSettings>>,
+  targets: Awaited<ReturnType<typeof preloadNotificationTargets>>,
+) {
   if (relatedType === RelatedType.POST) {
-    const post = await findPostSlugById(relatedId)
+    const post = targets.postMap.get(relatedId)
 
     return post ? getPostPath({ id: post.id, slug: post.slug }, settings.postLinkDisplayMode) : "/notifications"
-
   }
 
   if (relatedType === RelatedType.COMMENT) {
-    const comment = await findCommentPostSlugById(relatedId)
+    const comment = targets.commentMap.get(relatedId)
 
     return comment?.post ? getPostCommentPath({ id: comment.post.id, slug: comment.post.slug }, comment.id, settings.postLinkDisplayMode) : "/notifications"
-
   }
 
   if (relatedType === RelatedType.YINYANG_CHALLENGE) {
@@ -73,15 +89,17 @@ async function resolveNotificationUrl(relatedType: RelatedType, relatedId: strin
 
 export async function getUserNotifications(userId: number, page: number, pageSize: number): Promise<UserNotificationsResult> {
   try {
-    const skip = (page - 1) * pageSize
+    const normalizedPageSize = Math.min(50, Math.max(1, pageSize))
+    const skip = (page - 1) * normalizedPageSize
 
-    const [notifications, totalCount] = await Promise.all([
-      findNotificationsByUserId(userId, skip, pageSize),
+    const [notifications, totalCount, settings] = await Promise.all([
+      findNotificationsByUserId(userId, skip, normalizedPageSize),
       countNotificationsByUserId(userId),
+      getSiteSettings(),
     ])
 
-
-    const relatedUrls = await Promise.all(notifications.map((notification) => resolveNotificationUrl(notification.relatedType, notification.relatedId)))
+    const targets = await preloadNotificationTargets(notifications)
+    const relatedUrls = notifications.map((notification) => resolveNotificationUrl(notification.relatedType, notification.relatedId, settings, targets))
 
     return {
       items: notifications.map((notification, index) => ({

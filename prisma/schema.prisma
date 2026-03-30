@@ -1016,10 +1016,14 @@ model Upload {
   fileExt      String
   mimeType     String
   fileSize     Int
+  fileHash     String?
   storagePath  String
   urlPath      String
   createdAt    DateTime   @db.Timestamptz(3)    @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bucketType, fileHash])
+  @@index([fileHash])
 }
 
 model FriendLink {
@@ -1113,6 +1117,8 @@ model SiteSetting {
   loginCaptchaMode              String   @default("OFF")
   turnstileSiteKey              String?
   nicknameChangePointCost       Int      @default(0)
+  postEditableMinutes           Int      @default(10)
+  commentEditableMinutes        Int      @default(5)
   tippingEnabled                Boolean  @default(false)
   tippingDailyLimit             Int      @default(3)
   tippingPerPostLimit           Int      @default(1)

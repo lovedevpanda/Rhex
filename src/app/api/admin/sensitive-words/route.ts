@@ -1,6 +1,8 @@
 import { prisma } from "@/db/client"
 import { writeAdminLog } from "@/lib/admin"
 import { apiSuccess, createAdminRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
+import { invalidateSensitiveWordRulesCache } from "@/lib/content-safety"
+import { getRequestIp } from "@/lib/request-ip"
 
 export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   const body = await readJsonBody(request)
@@ -11,6 +13,7 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   const created = await prisma.sensitiveWord.create({
     data: { word, matchType, actionType, status: true },
   })
+  invalidateSensitiveWordRulesCache()
   await writeAdminLog(adminUser.id, "sensitiveWord.create", "CONFIG", created.id, `创建敏感词规则 ${word}`)
   return apiSuccess(undefined, "敏感词规则已创建")
 }, {
@@ -20,7 +23,7 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
 })
 
 export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
-  const requestIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip")?.trim() ?? null
+  const requestIp = getRequestIp(request)
   const body = await readJsonBody(request)
   const id = requireStringField(body, "id", "缺少规则ID")
 
@@ -28,6 +31,7 @@ export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
     where: { id },
     data: { status: Boolean(body.status) },
   })
+  invalidateSensitiveWordRulesCache()
   await writeAdminLog(adminUser.id, "sensitiveWord.toggle", "CONFIG", id, `切换敏感词规则状态为 ${Boolean(body.status) ? "启用" : "停用"}`, requestIp)
 
   return apiSuccess(undefined, "规则状态已更新")
@@ -42,6 +46,7 @@ export const DELETE = createAdminRouteHandler(async ({ request, adminUser }) => 
   const id = requireStringField(body, "id", "缺少规则ID")
 
   await prisma.sensitiveWord.delete({ where: { id } })
+  invalidateSensitiveWordRulesCache()
   await writeAdminLog(adminUser.id, "sensitiveWord.delete", "CONFIG", id, "删除敏感词规则")
   return apiSuccess(undefined, "规则已删除")
 }, {

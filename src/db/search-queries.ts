@@ -7,7 +7,6 @@ export function buildPostSearchWhere(keyword: string) {
     OR: [
       { title: { contains: keyword, mode: "insensitive" as const } },
       { summary: { contains: keyword, mode: "insensitive" as const } },
-      { content: { contains: keyword, mode: "insensitive" as const } },
       { author: { username: { contains: keyword, mode: "insensitive" as const } } },
       { author: { nickname: { contains: keyword, mode: "insensitive" as const } } },
       { board: { name: { contains: keyword, mode: "insensitive" as const } } },
@@ -24,11 +23,13 @@ export function findSearchPosts(params: {
   page: number
   pageSize: number
 }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+
   return prisma.post.findMany({
     where: params.where,
     include: postListInclude,
     orderBy: pinnedPostOrderBy,
-    skip: (params.page - 1) * params.pageSize,
-    take: params.pageSize,
+    skip: (params.page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }

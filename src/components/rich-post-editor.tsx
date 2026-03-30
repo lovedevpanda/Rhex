@@ -114,33 +114,49 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
 
 
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
+      return
+    }
+
+    const invalidFile = files.find((file) => !file.type.startsWith("image/"))
+    if (invalidFile) {
+      setMessage(`仅支持上传图片文件，${invalidFile.name} 不符合要求`)
+      event.target.value = ""
       return
     }
 
     setUploading(true)
     setMessage("")
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("folder", "posts")
 
-    const response = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    })
-    const result = await response.json()
-    setUploading(false)
-    event.target.value = ""
+    try {
+      const uploadedMarkdown: string[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("folder", "posts")
 
-    if (!response.ok) {
-      setMessage(result.message ?? "图片上传失败")
-      return
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.message ?? `${file.name} 上传失败`)
+        }
+
+        uploadedMarkdown.push(`![${file.name}](${result.data?.urlPath ?? ""})`)
+      }
+
+      insertTemplate(uploadedMarkdown.join("\n\n"))
+      setMessage(`已插入 ${uploadedMarkdown.length} 张图片`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "图片上传失败")
+    } finally {
+      setUploading(false)
+      event.target.value = ""
     }
-
-    const imageMarkdown = `![${file.name}](${result.data?.urlPath ?? ""})`
-    insertTemplate(imageMarkdown)
-    setMessage("图片已插入正文")
   }
 
   return (
@@ -169,7 +185,7 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
         <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-background px-4 py-2 text-sm hover:bg-accent/50">
           <ImagePlus className="h-4 w-4" />
           <span>{uploading ? "上传中..." : "插入图片"}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+          <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
         <Button type="button" variant="outline" onClick={() => insertTemplate("## 小标题")}>小标题</Button>
         <Button type="button" variant="outline" onMouseDown={handleToolbarMouseDown} onClick={() => applyWrap(`:${markdownEmojiMap[0]?.shortcode ?? "smile"}: :${markdownEmojiMap[1]?.shortcode ?? "heart"}: :${markdownEmojiMap[2]?.shortcode ?? "rocket"}: `)}>

@@ -39,7 +39,7 @@ import { getLevelDefinitions } from "@/lib/level-system"
 import { getRedeemCodeList } from "@/lib/redeem-codes"
 import { getAdminReports } from "@/lib/reports"
 import { getAdminFriendLinkPageData } from "@/lib/friend-links"
-import { getSensitiveWordPage, getSiteSettings } from "@/lib/site-settings"
+import { getSensitiveWordPage, getServerSiteSettings } from "@/lib/site-settings"
 import { prisma } from "@/db/client"
 
 interface AdminPageProps {
@@ -145,7 +145,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   const [data, siteSettings, adminUsers, filteredPosts, levelDefinitions, badges, announcements, inviteCodes, redeemCodes, reports, sensitiveWordResult, logCenter, friendLinks, verificationTypes, verificationApplications] = await Promise.all([
     getAdminDashboardData(),
-    getSiteSettings(),
+    getServerSiteSettings(),
     getAdminUsers({
       keyword: currentUserKeyword || undefined,
       role: currentUserRole,

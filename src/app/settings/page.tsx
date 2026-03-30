@@ -1,39 +1,47 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Sparkles } from "lucide-react"
+import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Sparkles, ThumbsUp } from "lucide-react"
 
 import { ChangeType } from "@/db/types"
 import { BadgeCenter } from "@/components/badge-center"
 import { InviteCodePurchaseCard } from "@/components/invite-code-purchase-card"
 import { InviteLinkCopyButton } from "@/components/invite-link-copy-button"
 import { LevelBadge } from "@/components/level-badge"
-import { PasswordChangeForm } from "@/components/password-change-form"
 import { ProfileEditForm } from "@/components/profile-edit-form"
 import { RedeemCodeCard } from "@/components/redeem-code-card"
 import { SettingsShell } from "@/components/settings-shell"
+import { SettingsTabs } from "@/components/settings-tabs"
 import { SiteHeader } from "@/components/site-header"
+import { VerificationCenter } from "@/components/verification-center"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { describeBadgeRule, getBadgeCenterData } from "@/lib/badges"
 import { getCurrentUser } from "@/lib/auth"
+import { getPostPath } from "@/lib/post-links"
 import { getUserPointLogs } from "@/lib/points"
 import { getSiteSettings } from "@/lib/site-settings"
-import { getPostPath } from "@/lib/post-links"
-import { getUserBoardFollows, getUserFavoritePosts } from "@/lib/user-panel"
 import { getCurrentUserLevelProgressView } from "@/lib/user-level-view"
+import { getUserBoardFollows, getUserFavoritePosts, getUserLikedPosts, getUserPosts, getUserReplies } from "@/lib/user-panel"
 import { getUserAccountSettings, getUserProfile } from "@/lib/users"
 import { getCurrentUserVerificationData } from "@/lib/verifications"
-import { VerificationCenter } from "@/components/verification-center"
 
 interface SettingsPageProps {
   searchParams?: {
     tab?: string
     page?: string
+    postTab?: string
   }
 }
 
-type SettingsTabKey = "profile" | "password" | "invite" | "level" | "badges" | "verifications" | "points" | "favorites" | "follows"
+type SettingsTabKey = "profile" | "invite" | "post-management" | "level" | "badges" | "verifications" | "points" | "follows"
+type PostManagementTabKey = "posts" | "replies" | "favorites" | "likes"
 
-const tabs: SettingsTabKey[] = ["profile", "password", "invite", "level", "badges", "verifications", "points", "favorites", "follows"]
+const tabs: SettingsTabKey[] = ["profile", "invite", "post-management", "level", "badges", "verifications", "points", "follows"]
+const postManagementTabs: Array<{ key: PostManagementTabKey; label: string }> = [
+  { key: "posts", label: "我的帖子" },
+  { key: "replies", label: "我的回复" },
+  { key: "favorites", label: "我的收藏" },
+  { key: "likes", label: "我的点赞" },
+]
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const [currentUser, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])
@@ -54,12 +62,24 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const currentTab: SettingsTabKey = tabs.includes((searchParams?.tab as SettingsTabKey) ?? "profile")
     ? ((searchParams?.tab as SettingsTabKey) ?? "profile")
     : "profile"
+  const currentPostTab: PostManagementTabKey = postManagementTabs.some((tab) => tab.key === searchParams?.postTab)
+    ? (searchParams?.postTab as PostManagementTabKey)
+    : "posts"
   const currentPage = Math.max(1, Number(searchParams?.page ?? "1") || 1)
 
-  const [favoritePosts, followedBoards, levelView, badges, verificationData, pointLogs] = await Promise.all([
-    currentTab === "favorites"
+  const [userPosts, replies, favoritePosts, likedPosts, followedBoards, levelView, badges, verificationData, pointLogs] = await Promise.all([
+    currentTab === "post-management" && currentPostTab === "posts"
+      ? getUserPosts(currentUser.id, { page: currentPage, pageSize: 10 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserPosts>> | null>(null),
+    currentTab === "post-management" && currentPostTab === "replies"
+      ? getUserReplies(currentUser.id, { page: currentPage, pageSize: 10 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserReplies>> | null>(null),
+    currentTab === "post-management" && currentPostTab === "favorites"
       ? getUserFavoritePosts(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserFavoritePosts>> | null>(null),
+    currentTab === "post-management" && currentPostTab === "likes"
+      ? getUserLikedPosts(currentUser.id, { page: currentPage, pageSize: 10 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserLikedPosts>> | null>(null),
     currentTab === "follows"
       ? getUserBoardFollows(currentUser.id, { page: currentPage, pageSize: 12 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserBoardFollows>> | null>(null),
@@ -82,30 +102,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 <CardTitle>资料设置</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="rounded-[24px] bg-secondary/50 p-4 text-sm text-muted-foreground">
-                  当前头像：未上传头像时会自动显示基于用户名生成的默认头像。头像修改模块下一步可继续接入上传能力。
-                </div>
                 <ProfileEditForm
                   username={profile.username}
                   initialNickname={profile.displayName}
                   initialBio={profile.bio}
+                  initialGender={profile.gender ?? null}
                   initialAvatarPath={profile.avatarPath}
                   initialEmail={dbUser?.email ?? null}
                   initialEmailVerified={Boolean(dbUser?.emailVerifiedAt)}
                   nicknameChangePointCost={settings.nicknameChangePointCost}
                   pointName={settings.pointName}
+                  avatarMaxFileSizeMb={settings.uploadAvatarMaxFileSizeMb}
                 />
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentTab === "password" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>修改密码</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <PasswordChangeForm />
               </CardContent>
             </Card>
           ) : null}
@@ -141,6 +149,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 <InviteCodePurchaseCard enabled={settings.inviteCodePurchaseEnabled} price={settings.inviteCodePrice} pointName={settings.pointName} />
               </CardContent>
             </Card>
+          ) : null}
+
+          {currentTab === "post-management" ? (
+            <PostManagementPanel
+              currentTab={currentPostTab}
+              tabs={postManagementTabs}
+              userPosts={userPosts}
+              replies={replies}
+              favoritePosts={favoritePosts}
+              likedPosts={likedPosts}
+              postLinkDisplayMode={settings.postLinkDisplayMode}
+            />
           ) : null}
 
           {currentTab === "level" ? <LevelPanel levelView={levelView} pointName={settings.pointName} /> : null}
@@ -193,11 +213,46 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           {currentTab === "points" ? <PointsPanel pointLogs={pointLogs} currentPoints={profile.points} pointName={settings.pointName} /> : null}
 
-          {currentTab === "favorites" ? <FavoritesPanel favoritePosts={favoritePosts} postLinkDisplayMode={settings.postLinkDisplayMode} /> : null}
-
           {currentTab === "follows" ? <FollowsPanel followedBoards={followedBoards} /> : null}
         </SettingsShell>
       </main>
+    </div>
+  )
+}
+
+function PostManagementPanel({
+  currentTab,
+  tabs,
+  userPosts,
+  replies,
+  favoritePosts,
+  likedPosts,
+  postLinkDisplayMode,
+}: {
+  currentTab: PostManagementTabKey
+  tabs: Array<{ key: PostManagementTabKey; label: string }>
+  userPosts: Awaited<ReturnType<typeof getUserPosts>> | null
+  replies: Awaited<ReturnType<typeof getUserReplies>> | null
+  favoritePosts: Awaited<ReturnType<typeof getUserFavoritePosts>> | null
+  likedPosts: Awaited<ReturnType<typeof getUserLikedPosts>> | null
+  postLinkDisplayMode: "SLUG" | "ID"
+}) {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="space-y-1">
+            <CardTitle>帖子管理</CardTitle>
+            <p className="text-sm text-muted-foreground">集中查看你发布、回复、收藏和点赞过的帖子内容。</p>
+          </div>
+          <SettingsTabs tabs={tabs} queryKey="postTab" basePath="/settings?tab=post-management" />
+        </CardHeader>
+      </Card>
+
+      {currentTab === "posts" ? <MyPostsPanel userPosts={userPosts} postLinkDisplayMode={postLinkDisplayMode} /> : null}
+      {currentTab === "replies" ? <MyRepliesPanel replies={replies} postLinkDisplayMode={postLinkDisplayMode} /> : null}
+      {currentTab === "favorites" ? <FavoritesPanel favoritePosts={favoritePosts} postLinkDisplayMode={postLinkDisplayMode} /> : null}
+      {currentTab === "likes" ? <MyLikesPanel likedPosts={likedPosts} postLinkDisplayMode={postLinkDisplayMode} /> : null}
     </div>
   )
 }
@@ -291,6 +346,65 @@ function LevelPanel({ levelView, pointName }: { levelView: Awaited<ReturnType<ty
   )
 }
 
+function MyPostsPanel({ userPosts, postLinkDisplayMode }: { userPosts: Awaited<ReturnType<typeof getUserPosts>> | null; postLinkDisplayMode: "SLUG" | "ID" }) {
+  if (!userPosts) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载我的帖子，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return <PostListPanel title="我的帖子" emptyText="当前还没有发布过帖子。" posts={userPosts} postLinkDisplayMode={postLinkDisplayMode} paginationBase="/settings?tab=post-management&postTab=posts" />
+}
+
+function MyRepliesPanel({ replies, postLinkDisplayMode }: { replies: Awaited<ReturnType<typeof getUserReplies>> | null; postLinkDisplayMode: "SLUG" | "ID" }) {
+  if (!replies) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载我的回复，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle>我的回复</CardTitle>
+          <span className="text-sm text-muted-foreground">共 {replies.total} 条记录 · 第 {replies.page} / {replies.totalPages} 页</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {replies.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有发表过回复。</p> : null}
+        {replies.items.map((reply) => (
+          <Link key={reply.id} href={getPostPath({ id: reply.postId, slug: reply.postSlug }, { mode: postLinkDisplayMode })} className="block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{reply.boardName}</span>
+              <span>·</span>
+              <span>{formatDateTime(reply.createdAt)}</span>
+              {reply.replyToUsername ? (
+                <>
+                  <span>·</span>
+                  <span>回复 @{reply.replyToUsername}</span>
+                </>
+              ) : null}
+            </div>
+            <h2 className="mt-2 text-base font-semibold">{reply.postTitle}</h2>
+            <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{reply.content}</p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <ThumbsUp className="h-3.5 w-3.5" />
+              <span>{reply.likeCount} 次点赞</span>
+            </div>
+          </Link>
+        ))}
+
+        {replies.total > 0 ? <PaginationBar page={replies.page} hasPrevPage={replies.hasPrevPage} hasNextPage={replies.hasNextPage} basePath="/settings?tab=post-management&postTab=replies" /> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 function FollowsPanel({ followedBoards }: { followedBoards: Awaited<ReturnType<typeof getUserBoardFollows>> | null }) {
   if (!followedBoards) {
     return (
@@ -333,17 +447,7 @@ function FollowsPanel({ followedBoards }: { followedBoards: Awaited<ReturnType<t
           ))}
         </div>
 
-        {followedBoards.total > 0 ? (
-          <div className="flex items-center justify-between pt-2">
-            <Link href={`/settings?tab=follows&page=${Math.max(1, followedBoards.page - 1)}`} className={followedBoards.hasPrevPage ? "" : "pointer-events-none opacity-50"}>
-              <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
-            </Link>
-            <span className="text-sm text-muted-foreground">第 {followedBoards.page} 页</span>
-            <Link href={`/settings?tab=follows&page=${followedBoards.page + 1}`} className={followedBoards.hasNextPage ? "" : "pointer-events-none opacity-50"}>
-              <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
-            </Link>
-          </div>
-        ) : null}
+        {followedBoards.total > 0 ? <PaginationBar page={followedBoards.page} hasPrevPage={followedBoards.hasPrevPage} hasNextPage={followedBoards.hasNextPage} basePath="/settings?tab=follows" /> : null}
       </CardContent>
     </Card>
   )
@@ -358,18 +462,46 @@ function FavoritesPanel({ favoritePosts, postLinkDisplayMode }: { favoritePosts:
     )
   }
 
+  return <PostListPanel title="我的收藏" emptyText="当前还没有收藏的帖子。" posts={favoritePosts} postLinkDisplayMode={postLinkDisplayMode} paginationBase="/settings?tab=post-management&postTab=favorites" />
+}
+
+function MyLikesPanel({ likedPosts, postLinkDisplayMode }: { likedPosts: Awaited<ReturnType<typeof getUserLikedPosts>> | null; postLinkDisplayMode: "SLUG" | "ID" }) {
+  if (!likedPosts) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载点赞列表，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return <PostListPanel title="我的点赞" emptyText="当前还没有点赞过帖子。" posts={likedPosts} postLinkDisplayMode={postLinkDisplayMode} paginationBase="/settings?tab=post-management&postTab=likes" />
+}
+
+function PostListPanel({
+  title,
+  emptyText,
+  posts,
+  postLinkDisplayMode,
+  paginationBase,
+}: {
+  title: string
+  emptyText: string
+  posts: Awaited<ReturnType<typeof getUserPosts>>
+  postLinkDisplayMode: "SLUG" | "ID"
+  paginationBase: string
+}) {
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>帖子收藏</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {favoritePosts.total} 条记录 · 第 {favoritePosts.page} / {favoritePosts.totalPages} 页</span>
+          <CardTitle>{title}</CardTitle>
+          <span className="text-sm text-muted-foreground">共 {posts.total} 条记录 · 第 {posts.page} / {posts.totalPages} 页</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {favoritePosts.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有收藏的帖子。</p> : null}
-        {favoritePosts.items.map((post) => (
-          <a key={post.id} href={getPostPath({ id: post.id, slug: post.slug }, { mode: postLinkDisplayMode })} className="block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
+        {posts.items.length === 0 ? <p className="text-sm text-muted-foreground">{emptyText}</p> : null}
+        {posts.items.map((post) => (
+          <Link key={post.id} href={getPostPath({ id: post.id, slug: post.slug }, { mode: postLinkDisplayMode })} className="block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{post.board}</span>
               <span>·</span>
@@ -377,20 +509,10 @@ function FavoritesPanel({ favoritePosts, postLinkDisplayMode }: { favoritePosts:
             </div>
             <h2 className="mt-2 text-base font-semibold">{post.title}</h2>
             <p className="mt-2 text-sm text-muted-foreground">{post.excerpt}</p>
-          </a>
+          </Link>
         ))}
 
-        {favoritePosts.total > 0 ? (
-          <div className="flex items-center justify-between pt-2">
-            <Link href={`/settings?tab=favorites&page=${Math.max(1, favoritePosts.page - 1)}`} className={favoritePosts.hasPrevPage ? "" : "pointer-events-none opacity-50"}>
-              <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
-            </Link>
-            <span className="text-sm text-muted-foreground">第 {favoritePosts.page} 页</span>
-            <Link href={`/settings?tab=favorites&page=${favoritePosts.page + 1}`} className={favoritePosts.hasNextPage ? "" : "pointer-events-none opacity-50"}>
-              <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
-            </Link>
-          </div>
-        ) : null}
+        {posts.total > 0 ? <PaginationBar page={posts.page} hasPrevPage={posts.hasPrevPage} hasNextPage={posts.hasNextPage} basePath={paginationBase} /> : null}
       </CardContent>
     </Card>
   )
@@ -400,69 +522,60 @@ function PointsPanel({ pointLogs, currentPoints, pointName }: { pointLogs: Await
   if (!pointLogs) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载{pointName}明细，请稍后刷新重试。</CardContent>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载积分明细，请稍后刷新重试。</CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-stretch">
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>我的{pointName}</CardTitle>
-          </CardHeader>
-          <CardContent className="h-full">
-            <div>
-              <p className="text-sm text-muted-foreground">当前{pointName}</p>
-              <p className="mt-2 text-3xl font-semibold">{currentPoints}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <RedeemCodeCard pointName={pointName} currentPoints={currentPoints} />
-      </div>
-
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>{pointName}明细</CardTitle>
-            <span className="text-sm text-muted-foreground">共 {pointLogs.total} 条记录 · 第 {pointLogs.page} / {pointLogs.totalPages} 页</span>
+            <span className="text-sm text-muted-foreground">当前余额：{currentPoints}</span>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {pointLogs.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有{pointName}变动记录。</p> : null}
-          {pointLogs.items.map((log) => (
-            <div key={log.id} className="rounded-[20px] border border-border bg-card p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className={log.changeType === ChangeType.INCREASE ? "rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700" : "rounded-full bg-rose-100 px-3 py-1 text-xs text-rose-700"}>
-                    {log.changeType === ChangeType.INCREASE ? `+${log.changeValue}` : `-${log.changeValue}`}
+          {pointLogs.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有任何积分变动记录。</p> : null}
+          {pointLogs.items.map((log) => {
+            const positive = log.changeType === ChangeType.INCREASE
+            return (
+              <div key={log.id} className="rounded-[20px] border border-border px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{log.reason}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</p>
+                  </div>
+                  <span className={positive ? "rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-700" : "rounded-full bg-rose-100 px-3 py-1 text-sm font-medium text-rose-700"}>
+                    {positive ? "+" : "-"}
+                    {log.changeValue}
                   </span>
-                  {log.isRedeemCode ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700">兑换码</span> : null}
-                  <span className="text-sm font-medium">{log.reason}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{log.createdAt}</span>
               </div>
+            )
+          })}
 
-              {log.relatedType && log.relatedId ? <p className="mt-2 text-xs text-muted-foreground">关联对象：{log.relatedType} / {log.relatedId}</p> : null}
-            </div>
-          ))}
-
-          {pointLogs.total > 0 ? (
-            <div className="flex items-center justify-between pt-2">
-              <Link href={`/settings?tab=points&page=${Math.max(1, pointLogs.page - 1)}`} className={pointLogs.hasPrevPage ? "" : "pointer-events-none opacity-50"}>
-                <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
-              </Link>
-              <span className="text-sm text-muted-foreground">第 {pointLogs.page} 页</span>
-              <Link href={`/settings?tab=points&page=${pointLogs.page + 1}`} className={pointLogs.hasNextPage ? "" : "pointer-events-none opacity-50"}>
-                <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
-              </Link>
-            </div>
-          ) : null}
+          {pointLogs.total > 0 ? <PaginationBar page={pointLogs.page} hasPrevPage={pointLogs.hasPrevPage} hasNextPage={pointLogs.hasNextPage} basePath="/settings?tab=points" /> : null}
         </CardContent>
       </Card>
+
+      <RedeemCodeCard pointName={pointName} currentPoints={currentPoints} />
     </div>
+  )
+}
+
+function QuickLink({ href, title, description }: { href: string; title: string; description: string }) {
+  return (
+    <Link href={href} className="rounded-[22px] border border-border bg-card px-5 py-4 transition-colors hover:bg-accent/40">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-medium">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+      </div>
+    </Link>
   )
 }
 
@@ -471,43 +584,64 @@ function StatCard({ title, value, hint, icon }: { title: string; value: number; 
     <Card>
       <CardContent className="p-5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-accent text-foreground">{icon}</div>
+          <div>
+            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="mt-2 text-3xl font-semibold">{value}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+          </div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">{icon}</div>
         </div>
-        <p className="mt-4 text-3xl font-semibold">{value}</p>
-        <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>
   )
 }
 
 function ProgressItem({ title, current, required, remaining, completed }: { title: string; current: number; required: number; remaining: number; completed: boolean }) {
-  const progress = required <= 0 ? 100 : Math.min(100, Math.round((current / required) * 100))
+  const progress = required > 0 ? Math.min(100, Math.round((current / required) * 100)) : 100
 
   return (
     <div className="rounded-[24px] border border-border p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">{title}</p>
-        <span className={completed ? "rounded-full bg-emerald-100 px-3 py-1 text-[11px] text-emerald-700" : "rounded-full bg-secondary px-3 py-1 text-[11px] text-muted-foreground"}>
-          {completed ? "已满足" : `还差 ${remaining}`}
+        <p className="font-medium">{title}</p>
+        <span className={completed ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700" : "rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground"}>
+          {completed ? "已完成" : `还差 ${remaining}`}
         </span>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">当前 {current} / 目标 {required}</p>
-      <div className="mt-3 h-2 rounded-full bg-secondary/70">
+      <div className="mt-4 h-2 rounded-full bg-secondary">
         <div className="h-2 rounded-full bg-foreground transition-all" style={{ width: `${progress}%` }} />
       </div>
+      <p className="mt-3 text-sm text-muted-foreground">{current} / {required}</p>
     </div>
   )
 }
 
-function QuickLink({ href, title, description }: { href: string; title: string; description: string }) {
+function PaginationBar({ page, hasPrevPage, hasNextPage, basePath }: { page: number; hasPrevPage: boolean; hasNextPage: boolean; basePath: string }) {
   return (
-    <Link href={href} className="rounded-[22px] border border-border p-4 transition-colors hover:bg-accent/40">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">{title}</p>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-    </Link>
+    <div className="flex items-center justify-end gap-2 pt-2">
+      <Link
+        href={`${basePath}&page=${Math.max(1, page - 1)}`}
+        aria-disabled={!hasPrevPage}
+        className={hasPrevPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
+      >
+        上一页
+      </Link>
+      <Link
+        href={`${basePath}&page=${page + 1}`}
+        aria-disabled={!hasNextPage}
+        className={hasNextPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
+      >
+        下一页
+      </Link>
+    </div>
   )
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value))
 }

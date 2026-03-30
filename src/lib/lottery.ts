@@ -14,7 +14,7 @@ import { canSendEmail } from "@/lib/mailer"
 
 
 import { parseBusinessDateTime } from "@/lib/formatters"
-import { getSiteSettings } from "@/lib/site-settings"
+import { getServerSiteSettings } from "@/lib/site-settings"
 
 
 
@@ -491,7 +491,7 @@ async function sendLotteryWinnerEmails(input: {
   }
 
   const nodemailer = await import("nodemailer")
-  const settings = await getSiteSettings()
+  const settings = await getServerSiteSettings()
   if (!settings.smtpEnabled || !settings.smtpHost || !settings.smtpPort || !settings.smtpUser || !settings.smtpPass || !settings.smtpFrom) {
     return
   }

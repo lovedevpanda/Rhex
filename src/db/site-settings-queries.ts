@@ -38,6 +38,8 @@ export const siteSettingsSelect = {
   loginCaptchaMode: true,
   turnstileSiteKey: true,
   nicknameChangePointCost: true,
+  postEditableMinutes: true,
+  commentEditableMinutes: true,
   tippingEnabled: true,
   tippingDailyLimit: true,
   tippingPerPostLimit: true,

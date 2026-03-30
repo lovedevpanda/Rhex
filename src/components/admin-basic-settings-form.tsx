@@ -35,6 +35,8 @@ interface AdminBasicSettingsFormProps {
     loginCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN"
     turnstileSiteKey?: string | null
     nicknameChangePointCost: number
+    postEditableMinutes: number
+    commentEditableMinutes: number
     tippingEnabled: boolean
     tippingDailyLimit: number
     tippingPerPostLimit: number
@@ -101,6 +103,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
   const [checkInMakeUpCardPrice, setCheckInMakeUpCardPrice] = useState(String(initialSettings.checkInMakeUpCardPrice))
   const [checkInVipMakeUpCardPrice, setCheckInVipMakeUpCardPrice] = useState(String(initialSettings.checkInVipMakeUpCardPrice))
   const [nicknameChangePointCost, setNicknameChangePointCost] = useState(String(initialSettings.nicknameChangePointCost))
+  const [postEditableMinutes, setPostEditableMinutes] = useState(String(initialSettings.postEditableMinutes))
+  const [commentEditableMinutes, setCommentEditableMinutes] = useState(String(initialSettings.commentEditableMinutes))
   const [inviteRewardInviter, setInviteRewardInviter] = useState(String(initialSettings.inviteRewardInviter))
   const [inviteRewardInvitee, setInviteRewardInvitee] = useState(String(initialSettings.inviteRewardInvitee))
   const [registrationEnabled, setRegistrationEnabled] = useState(initialSettings.registrationEnabled)
@@ -226,6 +230,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
         checkInMakeUpCardPrice: Number(checkInMakeUpCardPrice),
         checkInVipMakeUpCardPrice: Number(checkInVipMakeUpCardPrice),
         nicknameChangePointCost: Number(nicknameChangePointCost),
+        postEditableMinutes: Number(postEditableMinutes),
+        commentEditableMinutes: Number(commentEditableMinutes),
         section: "site-profile",
       }
     }
@@ -317,6 +323,10 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
             <Field label="Logo 文案" value={siteLogoText} onChange={setSiteLogoText} placeholder="如 兴趣论坛" />
             <Field label="积分名称" value={pointName} onChange={setPointName} placeholder="如 积分 / 金币 / 钻石" />
             <Field label="修改昵称所需积分" value={nicknameChangePointCost} onChange={setNicknameChangePointCost} placeholder="0 表示免费" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="帖子可编辑分钟数" value={postEditableMinutes} onChange={setPostEditableMinutes} placeholder="如 10" />
+            <Field label="评论可编辑分钟数" value={commentEditableMinutes} onChange={setCommentEditableMinutes} placeholder="如 5" />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SwitchField label="签到开关" checked={checkInEnabled} onChange={setCheckInEnabled} />

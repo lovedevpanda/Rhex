@@ -24,8 +24,8 @@ export async function SiteFooter() {
 
         </div>
         <div className="mt-6 border-t pt-6 text-center text-xs text-muted-foreground md:text-left">{settings.siteName} © 2026</div>
-        <div id="site-analytics-hook" data-hook="site-analytics" className="sr-only" aria-hidden="true" />
-        {settings.analyticsCode ? settings.analyticsCode : null}
+        <div id="site-analytics-hook" data-hook="site-analytics" />
+        {settings.analyticsCode ? <div dangerouslySetInnerHTML={{ __html: settings.analyticsCode }} /> : null}
       </div>
     </footer>
   )

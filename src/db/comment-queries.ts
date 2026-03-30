@@ -66,6 +66,20 @@ export function findCommentParentById(parentId: string) {
   })
 }
 
+export function findEditableCommentById(commentId: string) {
+  return prisma.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      postId: true,
+      userId: true,
+      status: true,
+      content: true,
+      createdAt: true,
+    },
+  })
+}
+
 export function buildCommentViewerLikesInclude(viewerUserId?: number) {
   if (!viewerUserId) {
     return false as const
@@ -116,6 +130,8 @@ export async function findRootCommentPageById(params: {
   pageSize: number
   sort: "oldest" | "newest"
 }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+
   const rootComment = await prisma.comment.findFirst({
     where: {
       id: params.rootCommentId,
@@ -153,14 +169,14 @@ export async function findRootCommentPageById(params: {
   })
 
   const totalRootComments = await countRootCommentsByPostId(params.postId)
-  const oldestPage = Math.max(1, Math.ceil((precedingCount + 1) / params.pageSize))
+  const oldestPage = Math.max(1, Math.ceil((precedingCount + 1) / normalizedPageSize))
 
   if (params.sort === "oldest") {
     return oldestPage
   }
 
   const newestIndex = totalRootComments - precedingCount
-  return Math.max(1, Math.ceil(newestIndex / params.pageSize))
+  return Math.max(1, Math.ceil(newestIndex / normalizedPageSize))
 }
 
 export function findRootCommentsByPostId(params: {
@@ -171,6 +187,8 @@ export function findRootCommentsByPostId(params: {
   pageSize: number
   viewerUserId?: number
 }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+
   return prisma.comment.findMany({
     where: {
       postId: params.postId,
@@ -182,8 +200,8 @@ export function findRootCommentsByPostId(params: {
       { isPinnedByAuthor: "desc" },
       { createdAt: params.sort === "newest" ? "desc" : "asc" },
     ],
-    skip: (params.page - 1) * params.pageSize,
-    take: params.pageSize,
+    skip: (params.page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 
@@ -215,6 +233,49 @@ export function countUserRepliesByPostId(postId: string, userId: number) {
       userId,
       status: "NORMAL",
     },
+  })
+}
+
+export function updateCommentContentById(commentId: string, data: { content: string; reviewNote: string | null }) {
+  return prisma.comment.update({
+    where: { id: commentId },
+    data: {
+      content: data.content,
+    },
+    select: {
+      id: true,
+      postId: true,
+      parentId: true,
+      replyToUserId: true,
+    },
+  })
+}
+
+export function createCommentMentionNotifications(params: {
+  commentId: string
+  senderId: number
+  senderName: string
+  content: string
+  mentionUserIds: number[]
+  excludeUserIds?: number[]
+}) {
+  const excludeUserIds = new Set([params.senderId, ...(params.excludeUserIds ?? [])])
+  const notificationTargets = [...new Set(params.mentionUserIds)].filter((userId) => !excludeUserIds.has(userId))
+
+  if (notificationTargets.length === 0) {
+    return Promise.resolve({ count: 0 })
+  }
+
+  return prisma.notification.createMany({
+    data: notificationTargets.map((userId) => ({
+      userId,
+      type: NotificationType.MENTION,
+      senderId: params.senderId,
+      relatedType: "COMMENT" as const,
+      relatedId: params.commentId,
+      title: "你被提及了",
+      content: `${params.senderName} 在评论中提到了你：${params.content.slice(0, 80)}`,
+    })),
   })
 }
 

@@ -31,6 +31,7 @@ const DEFAULT_COOLDOWN_MS = 3_000
 const DEFAULT_DEDUPE_WINDOW_MS = 5_000
 const RATE_LIMIT_KIND = "rate"
 const DEDUPE_KIND = "dedupe"
+const PURGE_SAMPLING_RATE = 0.01
 
 
 function normalizeIdentity(identity?: WriteGuardIdentity) {
@@ -53,6 +54,10 @@ function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 
+function shouldPurgeExpiredRequestControls() {
+  return Math.random() < PURGE_SAMPLING_RATE
+}
+
 async function createRequestControlRecord(params: {
   scope: string
   identity: string
@@ -62,7 +67,9 @@ async function createRequestControlRecord(params: {
   message: string
 }) {
   try {
-    await purgeExpiredRequestControls(new Date())
+    if (shouldPurgeExpiredRequestControls()) {
+      await purgeExpiredRequestControls(new Date())
+    }
 
     await createRequestControl({
       scope: params.scope,

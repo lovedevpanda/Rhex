@@ -8,7 +8,7 @@ import { extractSummaryFromContent } from "@/lib/content"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { parseBusinessDateTime } from "@/lib/formatters"
 import { determineLotteryTriggerMode, normalizeLotteryConfig } from "@/lib/lottery"
-import { createPostMentionNotifications } from "@/lib/post-mentions"
+import { createPostMentionNotifications, stripPostContentUserLinks } from "@/lib/post-mentions"
 
 import { buildPostContentDocument, getAllPostContentText, serializePostContentDocument } from "@/lib/post-content"
 import { createPostRedPacketAfterPostCreated, normalizePostRedPacketConfig } from "@/lib/post-red-packets"
@@ -119,7 +119,6 @@ export async function createPostFlow(body: unknown) {
   const post = await prisma.$transaction(async (tx) => {
     const lotteryData = normalizedLottery?.data
     const postCreateData: Prisma.PostUncheckedCreateInput = {
-
       title: titleSafety.sanitizedText,
       slug: createPostSlug(titleSafety.sanitizedText),
       content: serializedContent,
@@ -127,7 +126,6 @@ export async function createPostFlow(body: unknown) {
       boardId: boardContext.board.id,
       authorId: author.id,
       type: postType,
-
       status: shouldPending ? "PENDING" : "NORMAL",
       commentsVisibleToAuthorOnly,
       minViewLevel,
@@ -140,15 +138,13 @@ export async function createPostFlow(body: unknown) {
       lotteryStartsAt: postType === "LOTTERY" ? (lotteryData?.startsAt ?? new Date()) : null,
       lotteryEndsAt: postType === "LOTTERY" ? (lotteryData?.endsAt ?? null) : null,
       lotteryParticipantGoal: postType === "LOTTERY" ? (lotteryData?.participantGoal ?? null) : null,
-      editableUntil: new Date(Date.now() + 10 * 60 * 1000),
+      editableUntil: new Date(Date.now() + Math.max(0, settings.postEditableMinutes) * 60 * 1000),
       publishedAt: shouldPending ? null : new Date(),
       reviewNote: titleSafety.shouldReview || contentSafety.shouldReview || tagsSafety?.shouldReview ? "命中敏感词规则，已进入审核" : null,
       pollOptions: postType === "POLL" ? { create: pollOptions.map((option, index) => ({ content: option, sortOrder: index })) } : undefined,
       lotteryPrizes: postType === "LOTTERY" ? { create: (lotteryData?.prizes ?? []).map((prize, index) => ({ title: prize.title, description: prize.description, quantity: prize.quantity, sortOrder: index })) } : undefined,
       lotteryConditions: postType === "LOTTERY" ? { create: (lotteryData?.conditions ?? []).map((condition, index) => ({ type: condition.type, operator: condition.operator ?? "GTE", value: condition.value, description: condition.description, groupKey: condition.groupKey ?? "default", sortOrder: index })) } : undefined,
     }
-
-
 
     const createdPost = await tx.post.create({ data: { ...postCreateData, activityAt: new Date() } })
 
@@ -216,13 +212,23 @@ export async function createPostFlow(body: unknown) {
     })
 
     if (!shouldPending) {
-      await createPostMentionNotifications({
+      const mentionResult = await createPostMentionNotifications({
         tx,
         postId: createdPost.id,
         senderId: author.id,
         senderName: author.nickname ?? author.username,
         rawPostContent: serializedContent,
       })
+
+      if (mentionResult.content !== serializedContent) {
+        await tx.post.update({
+          where: { id: createdPost.id },
+          data: {
+            content: mentionResult.content,
+            summary: extractSummaryFromContent(getAllPostContentText(stripPostContentUserLinks(mentionResult.content))) || titleSafety.sanitizedText,
+          },
+        })
+      }
     }
 
     return createdPost

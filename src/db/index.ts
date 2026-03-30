@@ -4,5 +4,7 @@ export * from "@/db/helpers"
 export * from "@/db/queries"
 export * from "@/db/types"
 export type * from "@/db/types"
+export * from "@/db/upload-queries"
+
 
 

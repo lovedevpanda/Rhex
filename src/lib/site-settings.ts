@@ -14,7 +14,6 @@ import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
 import { normalizeHeaderAppIconName, parseSiteHeaderAppLinks, type SiteHeaderAppLinkItem } from "./site-header-app-links"
 
-
 export type { FooterLinkItem } from "@/lib/shared/config-parsers"
 
 export type PostLinkDisplayMode = "SLUG" | "ID"
@@ -54,6 +53,8 @@ export interface SiteSettingsData {
   loginCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN"
   turnstileSiteKey?: string | null
   nicknameChangePointCost: number
+  postEditableMinutes: number
+  commentEditableMinutes: number
   tippingEnabled: boolean
   tippingDailyLimit: number
   tippingPerPostLimit: number
@@ -80,12 +81,6 @@ export interface SiteSettingsData {
   registerGenderRequired: boolean
   registerInviterEnabled: boolean
   smtpEnabled: boolean
-  smtpHost?: string | null
-  smtpPort?: number | null
-  smtpUser?: string | null
-  smtpPass?: string | null
-  smtpFrom?: string | null
-  smtpSecure: boolean
   vipMonthlyPrice: number
   vipQuarterlyPrice: number
   vipYearlyPrice: number
@@ -104,6 +99,73 @@ export interface SiteSettingsData {
   appStateJson?: string | null
 }
 
+/** 含敏感字段的完整配置，仅在服务端内部使用（mailer、lottery 等），禁止序列化到客户端 */
+export interface ServerSiteSettingsData extends SiteSettingsData {
+  smtpHost?: string | null
+  smtpPort?: number | null
+  smtpUser?: string | null
+  smtpPass?: string | null
+  smtpFrom?: string | null
+  smtpSecure: boolean
+}
+
+const SITE_SETTINGS_CACHE_TTL_MS = 60_000
+
+let cachedServerSiteSettings: ServerSiteSettingsData | null = null
+let siteSettingsCacheExpiry = 0
+let siteSettingsCachePromise: Promise<ServerSiteSettingsData> | null = null
+
+function getDefaultServerSiteSettings(): ServerSiteSettingsData {
+  return mapSiteSettings({
+    ...defaultSiteSettingsCreateInput,
+    checkInMakeUpCardPrice: 0,
+    checkInVipMakeUpCardPrice: 0,
+    postOfflinePrice: 0,
+    postOfflineVip1Price: 0,
+    postOfflineVip2Price: 0,
+    postOfflineVip3Price: 0,
+  })
+}
+
+function setSiteSettingsCache(data: ServerSiteSettingsData) {
+  cachedServerSiteSettings = data
+  siteSettingsCacheExpiry = Date.now() + SITE_SETTINGS_CACHE_TTL_MS
+}
+
+async function readSiteSettingsFromDB(): Promise<ServerSiteSettingsData> {
+  const record = await findSiteSettingsRecord()
+
+  if (!record) {
+    return getDefaultServerSiteSettings()
+  }
+
+  return mapSiteSettings(record)
+}
+
+export function invalidateSiteSettingsCache() {
+  cachedServerSiteSettings = null
+  siteSettingsCacheExpiry = 0
+  siteSettingsCachePromise = null
+}
+
+async function getMemoryCachedSiteSettings(): Promise<ServerSiteSettingsData> {
+  if (cachedServerSiteSettings && Date.now() < siteSettingsCacheExpiry) {
+    return cachedServerSiteSettings
+  }
+
+  if (!siteSettingsCachePromise) {
+    siteSettingsCachePromise = readSiteSettingsFromDB()
+      .then((data) => {
+        setSiteSettingsCache(data)
+        return data
+      })
+      .finally(() => {
+        siteSettingsCachePromise = null
+      })
+  }
+
+  return siteSettingsCachePromise
+}
 
 function mapSiteSettings(record: {
   siteName: string
@@ -137,6 +199,8 @@ function mapSiteSettings(record: {
   loginCaptchaMode: string
   turnstileSiteKey?: string | null
   nicknameChangePointCost: number
+  postEditableMinutes: number
+  commentEditableMinutes: number
   tippingEnabled: boolean
   tippingDailyLimit: number
   tippingPerPostLimit: number
@@ -187,7 +251,7 @@ function mapSiteSettings(record: {
   friendLinksEnabled: boolean
   friendLinkApplicationEnabled: boolean
   friendLinkAnnouncement: string
-}): SiteSettingsData {
+}): ServerSiteSettingsData {
   return {
     siteName: record.siteName,
     siteSlogan: record.siteSlogan,
@@ -223,6 +287,8 @@ function mapSiteSettings(record: {
     loginCaptchaMode: normalizeCaptchaMode(record.loginCaptchaMode),
     turnstileSiteKey: record.turnstileSiteKey,
     nicknameChangePointCost: record.nicknameChangePointCost,
+    postEditableMinutes: normalizePositiveInteger(record.postEditableMinutes, 10),
+    commentEditableMinutes: normalizePositiveInteger(record.commentEditableMinutes, 5),
     tippingEnabled: record.tippingEnabled,
     tippingDailyLimit: record.tippingDailyLimit,
     tippingPerPostLimit: record.tippingPerPostLimit,
@@ -277,33 +343,37 @@ export async function ensureSiteSettings(): Promise<SiteSettingsData> {
   const existingRecord = await findSiteSettingsRecord()
 
   if (existingRecord) {
-    return mapSiteSettings(existingRecord)
+    return toPublicSiteSettings(mapSiteSettings(existingRecord))
   }
 
   const createdRecord = await createSiteSettingsRecord(defaultSiteSettingsCreateInput)
 
-  return mapSiteSettings(createdRecord)
+  invalidateSiteSettingsCache()
+
+  return toPublicSiteSettings(mapSiteSettings(createdRecord))
 }
 
-const getCachedSiteSettings = cache(async (): Promise<SiteSettingsData> => {
-  const record = await findSiteSettingsRecord()
+function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
+  const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, smtpSecure, ...rest } = data
+  void smtpHost
+  void smtpPort
+  void smtpUser
+  void smtpPass
+  void smtpFrom
+  void smtpSecure
+  return rest
+}
 
-  if (!record) {
-    return mapSiteSettings({
-      ...defaultSiteSettingsCreateInput,
-      checkInMakeUpCardPrice: 0,
-      checkInVipMakeUpCardPrice: 0,
-      postOfflinePrice: 0,
-      postOfflineVip1Price: 0,
-      postOfflineVip2Price: 0,
-      postOfflineVip3Price: 0,
-    })
-  }
-
-  return mapSiteSettings(record)
+const getCachedSiteSettings = cache(async (): Promise<ServerSiteSettingsData> => {
+  return getMemoryCachedSiteSettings()
 })
 
 export async function getSiteSettings(): Promise<SiteSettingsData> {
+  return toPublicSiteSettings(await getCachedSiteSettings())
+}
+
+/** 仅服务端内部使用（mailer、lottery 等），包含 smtp 等敏感字段，禁止序列化到客户端 */
+export async function getServerSiteSettings(): Promise<ServerSiteSettingsData> {
   return getCachedSiteSettings()
 }
 

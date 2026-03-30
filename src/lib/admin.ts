@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { resolveBoardSettings } from "@/lib/board-settings"
 import type { AdminPostListResult } from "@/lib/admin-post-management"
 import { serializeDateTime } from "@/lib/formatters"
+export { getRequestIp } from "@/lib/request-ip"
 
 import { getPostStatusLabel, getPostTypeLabel, isLocalPostType, type LocalPostType } from "@/lib/post-types"
 import { prisma } from "@/db/client"
@@ -532,28 +533,6 @@ export async function getAdminPosts(query: AdminPostQuery = {}): Promise<AdminPo
       hasNextPage: page < totalPages,
     },
   }
-}
-
-export function getRequestIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")
-  if (forwardedFor) {
-    const firstIp = forwardedFor.split(",").map((item) => item.trim()).find(Boolean)
-    if (firstIp) {
-      return firstIp
-    }
-  }
-
-  const realIp = request.headers.get("x-real-ip")?.trim()
-  if (realIp) {
-    return realIp
-  }
-
-  const cfIp = request.headers.get("cf-connecting-ip")?.trim()
-  if (cfIp) {
-    return cfIp
-  }
-
-  return null
 }
 
 export async function writeAdminLog(adminId: number, action: string, targetType: string, targetId: string, detail?: string, ip?: string | null) {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { createPortal } from "react-dom"
 
+import { renderUserLinkTokens } from "@/lib/mentions"
 import { renderMarkdownEmojiHtml, type MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
 
@@ -21,7 +22,7 @@ import markdownItSup from "markdown-it-sup"
 import markdownItTaskLists from "markdown-it-task-lists"
 import hljs from "highlight.js"
 import mermaid from "mermaid"
-import { X } from "lucide-react"
+import { ChevronLeft, ChevronRight, X } from "lucide-react"
 
 interface MarkdownContentProps {
   content: string
@@ -33,6 +34,11 @@ interface MarkdownContentProps {
 interface LightboxImage {
   src: string
   alt: string
+}
+
+interface LightboxState {
+  images: LightboxImage[]
+  index: number
 }
 
 interface MarkdownHeadingToken {
@@ -126,9 +132,8 @@ function renderIframe(src: string) {
     return `<pre><code>${escapeHtml(`MEDIA::iframe::${src}`)}</code></pre>`
   }
 
-
   return [
-    '<div>',
+    "<div>",
     `<iframe  frameborder="no" border="0" marginwidth="0" marginheight="0" class="block w-full" src="${escapeHtml(normalizedSrc)}" title="嵌入媒体" width="100%"  loading="lazy" referrerpolicy="no-referrer-when-downgrade" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="true"></iframe>`,
     "</div>",
   ].join("")
@@ -291,7 +296,8 @@ function createMarkdownRenderer(emojiItems: MarkdownEmojiItem[]) {
 
 function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
   const markdown = createMarkdownRenderer(emojiItems)
-  const sanitizedInput = sanitizeMarkdownInlineHtml(input)
+  const normalizedInput = renderUserLinkTokens(input)
+  const sanitizedInput = sanitizeMarkdownInlineHtml(normalizedInput)
   const lines = sanitizedInput.split("\n")
   const htmlChunks: string[] = []
   const markdownBuffer: string[] = []
@@ -370,66 +376,48 @@ function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
     .replace(/<div class="md-callout-body">/g, '<div class="space-y-3 text-sm leading-7">')
 }
 
-function bindImageLightbox(container: HTMLElement, onOpenImage: (image: LightboxImage) => void) {
-  const cleanups: Array<() => void> = []
+function bindImageLightbox(container: HTMLElement, onOpen: (images: LightboxImage[], index: number) => void) {
+  const imageEls = Array.from(container.querySelectorAll<HTMLImageElement>("img"))
+  const images: LightboxImage[] = imageEls
+    .map((img) => ({ src: img.getAttribute("src")?.trim() ?? "", alt: img.getAttribute("alt") ?? "" }))
+    .filter((img) => img.src)
 
-  const handleContainerClick = (event: Event) => {
-    const target = event.target
-    if (!(target instanceof HTMLImageElement)) {
-      return
-    }
-
-    const src = target.getAttribute("src")?.trim()
-    if (!src) {
-      return
-    }
-
-    onOpenImage({
-      src,
-      alt: target.getAttribute("alt") ?? "",
-    })
-  }
-
-  const handleContainerKeyDown = (event: Event) => {
-    const keyboardEvent = event as KeyboardEvent
-    if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
-      return
-    }
-
-    const target = keyboardEvent.target
-    if (!(target instanceof HTMLImageElement)) {
-      return
-    }
-
-    const src = target.getAttribute("src")?.trim()
-    if (!src) {
-      return
-    }
-
-    keyboardEvent.preventDefault()
-    onOpenImage({
-      src,
-      alt: target.getAttribute("alt") ?? "",
-    })
-  }
-
-  for (const image of Array.from(container.querySelectorAll<HTMLImageElement>("img"))) {
+  for (const image of imageEls) {
     image.classList.add("cursor-zoom-in", "transition-opacity", "hover:opacity-90")
     image.setAttribute("role", "button")
     image.setAttribute("tabindex", "0")
     image.setAttribute("aria-label", image.getAttribute("alt")?.trim() || "点击放大图片")
   }
 
+  const handleContainerClick = (event: Event) => {
+    const target = event.target
+    if (!(target instanceof HTMLImageElement)) return
+    const src = target.getAttribute("src")?.trim()
+    if (!src) return
+    const index = images.findIndex((img) => img.src === src)
+    if (index === -1) return
+    onOpen(images, index)
+  }
+
+  const handleContainerKeyDown = (event: Event) => {
+    const keyboardEvent = event as KeyboardEvent
+    if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return
+    const target = keyboardEvent.target
+    if (!(target instanceof HTMLImageElement)) return
+    const src = target.getAttribute("src")?.trim()
+    if (!src) return
+    const index = images.findIndex((img) => img.src === src)
+    if (index === -1) return
+    keyboardEvent.preventDefault()
+    onOpen(images, index)
+  }
+
   container.addEventListener("click", handleContainerClick)
   container.addEventListener("keydown", handleContainerKeyDown)
 
-  cleanups.push(() => {
+  return () => {
     container.removeEventListener("click", handleContainerClick)
     container.removeEventListener("keydown", handleContainerKeyDown)
-  })
-
-  return () => {
-    cleanups.forEach((cleanup) => cleanup())
   }
 }
 
@@ -514,9 +502,103 @@ async function enhanceMarkdown(container: HTMLElement) {
   )
 }
 
+interface LightboxPortalProps {
+  lightbox: LightboxState
+  onClose: () => void
+  onPrev: () => void
+  onNext: () => void
+}
+
+function LightboxPortal({ lightbox, onClose, onPrev, onNext }: LightboxPortalProps) {
+  const touchStartX = useRef<number | null>(null)
+  const current = lightbox.images[lightbox.index]!
+  const hasPrev = lightbox.index > 0
+  const hasNext = lightbox.index < lightbox.images.length - 1
+  const isMultiple = lightbox.images.length > 1
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return
+    const delta = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) < 50) return
+    if (delta > 0 && hasPrev) onPrev()
+    else if (delta < 0 && hasNext) onNext()
+  }
+
+  return (
+    <div
+      key={current.src}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* 关闭按钮 */}
+      <button
+        type="button"
+        className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:right-4 sm:top-4 sm:h-10 sm:w-10"
+        onClick={(e) => { e.stopPropagation(); onClose() }}
+        aria-label="关闭图片预览"
+      >
+        <X className="h-4 w-4 sm:h-5 sm:w-5" />
+      </button>
+
+      {/* 上一张：桌面端居中左侧，移动端底部左侧 */}
+      {hasPrev && (
+        <button
+          type="button"
+          className="absolute bottom-4 left-4 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:bottom-auto sm:left-4 sm:top-1/2 sm:h-10 sm:w-10 sm:-translate-y-1/2"
+          onClick={(e) => { e.stopPropagation(); onPrev() }}
+          aria-label="上一张"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* 下一张：桌面端居中右侧，移动端底部右侧 */}
+      {hasNext && (
+        <button
+          type="button"
+          className="absolute bottom-4 right-4 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:bottom-auto sm:right-4 sm:top-1/2 sm:h-10 sm:w-10 sm:-translate-y-1/2"
+          onClick={(e) => { e.stopPropagation(); onNext() }}
+          aria-label="下一张"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* 图片容器：移动端全屏，桌面端留边距 */}
+      <div
+        className="relative h-full w-full sm:h-[90vh] sm:w-[90vw] sm:max-w-[1400px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Image
+          src={current.src}
+          alt={current.alt}
+          fill
+          unoptimized
+          className="object-contain sm:rounded-2xl sm:shadow-2xl"
+          sizes="100vw"
+        />
+      </div>
+
+      {/* 页码：移动端居中底部，不与箭头重叠 */}
+      {isMultiple && (
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs text-white/80 backdrop-blur-sm sm:bottom-4 sm:text-sm">
+          {lightbox.index + 1} / {lightbox.images.length}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function MarkdownContent({ content, className, emptyText, markdownEmojiMap }: MarkdownContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null)
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
   const normalized = content.replace(/\r\n/g, "\n").trim()
   const resolvedMarkdownEmojiMap = useMarkdownEmojiMap(markdownEmojiMap)
   const html = useMemo(() => (normalized ? renderMarkdown(normalized, resolvedMarkdownEmojiMap) : ""), [normalized, resolvedMarkdownEmojiMap])
@@ -535,7 +617,9 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
         return
       }
 
-      removeImageLightbox = bindImageLightbox(container, setLightboxImage)
+      removeImageLightbox = bindImageLightbox(container, (images, index) => {
+        setLightbox({ images, index })
+      })
     })
 
     return () => {
@@ -545,7 +629,7 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
   }, [html])
 
   useEffect(() => {
-    if (!lightboxImage) {
+    if (!lightbox) {
       return
     }
 
@@ -554,7 +638,11 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setLightboxImage(null)
+        setLightbox(null)
+      } else if (event.key === "ArrowLeft") {
+        setLightbox((prev) => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)
+      } else if (event.key === "ArrowRight") {
+        setLightbox((prev) => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)
       }
     }
 
@@ -564,7 +652,7 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
       document.body.style.overflow = originalOverflow
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [lightboxImage])
+  }, [lightbox])
 
   if (!normalized) {
     return emptyText ? <p className="text-sm text-muted-foreground">{emptyText}</p> : null
@@ -577,27 +665,13 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
         className={className ?? "markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1"}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      {lightboxImage ? createPortal(
-        <div key={lightboxImage.src} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxImage(null)}>
-          <button
-            type="button"
-            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white transition-opacity hover:opacity-80"
-            onClick={() => setLightboxImage(null)}
-            aria-label="关闭图片预览"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <div className="relative h-[90vh] w-[90vw] max-w-[1400px]" onClick={(event) => event.stopPropagation()}>
-            <Image
-              src={lightboxImage.src}
-              alt={lightboxImage.alt}
-              fill
-              unoptimized
-              className="rounded-2xl object-contain shadow-2xl"
-              sizes="90vw"
-            />
-          </div>
-        </div>,
+      {lightbox ? createPortal(
+        <LightboxPortal
+          lightbox={lightbox}
+          onClose={() => setLightbox(null)}
+          onPrev={() => setLightbox((prev) => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)}
+          onNext={() => setLightbox((prev) => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)}
+        />,
         document.body,
       ) : null}
     </>

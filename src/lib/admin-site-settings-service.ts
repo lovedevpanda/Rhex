@@ -7,9 +7,7 @@ import { normalizeCaptchaMode, normalizeFooterLinks } from "@/lib/shared/config-
 import { normalizeHeatColors, normalizeHeatThresholds, normalizePositiveInteger, normalizeTippingAmounts } from "@/lib/shared/normalizers"
 import { createSiteSettingsRecordWithFullData, updateSiteSettingsHeaderApps } from "@/db/site-settings-write-queries"
 import { normalizeHeaderAppIconName, normalizeSiteHeaderAppLinks } from "@/lib/site-header-app-links"
-
-
-
+import { invalidateSiteSettingsCache } from "@/lib/site-settings"
 
 export async function getOrCreateSiteSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })
@@ -18,7 +16,6 @@ export async function getOrCreateSiteSettings() {
   }
 
   return createSiteSettingsRecordWithFullData(defaultSiteSettingsCreateInput)
-
 }
 
 export async function updateSiteSettingsBySection(body: JsonObject) {
@@ -37,17 +34,16 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const postLinkDisplayMode = readOptionalStringField(body, "postLinkDisplayMode") === "ID" ? "ID" : "SLUG"
     const checkInEnabled = Boolean(body.checkInEnabled)
 
-
-
     const checkInReward = Math.max(0, readOptionalNumberField(body, "checkInReward") ?? 0)
     const checkInMakeUpCardPrice = Math.max(0, readOptionalNumberField(body, "checkInMakeUpCardPrice") ?? 0)
     const checkInVipMakeUpCardPrice = Math.max(0, readOptionalNumberField(body, "checkInVipMakeUpCardPrice") ?? 0)
     const nicknameChangePointCost = Math.max(0, readOptionalNumberField(body, "nicknameChangePointCost") ?? 0)
+    const postEditableMinutes = Math.max(0, readOptionalNumberField(body, "postEditableMinutes") ?? 10)
+    const commentEditableMinutes = Math.max(0, readOptionalNumberField(body, "commentEditableMinutes") ?? 5)
 
     if (!siteName || !siteDescription) {
       apiError(400, "站点名称和描述不能为空")
     }
-
 
     const settings = await prisma.siteSetting.update({
       where: { id: existing.id },
@@ -66,12 +62,14 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         checkInMakeUpCardPrice,
         checkInVipMakeUpCardPrice,
         nicknameChangePointCost,
+        postEditableMinutes,
+        commentEditableMinutes,
       },
     })
 
+    invalidateSiteSettingsCache()
 
     return { settings, message: "基础信息已保存", revalidatePaths: ["/", "/write", "/admin"] }
-
   }
 
   if (section === "site-apps") {
@@ -80,11 +78,12 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
 
     await updateSiteSettingsHeaderApps(existing.id, JSON.stringify(headerAppLinks), headerAppIconName)
 
+    invalidateSiteSettingsCache()
+
     return { settings: undefined, message: "应用入口已保存", revalidatePaths: ["/", "/admin"] }
   }
 
   if (section === "site-markdown-emoji") {
-
     const markdownEmojiMap = normalizeMarkdownEmojiItems(body.markdownEmojiMap)
     const markdownEmojiMapJson = serializeMarkdownEmojiItems(markdownEmojiMap)
     const settings = await prisma.siteSetting.update({
@@ -93,6 +92,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         markdownEmojiMapJson,
       },
     })
+
+    invalidateSiteSettingsCache()
 
     return { settings, message: "Markdown 表情已保存", revalidatePaths: ["/", "/write", "/admin"] }
   }
@@ -105,6 +106,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         footerLinksJson: JSON.stringify(footerLinks),
       },
     })
+
+    invalidateSiteSettingsCache()
 
     return { settings, message: "页脚导航已保存" }
   }
@@ -190,6 +193,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
       },
     })
 
+    invalidateSiteSettingsCache()
+
     return { settings, message: "注册与邀请设置已保存" }
   }
 
@@ -245,6 +250,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
       },
     })
 
+    invalidateSiteSettingsCache()
+
     return { settings, message: "互动与热度设置已保存" }
   }
 
@@ -261,6 +268,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         friendLinkAnnouncement: friendLinkAnnouncement || "欢迎与本站交换友情链接，请先添加我方链接后再提交申请，我们会在 1-3 个工作日内完成审核。",
       },
     })
+
+    invalidateSiteSettingsCache()
 
     return { settings, message: "友情链接设置已保存" }
   }
@@ -286,6 +295,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         postOfflineVip3Price,
       },
     })
+
+    invalidateSiteSettingsCache()
 
     return { settings, message: "VIP设置已保存" }
   }
@@ -325,6 +336,8 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         uploadAvatarMaxFileSizeMb,
       },
     })
+
+    invalidateSiteSettingsCache()
 
     return { settings, message: "上传设置已保存" }
   }

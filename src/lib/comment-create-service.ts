@@ -2,7 +2,7 @@ import { countRootCommentsByPostId, createCommentWithRelations, findCommentAutho
 
 import { apiError } from "@/lib/api-route"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
-import { extractMentionTexts, findMentionUsers } from "@/lib/comment-mentions"
+import { extractMentionTexts, findMentionUsers, resolveMentionsInText } from "@/lib/comment-mentions"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validateCommentPayload } from "@/lib/validators"
@@ -68,10 +68,12 @@ export async function createCommentFlow(input: {
     normalizedReplyToUserName = parentComment.user.nickname ?? parentComment.user.username
   }
 
+  const resolvedComment = resolveMentionsInText(contentSafety.sanitizedText, mentionUsers)
+
   const created = await createCommentWithRelations({
     postId,
     userId: input.currentUser.id,
-    content: contentSafety.sanitizedText,
+    content: resolvedComment.content,
     status: contentSafety.shouldReview ? "PENDING" : "NORMAL",
     parentId: normalizedParentId || undefined,
     replyToUserId: normalizedReplyToUserId ?? undefined,
@@ -79,7 +81,7 @@ export async function createCommentFlow(input: {
     pointName: settings.pointName,
     senderName: input.currentUser.nickname ?? input.currentUser.username,
     postAuthorId: postContext.post.authorId,
-    mentionUsers,
+    mentionUsers: resolvedComment.mentions,
     normalizedParentId: normalizedParentId || undefined,
     normalizedReplyToUserId,
   })

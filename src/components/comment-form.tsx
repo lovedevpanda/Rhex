@@ -3,7 +3,6 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
-
 import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -11,6 +10,10 @@ import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 
 interface CommentFormProps {
   postId: string
+  commentId?: string
+  initialContent?: string
+  mode?: "create" | "edit"
+  editWindowMinutes?: number
   parentId?: string
   replyToUserName?: string
   compact?: boolean
@@ -20,19 +23,21 @@ interface CommentFormProps {
   markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
-export function CommentForm({ postId, parentId, replyToUserName, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false, markdownEmojiMap }: CommentFormProps) {
-
+export function CommentForm({ postId, commentId, initialContent = "", mode = "create", editWindowMinutes = 5, parentId, replyToUserName, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false, markdownEmojiMap }: CommentFormProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [content, setContent] = useState("")
-
+  const [content, setContent] = useState(initialContent)
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState(!compact)
 
   useEffect(() => {
-    if (replyToUserName) {
+    setContent(initialContent)
+  }, [initialContent])
+
+  useEffect(() => {
+    if (replyToUserName && mode === "create") {
       setExpanded(true)
       setContent((current) => {
         const prefix = `@${replyToUserName} `
@@ -43,33 +48,36 @@ export function CommentForm({ postId, parentId, replyToUserName, compact = false
         return `${prefix}${current}`.trimStart()
       })
     }
-  }, [replyToUserName])
+  }, [mode, replyToUserName])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setMessage("")
 
-    const response = await fetch("/api/comments/create", {
+    const response = await fetch(mode === "edit" ? "/api/comments/update" : "/api/comments/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ postId, content, parentId, replyToUserName }),
+      body: JSON.stringify(mode === "edit" ? { postId, commentId, content } : { postId, content, parentId, replyToUserName }),
     })
 
     const result = await response.json()
 
     if (!response.ok) {
-      const errorMessage = result.message ?? "评论失败"
+      const errorMessage = result.message ?? (mode === "edit" ? "评论编辑失败" : "评论失败")
       setMessage(errorMessage)
-      toast.error(errorMessage, parentId ? "回复失败" : "评论失败")
+      toast.error(errorMessage, mode === "edit" ? "编辑失败" : parentId ? "回复失败" : "评论失败")
       setLoading(false)
       return
     }
 
-    setContent("")
-    const successMessage = parentId ? "回复提交成功" : "评论提交成功"
+    if (mode !== "edit") {
+      setContent("")
+    }
+
+    const successMessage = mode === "edit" ? "评论修改成功" : parentId ? "回复提交成功" : "评论提交成功"
     const navigation = result.data?.navigation as { page?: number; sort?: string; anchor?: string } | undefined
     const nextSearchParams = new URLSearchParams(searchParams.toString())
 
@@ -85,10 +93,17 @@ export function CommentForm({ postId, parentId, replyToUserName, compact = false
       : null
 
     setMessage(successMessage)
-    toast.success(successMessage, parentId ? "回复成功" : "评论成功")
+    toast.success(successMessage, mode === "edit" ? "编辑成功" : parentId ? "回复成功" : "评论成功")
     setExpanded(!compact)
-    onCancel?.()
     setLoading(false)
+
+    if (mode === "edit") {
+      onCancel?.()
+      router.refresh()
+      return
+    }
+
+    onCancel?.()
 
     if (nextUrl) {
       router.replace(nextUrl)
@@ -97,7 +112,6 @@ export function CommentForm({ postId, parentId, replyToUserName, compact = false
     }
 
     router.refresh()
-
   }
 
   if (compact && !expanded) {
@@ -118,22 +132,22 @@ export function CommentForm({ postId, parentId, replyToUserName, compact = false
         minHeight={compact ? 120 : 180}
         uploadFolder="comments"
         markdownEmojiMap={markdownEmojiMap}
-        placeholder={replyToUserName ? `回复 @${replyToUserName}…` : "写下你的回复…支持 @用户名 提及"}
+        placeholder={mode === "edit" ? `修改评论内容…可在 ${editWindowMinutes} 分钟内编辑` : replyToUserName ? `回复 @${replyToUserName}…` : "写下你的回复…支持 @用户名 提及"}
       />
       <div className="flex items-center justify-between gap-3">
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : <span className="text-xs text-muted-foreground">{commentsVisibleToAuthorOnly ? "当前帖子开启了评论仅楼主可见，你的评论仅楼主、管理员和你自己可见。" : "可使用 @用户名 提及他人"}</span>}
 
         <div className="flex items-center gap-2">
-          {(compact || replyToUserName) ? (
+          {(compact || replyToUserName || mode === "edit") ? (
             <Button type="button" variant="ghost" onClick={() => {
               setExpanded(false)
-              setContent("")
+              setContent(initialContent)
               onCancel?.()
             }}>
               取消
             </Button>
           ) : null}
-          <Button disabled={loading || Boolean(disabledMessage)}>{loading ? "提交中..." : parentId ? "提交回复" : "提交评论"}</Button>
+          <Button disabled={loading || Boolean(disabledMessage)}>{loading ? "提交中..." : mode === "edit" ? "保存修改" : parentId ? "提交回复" : "提交评论"}</Button>
         </div>
       </div>
     </form>

@@ -5,13 +5,15 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 
+interface PasswordChangeFormProps {
+  embedded?: boolean
+}
 
-export function PasswordChangeForm() {
+export function PasswordChangeForm({ embedded = false }: PasswordChangeFormProps) {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [loading, setLoading] = useState(false)
-
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -25,7 +27,6 @@ export function PasswordChangeForm() {
       toast.warning("两次输入的新密码不一致", "修改密码")
       return
     }
-
 
     setLoading(true)
     const response = await fetch("/api/profile/password", {
@@ -47,11 +48,10 @@ export function PasswordChangeForm() {
     setCurrentPassword("")
     setNewPassword("")
     setConfirmPassword("")
-
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-[24px] border border-border bg-card p-5">
+    <form onSubmit={handleSubmit} className={embedded ? "space-y-4" : "space-y-4 rounded-[24px] border border-border bg-card p-5"}>
       <div className="space-y-2">
         <p className="text-sm font-medium">当前密码</p>
         <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" />
@@ -65,7 +65,6 @@ export function PasswordChangeForm() {
         <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" />
       </div>
       <Button disabled={loading}>{loading ? "保存中..." : "修改密码"}</Button>
-
     </form>
   )
 }

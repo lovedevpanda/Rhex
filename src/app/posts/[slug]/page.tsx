@@ -393,8 +393,6 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                               </div>
                               <div className="mt-2 pl-0.5">
                                 <MarkdownContent content={appendix.content} className="text-[15px] leading-8 tracking-[0.018em] text-muted-foreground dark:text-muted-foreground/90" markdownEmojiMap={settings.markdownEmojiMap} />
-
-
                               </div>
                             </section>
                           ))}
@@ -424,7 +422,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   <PostEditPanel
                     postId={displayPost.id}
                     postSlug={displayPost.slug}
-                    editableUntil={displayPost.editableUntil}
+                    createdAt={displayPost.createdAt}
+                    editWindowMinutes={settings.postEditableMinutes}
                     lastAppendedAt={displayPost.lastAppendedAt}
                     appendixCount={displayPost.appendices?.length ?? 0}
                     offlinePrice={postOfflineMeta?.price.amount ?? 0}
@@ -488,6 +487,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                       isAdmin={isAdmin}
                       canPinComment={Boolean(currentUser?.id === displayPost.authorId || isAdmin)}
                       markdownEmojiMap={settings.markdownEmojiMap}
+                      commentEditWindowMinutes={settings.commentEditableMinutes}
                     />
 
                   </CardContent>

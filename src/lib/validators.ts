@@ -8,6 +8,13 @@ export interface ValidationResult<T> {
   message?: string
 }
 
+function getField(body: unknown, key: string): unknown {
+  if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+    return (body as Record<string, unknown>)[key]
+  }
+  return undefined
+}
+
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
@@ -36,16 +43,16 @@ export function validateAuthPayload(body: unknown): ValidationResult<{
   phoneCode: string
   gender: string
 }> {
-  const username = normalizeString((body as Record<string, unknown> | null)?.username)
-  const password = normalizeString((body as Record<string, unknown> | null)?.password)
-  const nickname = normalizeString((body as Record<string, unknown> | null)?.nickname)
-  const inviterUsername = normalizeString((body as Record<string, unknown> | null)?.inviterUsername)
-  const inviteCode = normalizeString((body as Record<string, unknown> | null)?.inviteCode).toUpperCase()
-  const email = normalizeString((body as Record<string, unknown> | null)?.email)
-  const emailCode = normalizeString((body as Record<string, unknown> | null)?.emailCode)
-  const phone = normalizeString((body as Record<string, unknown> | null)?.phone)
-  const phoneCode = normalizeString((body as Record<string, unknown> | null)?.phoneCode)
-  const gender = normalizeString((body as Record<string, unknown> | null)?.gender)
+  const username = normalizeString(getField(body, "username"))
+  const password = normalizeString(getField(body, "password"))
+  const nickname = normalizeString(getField(body, "nickname"))
+  const inviterUsername = normalizeString(getField(body, "inviterUsername"))
+  const inviteCode = normalizeString(getField(body, "inviteCode")).toUpperCase()
+  const email = normalizeString(getField(body, "email"))
+  const emailCode = normalizeString(getField(body, "emailCode"))
+  const phone = normalizeString(getField(body, "phone"))
+  const phoneCode = normalizeString(getField(body, "phoneCode"))
+  const gender = normalizeString(getField(body, "gender"))
 
   if (!username || !password) {
     return { success: false, message: "缺少用户名或密码" }
@@ -124,25 +131,24 @@ export function validatePostPayload(body: unknown): ValidationResult<{
   lotteryConfig: Record<string, unknown> | null
 }> {
 
-  const title = normalizeString((body as Record<string, unknown> | null)?.title)
-  const content = normalizeString((body as Record<string, unknown> | null)?.content)
-  const boardSlug = normalizeString((body as Record<string, unknown> | null)?.boardSlug)
-  const postType = normalizePostType((body as Record<string, unknown> | null)?.postType)
+  const title = normalizeString(getField(body, "title"))
+  const content = normalizeString(getField(body, "content"))
+  const boardSlug = normalizeString(getField(body, "boardSlug"))
+  const postType = normalizePostType(getField(body, "postType"))
 
-  const rawBountyPoints = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.bountyPoints ?? 0) ?? 0
-  const commentsVisibleToAuthorOnly = Boolean((body as Record<string, unknown> | null)?.commentsVisibleToAuthorOnly)
-  const replyUnlockContent = normalizeString((body as Record<string, unknown> | null)?.replyUnlockContent)
-  const rawReplyThreshold = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.replyThreshold ?? 1) ?? 1
-  const purchaseUnlockContent = normalizeString((body as Record<string, unknown> | null)?.purchaseUnlockContent)
-  const rawPurchasePrice = parsePositiveSafeInteger((body as Record<string, unknown> | null)?.purchasePrice ?? 0) ?? 0
-  const rawMinViewLevel = parseNonNegativeSafeInteger((body as Record<string, unknown> | null)?.minViewLevel ?? 0) ?? 0
+  const rawBountyPoints = parsePositiveSafeInteger(getField(body, "bountyPoints") ?? 0) ?? 0
+  const commentsVisibleToAuthorOnly = Boolean(getField(body, "commentsVisibleToAuthorOnly"))
+  const replyUnlockContent = normalizeString(getField(body, "replyUnlockContent"))
+  const rawReplyThreshold = parsePositiveSafeInteger(getField(body, "replyThreshold") ?? 1) ?? 1
+  const purchaseUnlockContent = normalizeString(getField(body, "purchaseUnlockContent"))
+  const rawPurchasePrice = parsePositiveSafeInteger(getField(body, "purchasePrice") ?? 0) ?? 0
+  const rawMinViewLevel = parseNonNegativeSafeInteger(getField(body, "minViewLevel") ?? 0) ?? 0
 
-  const pollOptions = Array.isArray((body as Record<string, unknown> | null)?.pollOptions)
-    ? ((body as Record<string, unknown> | null)?.pollOptions as unknown[])
-        .map((item) => normalizeString(item))
-        .filter(Boolean)
+  const pollOptionsRaw = getField(body, "pollOptions")
+  const pollOptions = Array.isArray(pollOptionsRaw)
+    ? (pollOptionsRaw as unknown[]).map((item) => normalizeString(item)).filter(Boolean)
     : []
-  const rawLotteryConfig = (body as Record<string, unknown> | null)?.lotteryConfig
+  const rawLotteryConfig = getField(body, "lotteryConfig")
   const lotteryConfig = rawLotteryConfig && typeof rawLotteryConfig === "object" && !Array.isArray(rawLotteryConfig)
     ? (rawLotteryConfig as Record<string, unknown>)
     : null
@@ -233,10 +239,10 @@ export function validatePostPayload(body: unknown): ValidationResult<{
 
 
 export function validateCommentPayload(body: unknown): ValidationResult<{ postId: string; content: string; parentId: string; replyToUserName: string }> {
-  const postId = normalizeString((body as Record<string, unknown> | null)?.postId)
-  const content = normalizeString((body as Record<string, unknown> | null)?.content)
-  const parentId = normalizeString((body as Record<string, unknown> | null)?.parentId)
-  const replyToUserName = normalizeString((body as Record<string, unknown> | null)?.replyToUserName)
+  const postId = normalizeString(getField(body, "postId"))
+  const content = normalizeString(getField(body, "content"))
+  const parentId = normalizeString(getField(body, "parentId"))
+  const replyToUserName = normalizeString(getField(body, "replyToUserName"))
 
   if (!postId || !content) {
     return { success: false, message: "缺少必要参数" }
@@ -257,10 +263,11 @@ export function validateCommentPayload(body: unknown): ValidationResult<{ postId
   }
 }
 
-export function validateProfilePayload(body: unknown): ValidationResult<{ nickname: string; bio: string; email: string }> {
-  const nickname = normalizeString((body as Record<string, unknown> | null)?.nickname)
-  const bio = normalizeString((body as Record<string, unknown> | null)?.bio)
-  const email = normalizeString((body as Record<string, unknown> | null)?.email)
+export function validateProfilePayload(body: unknown): ValidationResult<{ nickname: string; bio: string; email: string; gender: string }> {
+  const nickname = normalizeString(getField(body, "nickname"))
+  const bio = normalizeString(getField(body, "bio"))
+  const email = normalizeString(getField(body, "email"))
+  const gender = normalizeString(getField(body, "gender"))
 
   if (!nickname) {
     return { success: false, message: "昵称不能为空" }
@@ -278,12 +285,17 @@ export function validateProfilePayload(body: unknown): ValidationResult<{ nickna
     return { success: false, message: "邮箱格式不正确" }
   }
 
+  if (gender && !["male", "female", "unknown"].includes(gender)) {
+    return { success: false, message: "性别参数不正确" }
+  }
+
   return {
     success: true,
     data: {
       nickname,
       bio,
       email,
+      gender,
     },
   }
 }

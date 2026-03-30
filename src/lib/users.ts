@@ -26,6 +26,7 @@ export interface SiteUserProfile {
   displayName: string
   bio: string
   avatarPath?: string | null
+  gender?: string | null
   status: PublicUserStatus
   level: number
   levelName?: string
@@ -50,7 +51,6 @@ export interface SiteUserProfile {
   boardCount?: number
 }
 
-
 export async function getUserProfile(username: string): Promise<SiteUserProfile | null> {
   return withRuntimeFallback(async () => {
     const user = await findUserProfileByUsername(username)
@@ -68,6 +68,7 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
       displayName: getUserDisplayName(user),
       bio: user.bio ?? "这个用户还没有留下简介。",
       avatarPath: user.avatarPath,
+      gender: user.gender,
       status: user.status,
       level: user.level,
       levelName: levelBadge.name,
@@ -125,4 +126,3 @@ export async function getUserPosts(username: string) {
 export async function getUserAccountSettings(userId: number) {
   return findUserAccountSettingsById(userId)
 }
-

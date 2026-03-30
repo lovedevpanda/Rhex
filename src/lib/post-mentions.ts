@@ -1,22 +1,51 @@
 import { NotificationType, type Prisma } from "@/db/types"
 
 import { extractSummaryFromContent } from "@/lib/content"
-import { extractMentionTexts, findMentionUsersByContent } from "@/lib/mentions"
-import { getAllPostContentText } from "@/lib/post-content"
+import { extractMentionTexts, findMentionUsers, renderUserLinkTokens, resolveMentionsInText, stripUserLinkTokens } from "@/lib/mentions"
+import { getAllPostContentText, parsePostContentDocument, serializePostContentDocument, type PostContentDocument } from "@/lib/post-content"
 
-export function extractPostMentionTextsFromText(content: string) {
-  return extractMentionTexts(content)
+function mapPostContentDocument(document: PostContentDocument, transform: (content: string) => string) {
+  return {
+    ...document,
+    blocks: document.blocks.map((block) => ({
+      ...block,
+      text: transform(block.text),
+    })),
+  }
 }
 
-export function extractPostMentionTexts(rawPostContent: string) {
-  const plainTextContent = getAllPostContentText(rawPostContent)
-  return extractMentionTexts(plainTextContent)
+export function renderPostContentUserLinks(rawPostContent: string) {
+  const document = parsePostContentDocument(rawPostContent)
+  return serializePostContentDocument(mapPostContentDocument(document, renderUserLinkTokens))
 }
 
+export function stripPostContentUserLinks(rawPostContent: string) {
+  const document = parsePostContentDocument(rawPostContent)
+  return serializePostContentDocument(mapPostContentDocument(document, stripUserLinkTokens))
+}
 
-export async function findPostMentionUsers(rawPostContent: string) {
-  const plainTextContent = getAllPostContentText(rawPostContent)
-  return findMentionUsersByContent(plainTextContent)
+export async function resolvePostContentMentions(rawPostContent: string) {
+  const document = parsePostContentDocument(rawPostContent)
+  const mentionTexts = document.blocks.flatMap((block) => extractMentionTexts(block.text))
+  const users = await findMentionUsers(mentionTexts)
+  const resolvedMentions = [] as ReturnType<typeof resolveMentionsInText>["mentions"]
+  const seenUserIds = new Set<number>()
+
+  const nextDocument = mapPostContentDocument(document, (content) => {
+    const resolved = resolveMentionsInText(content, users)
+    resolved.mentions.forEach((mention) => {
+      if (!seenUserIds.has(mention.id)) {
+        seenUserIds.add(mention.id)
+        resolvedMentions.push(mention)
+      }
+    })
+    return resolved.content
+  })
+
+  return {
+    content: serializePostContentDocument(nextDocument),
+    mentions: resolvedMentions,
+  }
 }
 
 export async function createPostMentionNotifications(params: {
@@ -27,16 +56,18 @@ export async function createPostMentionNotifications(params: {
   rawPostContent: string
   excludeUserIds?: number[]
 }) {
-  const plainTextContent = getAllPostContentText(params.rawPostContent)
-  const mentionUsers = await findMentionUsersByContent(plainTextContent)
+  const resolved = await resolvePostContentMentions(params.rawPostContent)
   const excludeUserIds = new Set([params.senderId, ...(params.excludeUserIds ?? [])])
-  const notificationTargets = mentionUsers.filter((user) => !excludeUserIds.has(user.id))
+  const notificationTargets = resolved.mentions.filter((user) => !excludeUserIds.has(user.id))
 
   if (notificationTargets.length === 0) {
-    return 0
+    return {
+      notifiedCount: 0,
+      content: resolved.content,
+    }
   }
 
-  const summary = extractSummaryFromContent(plainTextContent, 80)
+  const summary = extractSummaryFromContent(getAllPostContentText(stripPostContentUserLinks(resolved.content)), 80)
 
   await params.tx.notification.createMany({
     data: notificationTargets.map((user) => ({
@@ -50,5 +81,8 @@ export async function createPostMentionNotifications(params: {
     })),
   })
 
-  return notificationTargets.length
+  return {
+    notifiedCount: notificationTargets.length,
+    content: resolved.content,
+  }
 }

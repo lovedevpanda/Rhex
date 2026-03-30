@@ -38,6 +38,8 @@ export const defaultSiteSettingsCreateInput = {
   loginCaptchaMode: "OFF",
   turnstileSiteKey: null,
   nicknameChangePointCost: 0,
+  postEditableMinutes: 10,
+  commentEditableMinutes: 5,
   tippingEnabled: false,
   tippingDailyLimit: 3,
   tippingPerPostLimit: 1,

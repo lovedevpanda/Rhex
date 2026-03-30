@@ -34,16 +34,32 @@ export function countNotificationsByUserId(userId: number) {
   })
 }
 
-export function findPostSlugById(postId: string) {
-  return prisma.post.findUnique({
-    where: { id: postId },
+export function findPostsByIds(postIds: string[]) {
+  if (postIds.length === 0) {
+    return Promise.resolve([])
+  }
+
+  return prisma.post.findMany({
+    where: {
+      id: {
+        in: [...new Set(postIds)],
+      },
+    },
     select: { id: true, slug: true, title: true },
   })
 }
 
-export function findCommentPostSlugById(commentId: string) {
-  return prisma.comment.findUnique({
-    where: { id: commentId },
+export function findCommentsWithPostByIds(commentIds: string[]) {
+  if (commentIds.length === 0) {
+    return Promise.resolve([])
+  }
+
+  return prisma.comment.findMany({
+    where: {
+      id: {
+        in: [...new Set(commentIds)],
+      },
+    },
     select: {
       id: true,
       post: {

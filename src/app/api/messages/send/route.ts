@@ -35,5 +35,9 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "发送失败",
   logPrefix: "[api/messages/send] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
+  forbiddenMessages: {
+    BANNED: "账号已被拉黑，无法发送私信",
+    INACTIVE: "账号未激活，无法发送私信",
+  },
 })

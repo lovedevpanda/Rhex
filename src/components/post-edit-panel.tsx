@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 interface PostEditPanelProps {
   postId: string
   postSlug: string
-  editableUntil?: string | null
+  createdAt?: string | null
+  editWindowMinutes?: number
   lastAppendedAt?: string | null
   appendixCount?: number
   offlinePrice?: number
@@ -25,7 +26,8 @@ const EDIT_WINDOW_TICK_MS = 30 * 1000
 export function PostEditPanel({
   postId,
   postSlug,
-  editableUntil,
+  createdAt,
+  editWindowMinutes = 10,
   lastAppendedAt,
   appendixCount = 0,
   offlinePrice = 0,
@@ -43,10 +45,6 @@ export function PostEditPanel({
   const [currentTime, setCurrentTime] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!editableUntil) {
-      return
-    }
-
     const timer = window.setInterval(() => {
       setCurrentTime(Date.now())
     }, EDIT_WINDOW_TICK_MS)
@@ -54,9 +52,21 @@ export function PostEditPanel({
     return () => {
       window.clearInterval(timer)
     }
-  }, [editableUntil])
+  }, [])
 
-  const canEditOriginal = useMemo(() => (editableUntil ? new Date(editableUntil).getTime() > currentTime : false), [currentTime, editableUntil])
+  const editDeadline = useMemo(() => {
+    if (!createdAt) {
+      return null
+    }
+
+    const parsedCreatedAt = new Date(createdAt).getTime()
+    if (!Number.isFinite(parsedCreatedAt) || parsedCreatedAt <= 0) {
+      return null
+    }
+
+    return parsedCreatedAt + editWindowMinutes * 60 * 1000
+  }, [createdAt, editWindowMinutes])
+  const canEditOriginal = useMemo(() => (editDeadline ? editDeadline > currentTime : false), [currentTime, editDeadline])
   const nextAppendAt = useMemo(() => {
 
     if (!lastAppendedAt) {
@@ -141,7 +151,9 @@ export function PostEditPanel({
           <div className="space-y-1">
             <h3 className="text-base font-semibold">作者操作</h3>
             <p className="text-sm text-muted-foreground">
-              {canEditOriginal ? "发帖后 10 分钟内可跳转到编辑页修改标题和正文。" : "10 分钟后正文锁定，可通过弹窗追加附言。"}
+              {canEditOriginal
+                ? `发帖后 ${editWindowMinutes} 分钟内可跳转到编辑页修改标题和正文。`
+                : `原帖正文已锁定，可通过弹窗追加附言。`}
             </p>
             <p className="text-xs text-muted-foreground">
               已追加 {appendixCount} 条附言{!canEditOriginal ? `，每次追加需间隔 ${APPEND_INTERVAL_MINUTES} 分钟` : ""}。
@@ -156,15 +168,15 @@ export function PostEditPanel({
                 下线帖子
               </Button>
             ) : null}
-            {!canEditOriginal ? (
-              <Button type="button" variant="outline" onClick={() => setModalOpen(true)}>
-                追加附言
-              </Button>
-            ) : null}
             {canEditOriginal ? (
               <Link href={`/write?mode=edit&post=${postSlug}`}>
                 <Button type="button" variant="outline">编辑帖子</Button>
               </Link>
+            ) : null}
+            {!canEditOriginal ? (
+              <Button type="button" variant="outline" onClick={() => setModalOpen(true)}>
+                追加附言
+              </Button>
             ) : null}
           </div>
         </div>

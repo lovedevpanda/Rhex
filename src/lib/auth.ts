@@ -21,7 +21,7 @@ export type SessionActor = Prisma.UserGetPayload<{ select: typeof sessionActorSe
 
 export const getCurrentSessionActor = cache(async (): Promise<SessionActor | null> => {
   const { cookies } = await import("next/headers")
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const token = cookieStore.get(getSessionCookieName())?.value
   const session = await parseSessionToken(token)
 
@@ -43,4 +43,3 @@ export const getCurrentSessionActor = cache(async (): Promise<SessionActor | nul
 export const getCurrentUser = getCurrentSessionActor
 
 export { getSessionCookieName } from "@/lib/session"
-

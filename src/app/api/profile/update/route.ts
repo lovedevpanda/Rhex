@@ -13,6 +13,7 @@ type ProfileUpdateResponse = {
   username: string
   nickname: string
   bio: string
+  gender: string
   avatarPath: string
   email: string
   emailVerifiedAt?: string | null
@@ -23,6 +24,7 @@ function toProfileUpdateResponse(input: {
   username: string
   nickname: string | null
   bio: string | null
+  gender: string | null
   avatarPath: string | null
   email: string | null
   emailVerifiedAt?: Date | string | null
@@ -32,6 +34,7 @@ function toProfileUpdateResponse(input: {
     username: input.username,
     nickname: input.nickname ?? "",
     bio: input.bio ?? "",
+    gender: input.gender ?? "unknown",
     avatarPath: input.avatarPath ?? "",
     email: input.email ?? "",
     emailVerifiedAt: typeof input.emailVerifiedAt === "string"
@@ -54,6 +57,7 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   const nicknameSafety = await enforceSensitiveText({ scene: "profile.nickname", text: validated.data.nickname })
   const bioSafety = await enforceSensitiveText({ scene: "profile.bio", text: validated.data.bio })
   const email = validated.data.email
+  const gender = validated.data.gender || "unknown"
   const avatarPath = typeof body.avatarPath === "string" ? body.avatarPath.trim() : ""
   const emailCode = typeof body.emailCode === "string" ? body.emailCode.trim() : ""
 
@@ -67,6 +71,7 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
         id: true,
         username: true,
         nickname: true,
+        gender: true,
         email: true,
         emailVerifiedAt: true,
         points: true,
@@ -148,6 +153,7 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
       data: {
         nickname: nextNickname,
         bio: bioSafety.sanitizedText || undefined,
+        gender,
         avatarPath: avatarPath || undefined,
         email: nextEmail,
         emailVerifiedAt,
@@ -158,6 +164,7 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
         username: true,
         nickname: true,
         bio: true,
+        gender: true,
         avatarPath: true,
         email: true,
         emailVerifiedAt: true,

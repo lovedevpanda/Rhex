@@ -18,14 +18,13 @@ interface SettingsShellProps {
 
 export function SettingsShell({ children, pointName }: SettingsShellProps) {
   const navItems: SettingsNavItem[] = [
-    { key: "profile", label: "资料设置", description: "维护头像、昵称、简介与邮箱。" },
-    { key: "password", label: "修改密码", description: "更新登录凭据，保持账户安全。" },
+    { key: "profile", label: "资料设置", description: "维护基础资料、头像、邮箱与密码。" },
     { key: "invite", label: "邀请中心", description: "查看邀请数据并管理邀请入口。" },
+    { key: "post-management", label: "帖子管理", description: "查看我的帖子、回复、收藏与点赞。" },
     { key: "level", label: "我的等级", description: "查看成长进度、升级条件与当前等级。" },
     { key: "badges", label: "勋章中心", description: "查看已达成状态并手动领取勋章。" },
     { key: "verifications", label: "账号认证", description: "提交个人认证、商家认证等身份申请。" },
     { key: "points", label: `${pointName}明细`, description: `查看当前${pointName}余额与全部变动记录。` },
-    { key: "favorites", label: "帖子收藏", description: "集中查看你收藏过的内容。" },
     { key: "follows", label: "关注节点", description: "查看你已关注的节点列表。" },
   ]
 

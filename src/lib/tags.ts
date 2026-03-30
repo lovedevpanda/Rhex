@@ -61,7 +61,7 @@ export async function getTags(): Promise<SiteTagItem[]> {
 export async function getTagListPage(page = 1, pageSize = 24, sort: TagListSort = "hot"): Promise<TagListPageData> {
   try {
     const resolvedPage = normalizeTagListPage(page)
-    const resolvedPageSize = Math.max(1, Math.trunc(pageSize) || 24)
+    const resolvedPageSize = Math.min(50, Math.max(1, Math.trunc(pageSize) || 24))
     const [items, total] = await Promise.all([
       findTagListPage({ page: resolvedPage, pageSize: resolvedPageSize, sort }),
       countTags(),

@@ -103,7 +103,7 @@ export default async function WritePage({ searchParams }: WritePageProps) {
 
   const isAdmin = user.role === "ADMIN" || user.role === "MODERATOR"
   const canEditThisPost = Boolean(editingPost && (editingPost.authorId === user.id || isAdmin))
-  const isStillEditable = Boolean(editingPost?.editableUntil && new Date(editingPost.editableUntil).getTime() > Date.now()) || isAdmin
+  const isStillEditable = Boolean(editingPost && (new Date(editingPost.createdAt).getTime() + Math.max(0, settings.postEditableMinutes) * 60 * 1000 > Date.now())) || isAdmin
 
   return (
     <div className="min-h-screen ">
@@ -120,7 +120,7 @@ export default async function WritePage({ searchParams }: WritePageProps) {
               ) : !canEditThisPost ? (
                 <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">你无权编辑这篇帖子。</div>
               ) : !isStillEditable ? (
-                <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">该帖子已超过 10 分钟编辑窗口，请回到详情页使用附言追加功能。</div>
+                <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">该帖子已超过 {settings.postEditableMinutes} 分钟编辑窗口，请回到详情页使用附言追加功能。</div>
               ) : (
                 <CreatePostForm
                   boardOptions={boardOptions}

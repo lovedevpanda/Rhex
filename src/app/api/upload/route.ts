@@ -1,14 +1,13 @@
 import path from "path"
 
 import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
-import { prisma } from "@/db/client"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
-import { saveUploadedFile } from "@/lib/upload"
+import { computeFileHash, saveUploadedFile } from "@/lib/upload"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { createUploadRecord, findExistingUpload } from "@/db/upload-queries"
 
-
-const ALLOWED_UPLOAD_FOLDERS = new Set(["avatars", "posts", "friend-links", "site-logo"])
+const ALLOWED_UPLOAD_FOLDERS = new Set(["avatars", "posts", "comments", "friend-links", "site-logo"])
 
 function normalizeExtension(fileName: string) {
   return path.extname(fileName).replace(/^\./, "").toLowerCase()
@@ -16,10 +15,6 @@ function normalizeExtension(fileName: string) {
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const settings = await getSiteSettings()
-
-  if (settings.uploadRequireLogin && !currentUser) {
-    apiError(401, "请先登录后再上传")
-  }
 
   const formData = await request.formData()
   const file = formData.get("file")
@@ -52,27 +47,26 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     apiError(400, `上传文件不能超过 ${maxSizeMb}MB`)
   }
 
+  const fileHash = await computeFileHash(file)
+
   return withRequestWriteGuard({
     request,
     userId: currentUser.id,
     scope: "upload-file",
-    cooldownMs: 2_000,
-    dedupeKey: `${currentUser.id}:${folder}:${file.name}:${file.size}`,
   }, async () => {
-    const saved = await saveUploadedFile(file, folder)
+    // 同用户、同 bucket、相同内容 → 直接复用已有记录，跳过写盘和入库
+    const existing = await findExistingUpload(currentUser.id, folder, fileHash)
+    if (existing) {
+      return apiSuccess({ urlPath: existing.urlPath }, "上传成功")
+    }
 
-    await prisma.upload.create({
-      data: {
-        userId: currentUser.id,
-        bucketType: folder,
-        originalName: file.name,
-        fileName: saved.fileName,
-        fileExt: saved.fileExt,
-        mimeType: saved.mimeType,
-        fileSize: saved.fileSize,
-        storagePath: saved.storagePath,
-        urlPath: saved.urlPath,
-      },
+    const saved = await saveUploadedFile(file, folder, fileHash)
+
+    await createUploadRecord({
+      userId: currentUser.id,
+      bucketType: folder,
+      originalName: file.name,
+      saved,
     })
 
     logRouteWriteSuccess({
@@ -87,14 +81,15 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       },
     })
 
-    return apiSuccess({
-      urlPath: saved.urlPath,
-    }, "上传成功")
-
+    return apiSuccess({ urlPath: saved.urlPath }, "上传成功")
   })
 }, {
   errorMessage: "上传失败",
   logPrefix: "[api/upload] unexpected error",
   unauthorizedMessage: "请先登录后再上传",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
+  forbiddenMessages: {
+    BANNED: "账号已被拉黑，无法上传文件",
+    INACTIVE: "账号未激活，无法上传文件",
+  },
 })

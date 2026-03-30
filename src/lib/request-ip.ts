@@ -23,13 +23,18 @@ function normalizeIpCandidate(value: string | null) {
 export function getRequestIp(request: Request) {
   const forwarded = request.headers.get("x-forwarded-for")
   if (forwarded) {
-    const firstForwarded = forwarded.split(",")[0] ?? null
-    const normalizedForwarded = normalizeIpCandidate(firstForwarded)
-
-    if (normalizedForwarded) {
-      return normalizedForwarded
+    for (const candidate of forwarded.split(",")) {
+      const normalizedForwarded = normalizeIpCandidate(candidate)
+      if (normalizedForwarded) {
+        return normalizedForwarded
+      }
     }
   }
 
-  return normalizeIpCandidate(request.headers.get("x-real-ip"))
+  const realIp = normalizeIpCandidate(request.headers.get("x-real-ip"))
+  if (realIp) {
+    return realIp
+  }
+
+  return normalizeIpCandidate(request.headers.get("cf-connecting-ip"))
 }

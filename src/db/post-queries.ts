@@ -67,14 +67,16 @@ export async function findPostDetailBySlug(slug: string, currentUserId?: number)
 }
 
 export async function findHomepagePosts(page: number, pageSize: number) {
+  const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
+
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
     },
     include: postListInclude,
     orderBy: pinnedPostOrderBy,
-    skip: (page - 1) * pageSize,
-    take: pageSize,
+    skip: (page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
   })
 }
 

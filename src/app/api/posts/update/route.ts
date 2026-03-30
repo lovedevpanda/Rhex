@@ -4,7 +4,9 @@ import { updatePostFlow } from "@/lib/post-update-service"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
+  const postId = typeof body?.postId === "string" ? body.postId : ""
   const result = await updatePostFlow({
+    postId,
     body,
     currentUser: {
       id: currentUser.id,
