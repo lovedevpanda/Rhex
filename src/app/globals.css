@@ -274,8 +274,6 @@ html.dark .sidebar-user-card-header {
 
 .post-gallery-card {
   break-inside: avoid;
-  display: inline-block;
-  vertical-align: top;
   width: 100%;
 }
 

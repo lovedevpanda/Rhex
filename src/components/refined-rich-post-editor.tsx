@@ -1009,10 +1009,8 @@ export function RefinedRichPostEditor({
 
     setMessage("")
     setShowUploadPanel(true)
-    const insertedCount = await uploadImageFiles(files)
-    if (insertedCount > 0) {
-      setMessage(`已插入 ${insertedCount} 张图片`)
-    }
+    await uploadImageFiles(files)
+
     event.target.value = ""
   }
 
@@ -1030,9 +1028,7 @@ export function RefinedRichPostEditor({
     setMessage("")
     setShowUploadPanel(true)
     const insertedCount = await uploadImageFiles(imageFiles)
-    if (insertedCount > 0) {
-      setMessage(`已插入 ${insertedCount} 张图片`)
-    }
+
   }
 
 

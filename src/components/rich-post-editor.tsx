@@ -150,7 +150,6 @@ export function RichPostEditor({ value, onChange, placeholder, minHeight = 260 }
       }
 
       insertTemplate(uploadedMarkdown.join("\n\n"))
-      setMessage(`已插入 ${uploadedMarkdown.length} 张图片`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "图片上传失败")
     } finally {
