@@ -72,3 +72,22 @@ export function findCommentsWithPostByIds(commentIds: string[]) {
     },
   })
 }
+
+export function findUsersByIds(userIds: string[]) {
+  if (userIds.length === 0) {
+    return Promise.resolve([])
+  }
+
+  return prisma.user.findMany({
+    where: {
+      id: {
+        in: [...new Set(userIds.map((userId) => Number(userId)).filter((userId) => Number.isInteger(userId) && userId > 0))],
+      },
+    },
+    select: {
+      id: true,
+      username: true,
+      nickname: true,
+    },
+  })
+}

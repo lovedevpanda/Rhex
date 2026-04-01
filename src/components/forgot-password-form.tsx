@@ -122,7 +122,7 @@ export function ForgotPasswordForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <TextField label="邮箱" value={email} onChange={setEmail} placeholder="输入注册时绑定的邮箱" type="email" required background="card" />
 
-      <div className="space-y-3 rounded-[24px] border border-border p-4">
+      <div className="space-y-3 rounded-[24px]">
         <TextField label="邮箱验证码" value={code} onChange={setCode} placeholder="输入 6 位验证码" required background="card" />
         <Button type="button" variant="outline" onClick={() => void handleSendCode()} disabled={sending || countdown > 0} className="w-full sm:w-auto">
           {sending ? "发送中..." : countdown > 0 ? `${countdown}s 后重发` : "发送验证码"}

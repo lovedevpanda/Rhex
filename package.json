@@ -16,7 +16,6 @@
     "version:sync": "tsx scripts/copy-release-to-version.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "db:setup": "npm run setup:dev",
     "db:setup:prod": "npm run setup:prod"

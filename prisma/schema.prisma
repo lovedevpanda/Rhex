@@ -100,6 +100,8 @@ enum NotificationType {
   REPLY_COMMENT
   LIKE
   MENTION
+  FOLLOWED_YOU
+  FOLLOWING_ACTIVITY
   SYSTEM
   REPORT_RESULT
 }
@@ -107,6 +109,7 @@ enum NotificationType {
 enum RelatedType {
   POST
   COMMENT
+  USER
   REPORT
   ANNOUNCEMENT
   YINYANG_CHALLENGE
@@ -255,6 +258,10 @@ model User {
   notifications         Notification[]        @relation("notificationUser")
   sentNotifications Notification[] @relation("notificationSender")
   boardFollows      BoardFollow[]
+  followingUsers    UserFollow[]             @relation("UserFollowSource")
+  followedByUsers   UserFollow[]             @relation("UserFollowTarget")
+  tagFollows        TagFollow[]
+  postFollows       PostFollow[]
   favorites         Favorite[]
   likes             Like[]
   reports           Report[]       @relation("reporter")
@@ -518,6 +525,21 @@ model BoardFollow {
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
 
   @@unique([userId, boardId])
+  @@index([userId, createdAt])
+  @@index([boardId, createdAt])
+}
+
+model UserFollow {
+  id          String   @id @default(cuid())
+  followerId  Int
+  followingId Int
+  createdAt   DateTime   @db.Timestamptz(3)  @default(now())
+  follower    User     @relation("UserFollowSource", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowTarget", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId, createdAt])
+  @@index([followingId, createdAt])
 }
 
 enum PinScope {
@@ -589,6 +611,7 @@ model Post {
   tips                   PostTip[]
   redPacket              PostRedPacket?
   redPacketClaims        PostRedPacketClaim[]
+  followers              PostFollow[]
 
   @@index([boardId])
   @@index([authorId])
@@ -612,6 +635,33 @@ model Tag {
   slug      String    @unique
   createdAt DateTime   @db.Timestamptz(3)     @default(now())
   posts     PostTag[]
+  followers TagFollow[]
+}
+
+model TagFollow {
+  id        String   @id @default(cuid())
+  userId    Int
+  tagId     String
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tagId])
+  @@index([userId, createdAt])
+  @@index([tagId, createdAt])
+}
+
+model PostFollow {
+  id        String   @id @default(cuid())
+  userId    Int
+  postId    String
+  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
+  @@index([postId, createdAt])
 }
 
 model PostTag {

@@ -11,7 +11,7 @@ export { getRequestIp } from "@/lib/request-ip"
 
 import { getPostStatusLabel, getPostTypeLabel, isLocalPostType, type LocalPostType } from "@/lib/post-types"
 import { prisma } from "@/db/client"
-import { getAdminDashboardRawData } from "@/db/admin-dashboard-queries"
+import { getAdminDashboardRawData, getAdminStructureRawData } from "@/db/admin-dashboard-queries"
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
 import { apiError } from "./api-route"
 
@@ -61,25 +61,19 @@ interface AdminDashboardData {
   overview: {
     userCount: number
     postCount: number
-    commentCount: number
     reportCount: number
     pendingReportCount: number
-    announcementCount: number
     pendingPostCount: number
-    pendingCommentCount: number
     pendingVerificationCount: number
     pendingFriendLinkCount: number
     pendingAdOrderCount: number
     activeUserCount7d: number
-
     newUserCount7d: number
     newPostCount7d: number
-    newCommentCount7d: number
     totalViewCount: number
     totalLikeCount: number
     totalFavoriteCount: number
     totalFollowerCount: number
-    vipOrderCount30d: number
     todayCheckInUserCount: number
   }
   trends: Array<{
@@ -88,19 +82,6 @@ interface AdminDashboardData {
     postCount: number
     commentCount: number
     reportCount: number
-  }>
-
-
-
-  recentUsers: Array<{
-    id: number
-    username: string
-    displayName: string
-    role: UserRole
-    status: UserStatus
-    createdAt: string
-    postCount: number
-    commentCount: number
   }>
   recentPosts: Array<{
     id: string
@@ -129,6 +110,9 @@ interface AdminDashboardData {
     createdAt: string
     reporterName: string
   }>
+}
+
+interface AdminStructureData {
   zones: Array<{
     id: string
     name: string
@@ -151,7 +135,6 @@ interface AdminDashboardData {
     minReplyPoints: number
     minReplyLevel: number
     minViewVipLevel: number
-
     minPostVipLevel: number
     minReplyVipLevel: number
     requirePostReview: boolean
@@ -183,110 +166,20 @@ interface AdminDashboardData {
     minReplyPoints: number | null
     minReplyLevel: number | null
     minViewVipLevel: number | null
-
     minPostVipLevel: number | null
     minReplyVipLevel: number | null
     requirePostReview: boolean | null
     postListDisplayMode: string | null
   }>
-  recentAnnouncements: Array<{
-    id: string
-    title: string
-    status: AnnouncementStatus
-    isPinned: boolean
-    createdAt: string
-    publishedAt: string | null
-    creatorName: string
-  }>
-  sensitiveWords: Array<{
-    id: string
-    word: string
-    matchType: string
-    actionType: string
-    status: boolean
-    createdAt: string
-  }>
-  vipOrders: Array<{
-    id: string
-    username: string
-    displayName: string
-    orderType: string
-    amount: number | null
-    pointsCost: number | null
-    days: number
-    vipLevel: number
-    expiresAt: string | null
-    createdAt: string
-    remark: string | null
-  }>
 }
 
-export async function getAdminDashboardData(): Promise<AdminDashboardData> {
-  const currentUser = await requireAdminUser()
+type AdminStructureRawData = Awaited<ReturnType<typeof getAdminStructureRawData>>
 
-  if (!currentUser) {
-    apiError(403, "无权限访问后台数据")
-  }
-
-
-  const data = await getAdminDashboardRawData()
-
+function mapAdminStructureData(data: AdminStructureRawData): AdminStructureData {
   return {
-    overview: data.overview,
-    trends: data.trends.map((item) => ({
-      date: serializeDateTime(item.date) ?? item.date.toISOString(),
-      userCount: item.userCount,
-      postCount: item.postCount,
-      commentCount: item.commentCount,
-      reportCount: item.reportCount,
-    })),
-    recentUsers: data.recentUsers.map((user) => ({
-
-      id: user.id,
-      username: user.username,
-      displayName: user.nickname ?? user.username,
-      role: user.role,
-      status: user.status,
-      createdAt: serializeDateTime(user.createdAt) ?? user.createdAt.toISOString(),
-
-      postCount: user.postCount,
-      commentCount: user.commentCount,
-    })),
-    recentPosts: data.recentPosts.map((post) => ({
-
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      type: post.type,
-      typeLabel: getPostTypeLabel(post.type),
-      status: post.status,
-      statusLabel: getPostStatusLabel(post.status),
-      reviewNote: post.reviewNote ?? null,
-      boardName: post.board.name,
-      authorName: post.author.nickname ?? post.author.username,
-      createdAt: serializeDateTime(post.createdAt) ?? post.createdAt.toISOString(),
-      commentCount: post.commentCount,
-      likeCount: post.likeCount,
-      isPinned: post.isPinned,
-      isFeatured: post.isFeatured,
-    })),
-
-    recentReports: data.recentReports.map((report) => ({
-
-      id: report.id,
-      targetType: report.targetType,
-      targetId: report.targetId,
-      reasonType: report.reasonType,
-      reasonDetail: report.reasonDetail,
-      status: report.status,
-      createdAt: report.createdAt.toISOString(),
-      reporterName: report.reporter.nickname ?? report.reporter.username,
-    })),
     zones: data.zones.map((zone) => {
-
       const settings = resolveBoardSettings(zone, null)
       const relatedBoards = data.boards.filter((board) => board.zoneId === zone.id)
-
 
       return {
         id: zone.id,
@@ -310,7 +203,6 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         minReplyPoints: settings.minReplyPoints,
         minReplyLevel: settings.minReplyLevel,
         minViewVipLevel: settings.minViewVipLevel,
-
         minPostVipLevel: settings.minPostVipLevel,
         minReplyVipLevel: settings.minReplyVipLevel,
         requirePostReview: settings.requirePostReview,
@@ -318,7 +210,6 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       }
     }),
     boardStatus: data.boards.map((board) => ({
-
       id: board.id,
       name: board.name,
       slug: board.slug,
@@ -327,7 +218,6 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       postCount: board.postCount,
       followerCount: board.followerCount,
       todayPostCount: data.todayBoardPostStats.find((item) => item.boardId === board.id)?._count.boardId ?? 0,
-
       allowPost: board.allowPost,
       zoneId: board.zoneId ?? null,
       zoneName: board.zone?.name ?? null,
@@ -345,49 +235,72 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       minReplyPoints: board.minReplyPoints ?? null,
       minReplyLevel: board.minReplyLevel ?? null,
       minViewVipLevel: board.minViewVipLevel ?? null,
-
-
       minPostVipLevel: board.minPostVipLevel ?? null,
       minReplyVipLevel: board.minReplyVipLevel ?? null,
       requirePostReview: board.requirePostReview ?? null,
       postListDisplayMode: board.postListDisplayMode ?? null,
     })),
-    recentAnnouncements: data.recentAnnouncements.map((announcement) => ({
+  }
+}
 
-      id: announcement.id,
-      title: announcement.title,
-      status: announcement.status,
-      isPinned: announcement.isPinned,
-      createdAt: announcement.createdAt.toISOString(),
-      publishedAt: announcement.publishedAt?.toISOString() ?? null,
-      creatorName: announcement.creator.nickname ?? announcement.creator.username,
+export async function getAdminDashboardData(): Promise<AdminDashboardData> {
+  const currentUser = await requireAdminUser()
+
+  if (!currentUser) {
+    apiError(403, "无权限访问后台数据")
+  }
+
+  const data = await getAdminDashboardRawData()
+
+  return {
+    overview: data.overview,
+    trends: data.trends.map((item) => ({
+      date: serializeDateTime(item.date) ?? item.date.toISOString(),
+      userCount: item.userCount,
+      postCount: item.postCount,
+      commentCount: item.commentCount,
+      reportCount: item.reportCount,
     })),
-    sensitiveWords: data.sensitiveWords.map((word) => ({
-
-      id: word.id,
-      word: word.word,
-      matchType: word.matchType,
-      actionType: word.actionType,
-      status: word.status,
-      createdAt: serializeDateTime(word.createdAt) ?? word.createdAt.toISOString(),
+    recentPosts: data.recentPosts.map((post) => ({
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      type: post.type,
+      typeLabel: getPostTypeLabel(post.type),
+      status: post.status,
+      statusLabel: getPostStatusLabel(post.status),
+      reviewNote: post.reviewNote ?? null,
+      boardName: post.board.name,
+      authorName: post.author.nickname ?? post.author.username,
+      createdAt: serializeDateTime(post.createdAt) ?? post.createdAt.toISOString(),
+      commentCount: post.commentCount,
+      likeCount: post.likeCount,
+      isPinned: post.isPinned,
+      isFeatured: post.isFeatured,
     })),
-
-    vipOrders: data.vipOrders.map((item) => ({
-
-      id: item.id,
-      username: item.user.username,
-      displayName: item.user.nickname ?? item.user.username,
-      orderType: item.orderType,
-      amount: item.amount ?? null,
-      pointsCost: item.pointsCost ?? null,
-      days: item.days,
-      vipLevel: item.vipLevel,
-      expiresAt: serializeDateTime(item.expiresAt),
-      createdAt: serializeDateTime(item.createdAt) ?? item.createdAt.toISOString(),
-
-      remark: item.remark ?? null,
+    recentReports: data.recentReports.map((report) => ({
+      id: report.id,
+      targetType: report.targetType,
+      targetId: report.targetId,
+      reasonType: report.reasonType,
+      reasonDetail: report.reasonDetail,
+      status: report.status,
+      createdAt: report.createdAt.toISOString(),
+      reporterName: report.reporter.nickname ?? report.reporter.username,
     })),
   }
+}
+
+export async function getAdminStructureData(): Promise<AdminStructureData> {
+  const currentUser = await requireAdminUser()
+
+  if (!currentUser) {
+    apiError(403, "无权限访问后台版块数据")
+  }
+
+  const data = await getAdminStructureRawData()
+
+  return mapAdminStructureData(data)
 }
 
 export async function getAdminPosts(query: AdminPostQuery = {}): Promise<AdminPostListResult> {

@@ -1,4 +1,3 @@
-import Image from "next/image"
 import Link from "next/link"
 import { ImageIcon, MessageCircle } from "lucide-react"
 
@@ -40,21 +39,22 @@ interface PostGalleryGridProps {
 
 export function PostGalleryGrid({ items, showBoard = true, postLinkDisplayMode = "SLUG" }: PostGalleryGridProps) {
   return (
-    <div className="post-gallery-grid grid gap-3 px-2 py-2 sm:grid-cols-2 sm:px-3">
+    <div className="post-gallery-grid px-2 py-2 sm:px-3">
       {items.map((item) => {
         const postPath = getPostPath({ id: item.id, slug: item.slug }, { mode: postLinkDisplayMode })
         const pinTone = getPostPinTone(item.pinScope)
         const isRestrictedAuthor = item.authorStatus === "BANNED" || item.authorStatus === "MUTED"
 
         return (
-          <article key={item.id} className="overflow-hidden rounded-[24px] border border-border bg-card transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-sm">
+          <article key={item.id} className="post-gallery-card mb-3 overflow-hidden rounded-[24px] border border-border bg-card transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-sm">
             <Link href={postPath} className="block">
               {item.coverImage ? (
-                <div className="relative aspect-[16/10] w-full overflow-hidden bg-secondary/40">
-                  <Image src={item.coverImage} alt={item.title} title={item.title} fill sizes="(max-width: 640px) 100vw, 50vw" className="object-cover" loading="lazy" unoptimized />
+                <div className="overflow-hidden bg-secondary/40">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={item.coverImage} alt={item.title} title={item.title} className="block h-auto w-full" loading="lazy" />
                 </div>
               ) : (
-                <div className="flex aspect-[16/10] w-full items-center justify-center bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(15,23,42,0.04))] text-muted-foreground">
+                <div className="flex min-h-[220px] items-center justify-center bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(15,23,42,0.04))] px-4 py-12 text-muted-foreground">
                   <div className="flex items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-1.5 text-sm shadow-sm">
                     <ImageIcon className="h-4 w-4" />
                     <span>无封面图</span>

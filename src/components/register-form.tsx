@@ -242,7 +242,7 @@ function VerificationField({
   onSend: () => Promise<void>
 }) {
   return (
-    <div className="space-y-3 rounded-[24px] border border-border p-4">
+    <div className="space-y-3 rounded-[24px]">
       <TextField label={label} value={value} onChange={onChange} placeholder={placeholder} required={required} background="card" />
       {verifyRequired ? (
         <>

@@ -47,9 +47,9 @@ export function BuiltinCaptchaField({ code, onCodeChange, onTokenChange, onLoadE
   }, [refreshCaptcha])
 
   return (
-    <div ref={handleMount} className="space-y-3 rounded-[24px] border border-border p-4">
+    <div ref={handleMount} className="space-y-3 rounded-[24px]">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">图形验证码</p>
+        <p className="text-sm font-medium">验证码</p>
         <button type="button" className="text-xs text-primary hover:opacity-80" onClick={() => void refreshCaptcha()}>刷新验证码</button>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

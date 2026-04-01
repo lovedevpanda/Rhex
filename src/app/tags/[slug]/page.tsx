@@ -2,12 +2,14 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { ForumPostStream } from "@/components/forum-post-stream"
+import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { ForumPageShell } from "@/components/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { getBoards } from "@/lib/boards"
+import { isUserFollowingTarget } from "@/lib/follows"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 
 import { getSiteSettings } from "@/lib/site-settings"
@@ -51,6 +53,13 @@ export default async function TagPage(props: PageProps<"/tags/[slug]">) {
   ])
 
   const sidebarUser = await resolveSidebarUser(currentUser, settings)
+  const isFollowingTag = currentUser
+    ? await isUserFollowingTarget({
+        userId: currentUser.id,
+        targetType: "tag",
+        targetId: tag.id,
+      })
+    : false
 
 
 
@@ -66,9 +75,21 @@ export default async function TagPage(props: PageProps<"/tags/[slug]">) {
             <div className="space-y-6">
               <Card className="overflow-hidden border-none bg-gradient-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
                 <CardContent className="p-8">
-                  <p className="text-sm text-white/70">标签页</p>
-                  <h1 className="mt-2 text-3xl font-semibold">#{tag.name}</h1>
-                  <p className="mt-3 text-sm leading-7 text-white/75">当前标签共关联 {tag.count} 篇内容。</p>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <p className="text-sm text-white/70">标签页</p>
+                      <h1 className="mt-2 text-3xl font-semibold">#{tag.name}</h1>
+                      <p className="mt-3 text-sm leading-7 text-white/75">当前标签共关联 {tag.count} 篇内容。</p>
+                    </div>
+                    <FollowToggleButton
+                      targetType="tag"
+                      targetId={tag.id}
+                      initialFollowed={isFollowingTag}
+                      activeLabel="已关注标签"
+                      inactiveLabel="关注标签"
+                      className="self-start border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+                    />
+                  </div>
                 </CardContent>
               </Card>
 

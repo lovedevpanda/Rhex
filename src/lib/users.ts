@@ -5,6 +5,7 @@ import { mapListPost } from "@/lib/post-map"
 import { withRuntimeFallback } from "@/lib/runtime-errors"
 
 export type PublicUserStatus = "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+export type PublicUserRole = "USER" | "MODERATOR" | "ADMIN"
 
 export interface UserDisplayNameSource {
   username: string
@@ -24,6 +25,7 @@ export interface SiteUserProfile {
   id: number
   username: string
   displayName: string
+  role: PublicUserRole
   bio: string
   avatarPath?: string | null
   gender?: string | null
@@ -47,6 +49,7 @@ export interface SiteUserProfile {
   postCount: number
   commentCount: number
   likeReceivedCount: number
+  followerCount: number
   favoriteCount?: number
   boardCount?: number
 }
@@ -66,6 +69,7 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
       id: Number(user.id),
       username: user.username,
       displayName: getUserDisplayName(user),
+      role: user.role,
       bio: user.bio ?? "这个用户还没有留下简介。",
       avatarPath: user.avatarPath,
       gender: user.gender,
@@ -90,6 +94,7 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
       postCount: user.postCount,
       commentCount: user.commentCount,
       likeReceivedCount: user.likeReceivedCount,
+      followerCount: user._count.followedByUsers,
       favoriteCount: user._count.favorites,
       boardCount: user._count.boardFollows,
     }

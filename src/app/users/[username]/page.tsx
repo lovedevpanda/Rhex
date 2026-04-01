@@ -6,9 +6,9 @@ import { ForumPostStream } from "@/components/forum-post-stream"
 import { LevelBadge } from "@/components/level-badge"
 import { LevelIcon } from "@/components/level-icon"
 import { ReportDialog } from "@/components/report-dialog"
-import { RssSubscribeButton } from "@/components/rss-subscribe-button"
 import { SiteHeader } from "@/components/site-header"
 import { UserAvatar } from "@/components/user-avatar"
+import { UserProfileOverviewCard } from "@/components/user-profile-overview-card"
 import { UserStatusBadge } from "@/components/user-status-badge"
 import { UserVerificationBadge } from "@/components/user-verification-badge"
 import { VipBadge } from "@/components/vip-badge"
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { getGrantedBadgesForUser } from "@/lib/badges"
+import { isUserFollowingTarget } from "@/lib/follows"
 import { getSiteSettings } from "@/lib/site-settings"
 import { cn } from "@/lib/utils"
 import { getUserProfile, getUserPosts } from "@/lib/users"
@@ -48,6 +49,14 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
 
   const posts = await getUserPosts(params.username)
   const badgeItems = await getGrantedBadgesForUser(user.id)
+  const canToggleFollow = !currentUser || currentUser.id !== user.id
+  const isFollowingUser = currentUser && currentUser.id !== user.id
+    ? await isUserFollowingTarget({
+        userId: currentUser.id,
+        targetType: "user",
+        targetId: user.id,
+      })
+    : false
 
   const vipActive = isVipActive(user)
   const vipLevel = getVipLevel(user)
@@ -92,6 +101,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {user.role === "ADMIN" ? <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-200">管理员</span> : null}
                     {vipActive ? <VipBadge level={vipLevel} compact /> : null}
                     {user.levelName && user.levelColor && user.levelIcon ? <LevelBadge level={user.level} name={user.levelName} color={user.levelColor} icon={user.levelIcon} compact /> : null}
                     {isRestrictedUser ? <UserStatusBadge status={user.status} /> : null}
@@ -152,33 +162,20 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
           </aside>
 
           <section className="space-y-4">
-            <Card className="rounded-2xl border border-[#e8e8e8] shadow-sm">
-              <CardContent className="p-4 sm:p-5">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Overview</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <h2 className="text-xl font-semibold text-foreground sm:text-[22px]">{user.displayName} 的主页</h2>
-                      {restrictionLabel ? <UserStatusBadge status={user.status} /> : null}
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground sm:text-[13px]">{restrictionDescription ?? "查看这位成员的公开内容、社区贡献与活跃概况。"}</p>
-                  </div>
-                  <div className="grid w-full grid-cols-2 gap-1.5 sm:grid-cols-3 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end">
-                    {statItems.map((item) => (
-                      <div key={item.label} className="min-w-0 rounded-xl px-3 py-2.5 text-center dark:bg-white/[0.04] lg:min-w-[76px]">
-                        <p className="text-base font-semibold text-foreground sm:text-[17px]">{item.value}</p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{item.label}</p>
-                      </div>
-                    ))}
-                    <RssSubscribeButton
-                      href={`/users/${user.username}/rss.xml`}
-                      label="订阅用户 RSS"
-                      className="col-span-full inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-center text-xs font-medium text-muted-foreground transition-colors hover:bg-[#f5f5f5] hover:text-foreground dark:bg-white/[0.04] dark:hover:bg-white/[0.08] lg:col-span-1 lg:min-w-[76px]"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <UserProfileOverviewCard
+              title={`${user.displayName} 的主页`}
+              status={restrictionLabel ? user.status : null}
+              initialFollowerCount={user.followerCount}
+              stats={statItems}
+              rssHref={`/users/${user.username}/rss.xml`}
+              rssLabel="订阅用户 RSS"
+              followAction={canToggleFollow ? {
+                targetId: user.id,
+                initialFollowed: isFollowingUser,
+                activeLabel: "已关注用户",
+                inactiveLabel: "关注用户",
+              } : null}
+            />
 
             <Card className="rounded-2xl border border-[#e8e8e8]  shadow-sm">
               <CardContent className="p-5">

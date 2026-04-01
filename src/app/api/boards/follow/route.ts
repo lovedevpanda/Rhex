@@ -1,4 +1,4 @@
-import { prisma } from "@/db/client"
+import { toggleFollowTarget } from "@/db/follow-queries"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { withRequestWriteGuard } from "@/lib/write-guard"
 
@@ -14,44 +14,21 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     cooldownMs: 1_500,
     dedupeKey: `${currentUser.id}:${boardId}`,
   }, async () => {
-    const board = await prisma.board.findUnique({ where: { id: boardId }, select: { id: true } })
-    if (!board) {
+    const result = await toggleFollowTarget({
+      userId: currentUser.id,
+      targetType: "board",
+      targetId: boardId,
+    })
+
+    if (result.status === "missing") {
       apiError(404, "节点不存在")
     }
 
-    try {
-      await prisma.boardFollow.delete({
-        where: {
-          userId_boardId: {
-            userId: currentUser.id,
-            boardId,
-          },
-        },
-      })
-      return apiSuccess({ followed: false }, "已取消关注节点")
-    } catch (error) {
-      const isNotFound = error instanceof Error && "code" in error && (error as { code?: string }).code === "P2025"
-      if (!isNotFound) {
-        throw error
-      }
+    if (result.status !== "ok") {
+      apiError(400, "关注节点失败")
     }
 
-    try {
-      await prisma.boardFollow.create({
-        data: {
-          userId: currentUser.id,
-          boardId,
-        },
-      })
-    } catch (error) {
-      const isConflict = error instanceof Error && "code" in error && (error as { code?: string }).code === "P2002"
-      if (!isConflict) {
-        throw error
-      }
-    }
-
-    return apiSuccess({ followed: true }, "关注节点成功")
-
+    return apiSuccess({ followed: result.followed }, result.followed ? "关注节点成功" : "已取消关注节点")
   })
 }, {
 

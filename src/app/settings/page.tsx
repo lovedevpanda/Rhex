@@ -21,13 +21,14 @@ import { getUserPointLogs } from "@/lib/points"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
 import { getCurrentUserLevelProgressView } from "@/lib/user-level-view"
-import { getUserBoardFollows, getUserFavoritePosts, getUserLikedPosts, getUserPosts, getUserReplies } from "@/lib/user-panel"
+import { getUserBoardFollows, getUserFavoritePosts, getUserLikedPosts, getUserPostFollows, getUserPosts, getUserReplies, getUserTagFollows, getUserUserFollows } from "@/lib/user-panel"
 import { getUserAccountSettings, getUserProfile } from "@/lib/users"
 import { getCurrentUserVerificationData } from "@/lib/verifications"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 type SettingsTabKey = "profile" | "invite" | "post-management" | "level" | "badges" | "verifications" | "points" | "follows"
 type PostManagementTabKey = "posts" | "replies" | "favorites" | "likes"
+type FollowTabKey = "boards" | "users" | "tags" | "posts"
 
 const tabs: SettingsTabKey[] = ["profile", "invite", "post-management", "level", "badges", "verifications", "points", "follows"]
 const postManagementTabs: Array<{ key: PostManagementTabKey; label: string }> = [
@@ -35,6 +36,12 @@ const postManagementTabs: Array<{ key: PostManagementTabKey; label: string }> = 
   { key: "replies", label: "我的回复" },
   { key: "favorites", label: "我的收藏" },
   { key: "likes", label: "我的点赞" },
+]
+const followTabs: Array<{ key: FollowTabKey; label: string }> = [
+  { key: "boards", label: "节点" },
+  { key: "users", label: "用户" },
+  { key: "tags", label: "标签" },
+  { key: "posts", label: "帖子" },
 ]
 
 export default async function SettingsPage(props: PageProps<"/settings">) {
@@ -56,15 +63,19 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
   const currentTabValue = readSearchParam(searchParams?.tab)
   const currentPostTabValue = readSearchParam(searchParams?.postTab)
+  const currentFollowTabValue = readSearchParam(searchParams?.followTab)
   const currentTab: SettingsTabKey = tabs.includes((currentTabValue as SettingsTabKey) ?? "profile")
     ? ((currentTabValue as SettingsTabKey) ?? "profile")
     : "profile"
   const currentPostTab: PostManagementTabKey = postManagementTabs.some((tab) => tab.key === currentPostTabValue)
     ? (currentPostTabValue as PostManagementTabKey)
     : "posts"
+  const currentFollowTab: FollowTabKey = followTabs.some((tab) => tab.key === currentFollowTabValue)
+    ? (currentFollowTabValue as FollowTabKey)
+    : "boards"
   const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
 
-  const [userPosts, replies, favoritePosts, likedPosts, followedBoards, levelView, badges, verificationData, pointLogs] = await Promise.all([
+  const [userPosts, replies, favoritePosts, likedPosts, followedBoards, followedUsers, followedTags, followedPosts, levelView, badges, verificationData, pointLogs] = await Promise.all([
     currentTab === "post-management" && currentPostTab === "posts"
       ? getUserPosts(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserPosts>> | null>(null),
@@ -77,9 +88,18 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     currentTab === "post-management" && currentPostTab === "likes"
       ? getUserLikedPosts(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserLikedPosts>> | null>(null),
-    currentTab === "follows"
+    currentTab === "follows" && currentFollowTab === "boards"
       ? getUserBoardFollows(currentUser.id, { page: currentPage, pageSize: 12 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserBoardFollows>> | null>(null),
+    currentTab === "follows" && currentFollowTab === "users"
+      ? getUserUserFollows(currentUser.id, { page: currentPage, pageSize: 12 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserUserFollows>> | null>(null),
+    currentTab === "follows" && currentFollowTab === "tags"
+      ? getUserTagFollows(currentUser.id, { page: currentPage, pageSize: 18 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserTagFollows>> | null>(null),
+    currentTab === "follows" && currentFollowTab === "posts"
+      ? getUserPostFollows(currentUser.id, { page: currentPage, pageSize: 10 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserPostFollows>> | null>(null),
     currentTab === "level" ? getCurrentUserLevelProgressView() : Promise.resolve(null),
     currentTab === "badges" ? getBadgeCenterData(currentUser.id) : Promise.resolve([]),
     currentTab === "verifications" ? getCurrentUserVerificationData() : Promise.resolve({ currentUserId: currentUser.id, types: [], approvedVerification: null }),
@@ -239,7 +259,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
           {currentTab === "points" ? <PointsPanel pointLogs={pointLogs} currentPoints={profile.points} pointName={settings.pointName} /> : null}
 
-          {currentTab === "follows" ? <FollowsPanel followedBoards={followedBoards} /> : null}
+          {currentTab === "follows" ? <FollowsPanel currentTab={currentFollowTab} tabs={followTabs} followedBoards={followedBoards} followedUsers={followedUsers} followedTags={followedTags} followedPosts={followedPosts} postLinkDisplayMode={settings.postLinkDisplayMode} /> : null}
         </SettingsShell>
       </main>
     </div>
@@ -431,7 +451,44 @@ function MyRepliesPanel({ replies, postLinkDisplayMode }: { replies: Awaited<Ret
   )
 }
 
-function FollowsPanel({ followedBoards }: { followedBoards: Awaited<ReturnType<typeof getUserBoardFollows>> | null }) {
+function FollowsPanel({
+  currentTab,
+  tabs,
+  followedBoards,
+  followedUsers,
+  followedTags,
+  followedPosts,
+  postLinkDisplayMode,
+}: {
+  currentTab: FollowTabKey
+  tabs: Array<{ key: FollowTabKey; label: string }>
+  followedBoards: Awaited<ReturnType<typeof getUserBoardFollows>> | null
+  followedUsers: Awaited<ReturnType<typeof getUserUserFollows>> | null
+  followedTags: Awaited<ReturnType<typeof getUserTagFollows>> | null
+  followedPosts: Awaited<ReturnType<typeof getUserPostFollows>> | null
+  postLinkDisplayMode: "SLUG" | "ID"
+}) {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="space-y-1">
+            <CardTitle>我的关注</CardTitle>
+            <p className="text-sm text-muted-foreground">统一管理你关注的节点、用户、标签和帖子动态。</p>
+          </div>
+          <SettingsTabs tabs={tabs} queryKey="followTab" basePath="/settings?tab=follows" />
+        </CardHeader>
+      </Card>
+
+      {currentTab === "boards" ? <FollowBoardsPanel followedBoards={followedBoards} /> : null}
+      {currentTab === "users" ? <FollowUsersPanel followedUsers={followedUsers} /> : null}
+      {currentTab === "tags" ? <FollowTagsPanel followedTags={followedTags} /> : null}
+      {currentTab === "posts" ? <FollowPostsPanel followedPosts={followedPosts} postLinkDisplayMode={postLinkDisplayMode} /> : null}
+    </div>
+  )
+}
+
+function FollowBoardsPanel({ followedBoards }: { followedBoards: Awaited<ReturnType<typeof getUserBoardFollows>> | null }) {
   if (!followedBoards) {
     return (
       <Card>
@@ -473,10 +530,118 @@ function FollowsPanel({ followedBoards }: { followedBoards: Awaited<ReturnType<t
           ))}
         </div>
 
-        {followedBoards.total > 0 ? <PaginationBar page={followedBoards.page} hasPrevPage={followedBoards.hasPrevPage} hasNextPage={followedBoards.hasNextPage} basePath="/settings?tab=follows" /> : null}
+        {followedBoards.total > 0 ? <PaginationBar page={followedBoards.page} hasPrevPage={followedBoards.hasPrevPage} hasNextPage={followedBoards.hasNextPage} basePath="/settings?tab=follows&followTab=boards" /> : null}
       </CardContent>
     </Card>
   )
+}
+
+function FollowUsersPanel({ followedUsers }: { followedUsers: Awaited<ReturnType<typeof getUserUserFollows>> | null }) {
+  if (!followedUsers) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载关注用户，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle>关注用户</CardTitle>
+          <span className="text-sm text-muted-foreground">共 {followedUsers.total} 位用户 · 第 {followedUsers.page} / {followedUsers.totalPages} 页</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {followedUsers.items.length === 0 ? <p className="text-sm text-muted-foreground">你还没有关注任何用户。</p> : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {followedUsers.items.map((user) => (
+            <Link key={user.id} href={`/users/${user.username}`} className="rounded-[18px] border border-border bg-card px-4 py-4 transition-colors hover:bg-accent/40">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{user.displayName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">@{user.username}</p>
+                </div>
+                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              </div>
+              <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">{user.bio}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                <span>Lv.{user.level}</span>
+                <span>帖子 {user.postCount}</span>
+                <span>粉丝 {user.followerCount}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {followedUsers.total > 0 ? <PaginationBar page={followedUsers.page} hasPrevPage={followedUsers.hasPrevPage} hasNextPage={followedUsers.hasNextPage} basePath="/settings?tab=follows&followTab=users" /> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function FollowTagsPanel({ followedTags }: { followedTags: Awaited<ReturnType<typeof getUserTagFollows>> | null }) {
+  if (!followedTags) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载关注标签，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle>关注标签</CardTitle>
+          <span className="text-sm text-muted-foreground">共 {followedTags.total} 个标签 · 第 {followedTags.page} / {followedTags.totalPages} 页</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {followedTags.items.length === 0 ? <p className="text-sm text-muted-foreground">你还没有关注任何标签。</p> : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {followedTags.items.map((tag) => (
+            <Link key={tag.id} href={`/tags/${tag.slug}`} className="rounded-[18px] border border-border bg-card px-4 py-4 transition-colors hover:bg-accent/40">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">#{tag.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">/tags/{tag.slug}</p>
+                </div>
+                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                <span>内容 {tag.postCount}</span>
+                <span>关注 {tag.followerCount}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {followedTags.total > 0 ? <PaginationBar page={followedTags.page} hasPrevPage={followedTags.hasPrevPage} hasNextPage={followedTags.hasNextPage} basePath="/settings?tab=follows&followTab=tags" /> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function FollowPostsPanel({
+  followedPosts,
+  postLinkDisplayMode,
+}: {
+  followedPosts: Awaited<ReturnType<typeof getUserPostFollows>> | null
+  postLinkDisplayMode: "SLUG" | "ID"
+}) {
+  if (!followedPosts) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载关注帖子，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return <PostListPanel title="关注帖子" emptyText="当前还没有关注任何帖子。" posts={followedPosts} postLinkDisplayMode={postLinkDisplayMode} paginationBase="/settings?tab=follows&followTab=posts" />
 }
 
 function FavoritesPanel({ favoritePosts, postLinkDisplayMode }: { favoritePosts: Awaited<ReturnType<typeof getUserFavoritePosts>> | null; postLinkDisplayMode: "SLUG" | "ID" }) {

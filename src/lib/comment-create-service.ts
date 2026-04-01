@@ -99,10 +99,14 @@ export async function createCommentFlow(input: {
 
   return {
     postId,
+    postAuthorId: postContext.post.authorId,
     settings,
     created,
     targetPage,
+    isRootComment: !normalizedParentId,
+    normalizedReplyToUserId,
     normalizedReplyToUserName,
+    mentionUserIds: resolvedComment.mentions.map((mention) => mention.id),
     contentSafety,
   }
 }

@@ -1,7 +1,7 @@
 import { prisma } from "@/db/client"
 import type { Prisma } from "@/db/types"
 
-export type FeedQuerySort = "latest" | "new" | "hot" | "weekly"
+export type FeedQuerySort = "latest" | "new" | "hot" | "weekly" | "following"
 
 const feedPostInclude = {
   board: {
@@ -33,6 +33,7 @@ export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelat
       return [{ score: "desc" as const }, { commentCount: "desc" as const }, { likeCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
     case "weekly":
       return [{ likeCount: "desc" as const }, { commentCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
+    case "following":
     case "latest":
     default:
       return [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }] as Prisma.PostOrderByWithRelationInput[]
@@ -41,10 +42,35 @@ export function getFeedOrderBy(sort: FeedQuerySort): Prisma.PostOrderByWithRelat
 }
 
 
-function buildFeedWhere(excludedPostIds: string[] = []): Prisma.PostWhereInput {
+function buildFeedWhere(
+  excludedPostIds: string[] = [],
+  filters?: {
+    boardIds?: string[]
+    authorIds?: number[]
+  },
+): Prisma.PostWhereInput {
+  const followClauses: Prisma.PostWhereInput[] = []
+
+  if (filters?.boardIds?.length) {
+    followClauses.push({
+      boardId: {
+        in: filters.boardIds,
+      },
+    })
+  }
+
+  if (filters?.authorIds?.length) {
+    followClauses.push({
+      authorId: {
+        in: filters.authorIds,
+      },
+    })
+  }
+
   return {
     status: "NORMAL",
     id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    OR: followClauses.length > 0 ? followClauses : undefined,
   }
 }
 
@@ -53,6 +79,26 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
 
   return prisma.post.findMany({
     where: buildFeedWhere(excludedPostIds),
+    include: feedPostInclude,
+    orderBy: getFeedOrderBy(sort),
+    skip: (page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
+  })
+}
+
+export function findFollowingFeedPosts(
+  page: number,
+  pageSize: number,
+  sort: FeedQuerySort,
+  filters: {
+    boardIds: string[]
+    authorIds: number[]
+  },
+) {
+  const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
+
+  return prisma.post.findMany({
+    where: buildFeedWhere([], filters),
     include: feedPostInclude,
     orderBy: getFeedOrderBy(sort),
     skip: (page - 1) * normalizedPageSize,

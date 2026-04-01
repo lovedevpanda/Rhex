@@ -1,9 +1,10 @@
 import Link from "next/link"
-import { Clock3, Flame, Sparkles } from "lucide-react"
+import { Clock3, Flame, Sparkles, Users2 } from "lucide-react"
 
 import { ForumPostListItem } from "@/components/forum-post-list-item"
 import { PostGalleryGrid } from "@/components/post-gallery-grid"
 import type { FeedSort, ForumFeedItem } from "@/lib/forum-feed"
+import { buildHomeFeedHref } from "@/lib/home-feed-route"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
 import { getSiteSettings } from "@/lib/site-settings"
 import { resolvePostHeatStyle } from "@/lib/post-heat"
@@ -20,6 +21,7 @@ const tabs: Array<{ key: Exclude<FeedSort, "weekly">; label: string; icon: typeo
   { key: "latest", label: "最新", icon: Clock3 },
   { key: "new", label: "新贴", icon: Sparkles },
   { key: "hot", label: "热门", icon: Flame },
+  { key: "following", label: "关注", icon: Users2 },
 ]
 
 function getFeedPinLabel(pinScope?: string | null) {
@@ -48,7 +50,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
           return (
             <Link
               key={tab.key}
-              href={`/?sort=${tab.key}&page=1`}
+              href={buildHomeFeedHref(tab.key)}
               className={active ? "flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[13px] font-medium text-foreground sm:px-4 sm:py-2 sm:text-sm lg:gap-2" : "flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 sm:px-4 sm:py-2 sm:text-sm lg:gap-2"}
             >
               <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -91,7 +93,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 authorStatus: item.authorStatus,
                 authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
                 metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: currentSort === "latest" && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
                 commentCount: item.commentCount,
                 commentAccentColor: commentHeat.color,
               }}
@@ -138,7 +140,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 authorStatus: item.authorStatus,
                 authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
                 metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: currentSort === "latest" && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
                 commentCount: item.commentCount,
                 commentAccentColor: commentHeat.color,
               }
@@ -177,7 +179,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 authorStatus: item.authorStatus,
                 authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
                 metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: currentSort === "latest" && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
                 commentCount: item.commentCount,
                 commentAccentColor: commentHeat.color,
               }}

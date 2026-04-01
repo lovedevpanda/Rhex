@@ -1,5 +1,6 @@
 import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { createCommentFlow } from "@/lib/comment-create-service"
+import { dispatchPostFollowCommentNotificationsBestEffort } from "@/lib/follow-notifications"
 import { handleCommentCreateSideEffects } from "@/lib/interaction-side-effects"
 import { evaluateUserLevelProgress } from "@/lib/level-system"
 import { logRequestSucceeded } from "@/lib/request-log"
@@ -22,6 +23,17 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     userId: currentUser.id,
     commentId: result.created.id,
   })
+
+  if (!result.contentSafety.shouldReview) {
+    await dispatchPostFollowCommentNotificationsBestEffort({
+      commentId: result.created.id,
+      excludeUserIds: [
+        ...(result.isRootComment ? [result.postAuthorId] : []),
+        ...(typeof result.normalizedReplyToUserId === "number" ? [result.normalizedReplyToUserId] : []),
+        ...result.mentionUserIds,
+      ],
+    })
+  }
 
   const redPacketMessage = redPacketClaim?.claimed ? `，并领取了 ${redPacketClaim.amount} ${redPacketClaim.pointName} 红包` : ""
 

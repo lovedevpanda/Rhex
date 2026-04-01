@@ -1,6 +1,17 @@
-import { countUserBoardFollows, countUserFavorites, countUserLikedPosts, countUserPosts, countUserReplies, findUserBoardFollowsById, findUserFavoritePostsById, findUserLikedPostsById, findUserPostsById, findUserRepliesById } from "@/db/user-queries"
+import {
+  countUserBoardFollows,
+  countUserPostFollows,
+  countUserTagFollows,
+  countUserUserFollows,
+  findUserBoardFollowsById,
+  findUserPostFollowsById,
+  findUserTagFollowsById,
+  findUserUserFollowsById,
+} from "@/db/follow-queries"
+import { countUserFavorites, countUserLikedPosts, countUserPosts, countUserReplies, findUserFavoritePostsById, findUserLikedPostsById, findUserPostsById, findUserRepliesById } from "@/db/user-queries"
 import { mapListPost } from "@/lib/post-map"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
+import { getUserDisplayName } from "@/lib/users"
 
 export interface UserFavoritePostsResult {
   items: ReturnType<typeof mapListPost>[]
@@ -64,6 +75,54 @@ export interface UserBoardFollowsResult {
     zoneName?: string | null
     zoneSlug?: string | null
   }>
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export interface UserUserFollowsResult {
+  items: Array<{
+    id: number
+    username: string
+    displayName: string
+    bio: string
+    avatarPath?: string | null
+    status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+    level: number
+    postCount: number
+    commentCount: number
+    likeReceivedCount: number
+    followerCount: number
+  }>
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export interface UserTagFollowsResult {
+  items: Array<{
+    id: string
+    name: string
+    slug: string
+    postCount: number
+    followerCount: number
+  }>
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export interface UserPostFollowsResult {
+  items: ReturnType<typeof mapListPost>[]
   page: number
   pageSize: number
   total: number
@@ -218,6 +277,87 @@ export async function getUserBoardFollows(userId: number, options: { page?: numb
         zoneName: follow.board.zone?.name ?? null,
         zoneSlug: follow.board.zone?.slug ?? null,
       })),
+      ...pagination,
+    }
+  } catch (error) {
+    console.error(error)
+    return {
+      items: [],
+      ...createEmptyPageResult(pageSize),
+    }
+  }
+}
+
+export async function getUserUserFollows(userId: number, options: { page?: number; pageSize?: number } = {}): Promise<UserUserFollowsResult> {
+  const { pageSize, requestedPage } = resolvePagination(options, 12)
+
+  try {
+    const total = await countUserUserFollows(userId)
+    const pagination = resolvePagedResult(total, pageSize, requestedPage)
+    const follows = await findUserUserFollowsById(userId, { page: pagination.page, pageSize })
+
+    return {
+      items: follows.map((follow) => ({
+        id: follow.following.id,
+        username: follow.following.username,
+        displayName: getUserDisplayName(follow.following),
+        bio: follow.following.bio?.trim() || "这个用户还没有留下简介。",
+        avatarPath: follow.following.avatarPath,
+        status: follow.following.status,
+        level: follow.following.level,
+        postCount: follow.following.postCount,
+        commentCount: follow.following.commentCount,
+        likeReceivedCount: follow.following.likeReceivedCount,
+        followerCount: follow.following._count.followedByUsers,
+      })),
+      ...pagination,
+    }
+  } catch (error) {
+    console.error(error)
+    return {
+      items: [],
+      ...createEmptyPageResult(pageSize),
+    }
+  }
+}
+
+export async function getUserTagFollows(userId: number, options: { page?: number; pageSize?: number } = {}): Promise<UserTagFollowsResult> {
+  const { pageSize, requestedPage } = resolvePagination(options, 18)
+
+  try {
+    const total = await countUserTagFollows(userId)
+    const pagination = resolvePagedResult(total, pageSize, requestedPage)
+    const follows = await findUserTagFollowsById(userId, { page: pagination.page, pageSize })
+
+    return {
+      items: follows.map((follow) => ({
+        id: follow.tag.id,
+        name: follow.tag.name,
+        slug: follow.tag.slug,
+        postCount: follow.tag._count.posts,
+        followerCount: follow.tag._count.followers,
+      })),
+      ...pagination,
+    }
+  } catch (error) {
+    console.error(error)
+    return {
+      items: [],
+      ...createEmptyPageResult(pageSize),
+    }
+  }
+}
+
+export async function getUserPostFollows(userId: number, options: { page?: number; pageSize?: number } = {}): Promise<UserPostFollowsResult> {
+  const { pageSize, requestedPage } = resolvePagination(options, 10)
+
+  try {
+    const total = await countUserPostFollows(userId)
+    const pagination = resolvePagedResult(total, pageSize, requestedPage)
+    const follows = await findUserPostFollowsById(userId, { page: pagination.page, pageSize })
+
+    return {
+      items: follows.map((follow) => mapListPost(follow.post)),
       ...pagination,
     }
   } catch (error) {

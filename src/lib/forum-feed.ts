@@ -1,4 +1,5 @@
-import { findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
+import { findFollowFeedTargetIds } from "@/db/follow-queries"
+import { findFollowingFeedPosts, findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
 import { findGlobalPinnedPosts } from "@/db/taxonomy-queries"
 import { formatRelativeTime } from "@/lib/formatters"
 import { extractPinnedPostIds } from "@/lib/pinned-posts"
@@ -6,7 +7,7 @@ import { extractPinnedPostIds } from "@/lib/pinned-posts"
 import { resolvePostCoverImage } from "@/lib/post-cover"
 import { getPostTypeLabel, type LocalPostType } from "@/lib/post-types"
 
-export type FeedSort = "latest" | "new" | "hot" | "weekly"
+export type FeedSort = "latest" | "new" | "hot" | "weekly" | "following"
 
 export interface ForumFeedItem {
   id: string
@@ -119,7 +120,23 @@ function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord): ForumFeedItem
   }
 }
 
-export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "latest"): Promise<ForumFeedItem[]> {
+export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "latest", currentUserId?: number): Promise<ForumFeedItem[]> {
+  if (sort === "following") {
+    if (!currentUserId) {
+      return []
+    }
+
+    const { boardIds, authorIds } = await findFollowFeedTargetIds(currentUserId)
+
+    if (boardIds.length === 0 && authorIds.length === 0) {
+      return []
+    }
+
+    const posts = await findFollowingFeedPosts(page, pageSize, sort, { boardIds, authorIds })
+
+    return posts.map((post) => mapFeedPost(post))
+  }
+
   if (page === 1) {
     const globalPinnedPosts = await findGlobalPinnedPosts()
     const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)

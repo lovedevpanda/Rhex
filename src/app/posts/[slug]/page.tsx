@@ -6,6 +6,7 @@ import { notFound } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { CommentThread } from "@/components/comment-thread"
+import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { ForumPageShell } from "@/components/forum-page-shell"
 import { LevelIcon } from "@/components/level-icon"
 import { MarkdownContent } from "@/components/markdown-content"
@@ -29,6 +30,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
 import { getBoards } from "@/lib/boards"
 import { getCommentsByPostId, getUserReplyCountByPost } from "@/lib/comments"
+import { isUserFollowingTarget } from "@/lib/follows"
 import { resolveSidebarUser } from "@/lib/home-sidebar"
 import { getPostDetailBySlug, getPostSeoBySlug, incrementPostViewCount } from "@/lib/posts"
 
@@ -102,6 +104,13 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
   }
 
   const canonicalPath = getCanonicalPostPath({ slug: basePost.slug })
+  const isFollowingPost = currentUser
+    ? await isUserFollowingTarget({
+        userId: currentUser.id,
+        targetType: "post",
+        targetId: basePost.id,
+      })
+    : false
 
   const isAdmin = Boolean(currentUser && (currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"))
 
@@ -287,10 +296,19 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                           </div>
                         </div>
 
-                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary/60 px-2.5 py-1 text-[13px] text-muted-foreground">
-                          <Eye className="h-3.5 w-3.5" />
-                          {displayPost.stats.views}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <FollowToggleButton
+                            targetType="post"
+                            targetId={displayPost.id}
+                            initialFollowed={isFollowingPost}
+                            activeLabel="已关注帖子"
+                            inactiveLabel="关注帖子"
+                          />
+                          <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-2.5 py-1 text-[13px] text-muted-foreground">
+                            <Eye className="h-3.5 w-3.5" />
+                            {displayPost.stats.views}
+                          </span>
+                        </div>
                       </div>
 
                       <h1 className={displayPost.isFeatured ? "text-[15px] font-semibold leading-7 text-emerald-700 sm:hidden dark:text-emerald-300" : displayPost.isPinned ? "text-[15px] font-semibold leading-7 text-orange-700 sm:hidden dark:text-orange-300" : "text-[15px] font-semibold leading-7 sm:hidden"}>{displayPost.title}</h1>
@@ -327,7 +345,14 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center justify-end text-sm text-muted-foreground md:pt-1">
+                        <div className="flex shrink-0 items-center justify-end gap-2 text-sm text-muted-foreground md:pt-1">
+                          <FollowToggleButton
+                            targetType="post"
+                            targetId={displayPost.id}
+                            initialFollowed={isFollowingPost}
+                            activeLabel="已关注帖子"
+                            inactiveLabel="关注帖子"
+                          />
                           <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5">
                             <Eye className="h-4 w-4" />
                             {displayPost.stats.views}

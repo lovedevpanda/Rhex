@@ -6,6 +6,7 @@ export const userProfileSelect = {
   id: true,
   username: true,
   nickname: true,
+  role: true,
   bio: true,
   avatarPath: true,
   gender: true,
@@ -22,6 +23,7 @@ export const userProfileSelect = {
     select: {
       favorites: true,
       boardFollows: true,
+      followedByUsers: true,
     },
   },
   inviter: {

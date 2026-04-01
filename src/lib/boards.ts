@@ -1,6 +1,6 @@
 import { cache } from "react"
 
-import { findBoardFollow } from "@/db/board-queries"
+import { findFollowRecord } from "@/db/follow-queries"
 import { findBoardNormalPosts, findBoardPinnedPosts, findZoneBoardIdsById } from "@/db/taxonomy-queries"
 import { resolveBoardSettings } from "@/lib/board-settings"
 import { resolvePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
@@ -153,7 +153,11 @@ export async function getBoardPosts(slug: string, page = 1, pageSize = 30) {
 }
 
 export async function isUserFollowingBoard(userId: number, boardId: string) {
-  const follow = await findBoardFollow(userId, boardId)
+  const follow = await findFollowRecord({
+    userId,
+    targetType: "board",
+    targetId: boardId,
+  })
 
   return Boolean(follow)
 }

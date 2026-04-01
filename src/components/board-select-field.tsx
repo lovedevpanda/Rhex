@@ -100,8 +100,8 @@ export function BoardSelectField({
       <DialogPortal open={open} onClose={closeDialog}>
         <div className="fixed inset-0 z-[120]">
           <DialogBackdrop onClick={closeDialog} />
-          <DialogPositioner className="items-end overflow-y-auto px-0 pt-8 sm:items-center sm:px-4 sm:py-6">
-            <DialogPanel className="flex max-h-[92dvh] rounded-t-[28px] border border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-2xl sm:rounded-[28px] sm:p-6">
+          <DialogPositioner className="items-end overflow-y-auto px-0 pt-8 pb-0 sm:items-center sm:px-4 sm:py-6">
+            <DialogPanel className="flex w-full flex-col overflow-hidden rounded-t-[28px] border border-border px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-2xl sm:rounded-[28px] sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold">{title}</h3>
@@ -125,7 +125,7 @@ export function BoardSelectField({
                 </label>
               </div>
 
-              <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-2">
+              <div className="mt-4 min-h-0 max-h-[calc(90dvh-11rem)] flex-1 space-y-4 overflow-y-auto pr-1 pb-2 sm:max-h-[min(65dvh,36rem)]">
                 {filteredGroups.length > 0 ? filteredGroups.map((group) => (
                   <section key={group.zone} className="space-y-2">
                     <div className="sticky top-0 z-10 bg-background/95 py-1 text-xs font-medium tracking-wide text-muted-foreground backdrop-blur">
