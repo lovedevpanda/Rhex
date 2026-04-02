@@ -133,16 +133,27 @@ export function EditorBody({
   onSelect,
   onPaste,
 }: EditorBodyProps) {
+  const writeContainerClassName = isFullscreen
+    ? "relative flex min-h-0 flex-1 overflow-hidden rounded-xl bg-transparent"
+    : "relative flex overflow-hidden rounded-xl bg-transparent"
+  const writeContainerStyle = isFullscreen
+    ? { minHeight: 0 }
+    : { minHeight: contentMinHeight, maxHeight: contentMinHeight }
+  const textareaStyle = isFullscreen
+    ? { minHeight: 0, maxHeight: "none" as const }
+    : { minHeight: contentMinHeight, maxHeight: contentMinHeight }
+
   return (
     <div
       className={activeTab === "write"
-        ? (isFullscreen ? "flex min-h-0 flex-1 flex-col pl-2 pr-3 pb-4 pt-3 sm:pl-4 sm:pr-5 sm:pb-8" : "pl-1 pr-3 pb-4 pt-3 sm:pl-1 sm:pr-5")
+        ? (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pt-3 sm:px-5" : "pl-1 pr-3 pt-3 sm:pl-1 sm:pr-5")
         : (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pb-4 pt-3 sm:px-5 sm:pb-8" : "px-3 pb-4 pt-3 sm:px-5")}
     >
       {activeTab === "write" ? (
         <div
-          className="relative flex overflow-hidden rounded-xl bg-transparent"
-          style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}
+          key="write-panel"
+          className={writeContainerClassName}
+          style={writeContainerStyle}
         >
           <div
             aria-hidden="true"
@@ -176,7 +187,7 @@ export function EditorBody({
             disabled={disabled}
             className="w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent pl-2 pr-0 py-1 font-mono text-sm leading-7 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
             placeholder={placeholder}
-            style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}
+            style={textareaStyle}
           />
           <div
             aria-hidden="true"
@@ -201,7 +212,7 @@ export function EditorBody({
           </div>
         </div>
       ) : (
-        <div className="min-w-0 overflow-y-auto" style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}>
+        <div key="preview-panel" className="min-w-0 overflow-y-auto" style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}>
           <MarkdownContent content={value} emptyText="暂无预览内容" markdownEmojiMap={markdownEmojiMap} />
         </div>
       )}
@@ -299,7 +310,7 @@ export function EditorToolbar({
   }
 
   return (
-    <div className={`relative mt-2 flex flex-col gap-3 border-t border-border ${isFullscreen ? "" : "pt-2"} sm:flex-row sm:items-center sm:justify-between`}>
+    <div className={`relative flex flex-col gap-3 border-t border-border ${isFullscreen ? "" : "mt-2 pt-2"} sm:flex-row sm:items-center sm:justify-between`}>
       <div className="-mx-1 flex w-full items-center gap-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:px-0 sm:pb-0">
         <HeadingSelect
           disabled={disabled}

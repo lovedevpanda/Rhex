@@ -53,6 +53,8 @@ export function RefinedRichPostEditor({
   const lineMeasureContainerRef = useRef<HTMLDivElement | null>(null)
   const lineMeasureRefs = useRef<Array<HTMLDivElement | null>>([])
   const selectionRef = useRef({ start: 0, end: 0 })
+  const restoreViewStateRef = useRef<{ scrollTop: number; scrollLeft: number; pageXOffset: number; pageYOffset: number } | null>(null)
+  const writeTabViewStateRef = useRef<{ scrollTop: number; scrollLeft: number; selectionStart: number; selectionEnd: number } | null>(null)
 
   const [mediaPanelPosition, setMediaPanelPosition, mediaPanelReady, setMediaPanelReady, mediaPanelRef] = useFloatingPanel()
   const [emojiPanelPosition, setEmojiPanelPosition, emojiPanelReady, setEmojiPanelReady, emojiPanelRef] = useFloatingPanel()
@@ -117,13 +119,36 @@ export function RefinedRichPostEditor({
         return
       }
 
-      element.focus()
+      const viewState = restoreViewStateRef.current
+
+      try {
+        element.focus({ preventScroll: true })
+      } catch {
+        element.focus()
+      }
       element.setSelectionRange(start, end)
       selectionRef.current = { start, end }
+
+      if (viewState) {
+        element.scrollTop = viewState.scrollTop
+        element.scrollLeft = viewState.scrollLeft
+        setEditorScrollTop(viewState.scrollTop)
+        window.scrollTo(viewState.pageXOffset, viewState.pageYOffset)
+        restoreViewStateRef.current = null
+      }
     })
   }, [])
 
   const applyEditorUpdate = useCallback((update: MarkdownEditorUpdate) => {
+    const element = textareaRef.current
+    restoreViewStateRef.current = element
+      ? {
+          scrollTop: element.scrollTop,
+          scrollLeft: element.scrollLeft,
+          pageXOffset: window.scrollX,
+          pageYOffset: window.scrollY,
+        }
+      : null
     onChange(update.value)
     restoreSelection(update.selectionStart, update.selectionEnd)
   }, [onChange, restoreSelection])
@@ -155,7 +180,7 @@ export function RefinedRichPostEditor({
     }
   }, [uploadResults])
 
-  const contentMinHeight = isFullscreen ? "calc(100vh - 220px)" : minHeight
+  const contentMinHeight = isFullscreen ? "100%" : minHeight
   const logicalLines = useMemo(() => value.split("\n"), [value])
   const lineCount = logicalLines.length
   const lineNumbers = useMemo(() => Array.from({ length: lineCount }, (_, index) => index + 1), [lineCount])
@@ -759,6 +784,65 @@ export function RefinedRichPostEditor({
     await uploadImageFiles(imageFiles)
   }, [markdownImageUploadEnabled, uploadImageFiles])
 
+  const handleTabChange = useCallback((nextTab: "write" | "preview") => {
+    if (nextTab === activeTab) {
+      return
+    }
+
+    if (activeTab === "write") {
+      const element = textareaRef.current
+      if (element) {
+        writeTabViewStateRef.current = {
+          scrollTop: element.scrollTop,
+          scrollLeft: element.scrollLeft,
+          selectionStart: element.selectionStart,
+          selectionEnd: element.selectionEnd,
+        }
+        selectionRef.current = {
+          start: element.selectionStart,
+          end: element.selectionEnd,
+        }
+        setEditorScrollTop(element.scrollTop)
+      }
+    }
+
+    setActiveTab(nextTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== "write") {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = textareaRef.current
+      const viewState = writeTabViewStateRef.current
+      if (!element || !viewState) {
+        return
+      }
+
+      element.scrollTop = viewState.scrollTop
+      element.scrollLeft = viewState.scrollLeft
+      selectionRef.current = {
+        start: viewState.selectionStart,
+        end: viewState.selectionEnd,
+      }
+
+      try {
+        element.focus({ preventScroll: true })
+      } catch {
+        element.focus()
+      }
+      element.setSelectionRange(viewState.selectionStart, viewState.selectionEnd)
+      setEditorScrollTop(viewState.scrollTop)
+      writeTabViewStateRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeTab])
+
   return (
     <div className={isFullscreen ? "fixed inset-0 z-50 bg-black/45 p-4 md:p-6" : ""}>
       <div className={isFullscreen ? "flex h-full w-full items-center justify-center" : ""}>
@@ -769,7 +853,7 @@ export function RefinedRichPostEditor({
             isFullscreen={isFullscreen}
             uploading={uploading}
             valueLength={value.length}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             onEnterFullscreen={() => setIsFullscreen(true)}
             onExitFullscreen={() => setIsFullscreen(false)}
           />

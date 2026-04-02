@@ -307,18 +307,22 @@ export function AdminAnnouncementManager({ initialItems }: AdminAnnouncementMana
       <DialogPortal open={createOpen} onClose={() => setCreateOpen(false)} closeOnEscape={!isPending}>
         <div className="fixed inset-0 z-[120]">
           <DialogBackdrop onClick={isPending ? undefined : () => setCreateOpen(false)} />
-          <DialogPositioner>
-            <DialogPanel className="max-w-3xl p-5">
-              <div className="flex items-start justify-between gap-3">
+          <DialogPositioner className="px-3 py-4">
+            <DialogPanel className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col p-0">
+              <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                 <div>
                   <h3 className="text-lg font-semibold">新增站点文档</h3>
                   <p className="mt-1 text-sm text-muted-foreground">一个入口管理公告与帮助文档，支持文档页和跳转链接两种模式。</p>
                 </div>
                 <Button type="button" variant="ghost" className="h-8 px-2" onClick={() => setCreateOpen(false)} disabled={isPending}>关闭</Button>
               </div>
-              <form onSubmit={submitCreate} className="mt-5 space-y-4">
-                <EditorFields draft={createDraft} onChange={updateCreateDraft} />
-                <div className="flex items-center gap-3">
+              <form onSubmit={submitCreate} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+                  <div className="space-y-4">
+                    <EditorFields draft={createDraft} onChange={updateCreateDraft} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 border-t border-border px-5 py-4">
                   <Button disabled={isPending} className="rounded-full">
                     {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}创建站点文档
                   </Button>

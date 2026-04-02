@@ -1,6 +1,8 @@
 import { prisma } from "@/db/client"
 import { extractSummaryFromContent } from "@/lib/content"
 import { getAllPostContentText } from "@/lib/post-content"
+export { normalizeManualTags } from "@/lib/post-tags"
+import { normalizeManualTags } from "@/lib/post-tags"
 
 function normalizeTagSlug(name: string) {
   return name
@@ -11,18 +13,6 @@ function normalizeTagSlug(name: string) {
     .trim()
     .replace(/\s+/g, "-")
     .slice(0, 32)
-}
-
-export function normalizeManualTags(tags?: string[]) {
-  if (!Array.isArray(tags)) {
-    return []
-  }
-
-  return tags
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .filter((item, index, array) => array.findIndex((candidate) => candidate.toLowerCase() === item.toLowerCase()) === index)
-    .slice(0, 10)
 }
 
 function buildTagOperations(tags?: string[]) {
