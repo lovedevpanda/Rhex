@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
@@ -6,6 +7,15 @@ import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `登录 - ${settings.siteName}`,
+    description: `登录 ${settings.siteName}，继续浏览帖子、参与讨论并管理你的账户。`,
+  }
+}
 
 export default async function LoginPage() {
   const [user, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])

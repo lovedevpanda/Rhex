@@ -34,7 +34,7 @@ export async function createPostFlow(body: unknown) {
     apiError(400, validated.message ?? "参数错误")
   }
 
-  const { title, content, coverPath, boardSlug, postType, bountyPoints, pollOptions, commentsVisibleToAuthorOnly, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, lotteryConfig } = validated.data
+  const { title, content, coverPath, boardSlug, postType, bountyPoints, pollOptions, commentsVisibleToAuthorOnly, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, minViewVipLevel, lotteryConfig } = validated.data
 
   const rawBody = body as Record<string, unknown>
   const manualTags = normalizeManualTags(Array.isArray(rawBody?.manualTags)
@@ -130,6 +130,7 @@ export async function createPostFlow(body: unknown) {
       status: shouldPending ? "PENDING" : "NORMAL",
       commentsVisibleToAuthorOnly,
       minViewLevel,
+      minViewVipLevel,
       bountyPoints: postType === "BOUNTY" ? bountyPoints : null,
       pollExpiresAt: postType === "POLL" ? pollExpiresAt : null,
       lotteryStatus: postType === "LOTTERY" ? (shouldPending ? "DRAFT" : "ACTIVE") : null,

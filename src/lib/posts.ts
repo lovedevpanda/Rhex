@@ -9,6 +9,7 @@ import { getPublicPostContentText, parsePostContentDocument } from "@/lib/post-c
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 import type { PostTipSummary } from "@/lib/post-tips"
 import { withRuntimeFallback } from "@/lib/runtime-errors"
+import type { SiteTippingGiftItem } from "@/lib/site-settings"
 
 
 import { findEditablePostBySlug, findHomepagePosts, findPostDetailBySlug, findPostSeoBySlug, increasePostViewCount } from "@/db/post-queries"
@@ -67,6 +68,7 @@ export interface SitePostItem {
   authorDisplayedBadges?: Array<{
     id: string
     name: string
+    description?: string | null
     color: string
     iconText?: string | null
   }>
@@ -108,6 +110,7 @@ export interface SitePostItem {
   pinScope?: string | null
   hasRedPacket?: boolean
   minViewLevel?: number
+  minViewVipLevel?: number
   isFeatured: boolean
 
   bounty?: {
@@ -135,6 +138,9 @@ export interface SitePostItem {
     enabled: boolean
     pointName: string
     currentUserPoints: number
+    gifts: SiteTippingGiftItem[]
+    giftStats: PostTipSummary["giftStats"]
+    recentGiftEvents: PostTipSummary["recentGiftEvents"]
     allowedAmounts: number[]
     dailyLimit: number
     perPostLimit: number
@@ -251,6 +257,9 @@ function mapPostDetail(
       enabled: tipSummary.enabled,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
+      gifts: tipSummary.gifts,
+      giftStats: tipSummary.giftStats,
+      recentGiftEvents: tipSummary.recentGiftEvents,
       allowedAmounts: tipSummary.allowedAmounts,
       dailyLimit: tipSummary.dailyLimit,
       perPostLimit: tipSummary.perPostLimit,
@@ -263,6 +272,9 @@ function mapPostDetail(
       enabled: false,
       pointName: "积分",
       currentUserPoints: 0,
+      gifts: [],
+      giftStats: [],
+      recentGiftEvents: [],
       allowedAmounts: [],
       dailyLimit: 0,
       perPostLimit: 0,

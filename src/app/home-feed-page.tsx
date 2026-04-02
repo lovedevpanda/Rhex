@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import type { ReactNode } from "react"
 
 import { ForumFeedList } from "@/components/forum-feed-list"
 import { ForumPageShell } from "@/components/forum-page-shell"
@@ -31,6 +32,7 @@ const HOME_FEED_LABELS: Record<HomeFeedSort, string> = {
 interface HomeFeedPageProps {
   sort: HomeFeedSort
   searchParams?: Promise<{ page?: string | string[] }>
+  mainTopSlot?: ReactNode
 }
 
 export async function generateHomeFeedMetadata(sort: HomeFeedSort): Promise<Metadata> {
@@ -48,7 +50,7 @@ export async function generateHomeFeedMetadata(sort: HomeFeedSort): Promise<Meta
   }
 }
 
-export async function HomeFeedPage({ sort, searchParams }: HomeFeedPageProps) {
+export async function HomeFeedPage({ sort, searchParams, mainTopSlot }: HomeFeedPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined
   const rawPage = resolvedSearchParams?.page
   const currentPage = parseHomeFeedPage(resolvedSearchParams?.page)
@@ -102,12 +104,13 @@ export async function HomeFeedPage({ sort, searchParams }: HomeFeedPageProps) {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      <div className="mx-auto max-w-[1200px] px-4">
+      <div className="mx-auto max-w-[1200px] px-1">
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <div className="pb-12 py-1">
+              {mainTopSlot ? <div className="mt-6 mb-4">{mainTopSlot}</div> : null}
               <ForumFeedList items={feed} currentSort={sort} listDisplayMode={settings.homeFeedPostListDisplayMode} postLinkDisplayMode={settings.postLinkDisplayMode} />
 
               {feed.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">{emptyStateText}</div> : null}
@@ -138,6 +141,7 @@ export async function HomeFeedPage({ sort, searchParams }: HomeFeedPageProps) {
                 hotTopics={hotTopics}
                 postLinkDisplayMode={settings.postLinkDisplayMode}
                 announcements={announcements}
+                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
                 friendLinks={friendLinks.compact}
                 friendLinksEnabled={settings.friendLinksEnabled}
                 topPanels={sidebarPanels.top}

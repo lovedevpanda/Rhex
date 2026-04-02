@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { AlertTriangle, CheckCircle2, FileText, Info, Megaphone, Settings2, Shield, TrendingUp, Users } from "lucide-react"
@@ -59,11 +60,24 @@ const tabLabels: Record<AdminTabKey, string> = {
   levels: "等级系统",
   badges: "勋章系统",
   verifications: "认证系统",
-  announcements: "公告管理",
+  announcements: "站点文档",
   reports: "举报中心",
   logs: "日志中心",
   security: "内容安全",
   settings: "站点设置",
+}
+
+export async function generateMetadata(props: PageProps<"/admin">): Promise<Metadata> {
+  const searchParams = await props.searchParams
+  const currentTabValue = readSearchParam(searchParams?.tab)
+  const currentTab: AdminTabKey = adminTabs.includes((currentTabValue as AdminTabKey) ?? "overview")
+    ? ((currentTabValue as AdminTabKey) ?? "overview")
+    : "overview"
+  const settings = await getServerSiteSettings()
+
+  return {
+    title: `${tabLabels[currentTab]} - ${settings.siteName}`,
+  }
 }
 
 function getAdminVerificationTypes() {

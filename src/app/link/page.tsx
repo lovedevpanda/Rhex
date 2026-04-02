@@ -20,7 +20,7 @@ export default async function FriendLinkPage() {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-[1200px] px-4 py-6">
+      <main className="mx-auto max-w-[1200px] px-1 py-6">
         <FriendLinkPageContent links={data.links} announcement={data.announcement} applicationEnabled={data.applicationEnabled && data.enabled} />
       </main>
     </div>

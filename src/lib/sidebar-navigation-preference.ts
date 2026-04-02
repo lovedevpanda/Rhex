@@ -1,5 +1,5 @@
-export const SIDEBAR_COLLAPSED_STORAGE_KEY = "bbs:sidebar-navigation-collapsed"
-const SIDEBAR_COLLAPSED_CHANGE_EVENT = "bbs:sidebar-navigation-collapsed-change"
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = "rhex:sidebar-navigation-collapsed"
+const SIDEBAR_COLLAPSED_CHANGE_EVENT = "rhex:sidebar-navigation-collapsed-change"
 
 export function getSidebarNavigationInitScript() {
   return `

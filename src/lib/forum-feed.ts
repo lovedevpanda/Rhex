@@ -38,6 +38,7 @@ export interface ForumFeedItem {
 
   pinScope?: string | null
   minViewLevel?: number | null
+  minViewVipLevel?: number | null
   isFeatured: boolean
   type: LocalPostType
   typeLabel: string
@@ -62,6 +63,7 @@ type FeedPost = {
   tipTotalPoints: number | null
   pinScope: string | null
   minViewLevel: number | null
+  minViewVipLevel: number | null
   isFeatured: boolean
   type: LocalPostType | string
   publishedAt: Date | null
@@ -114,6 +116,7 @@ function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord): ForumFeedItem
 
     pinScope: feedPost.pinScope ?? (feedPost.isPinned ? "BOARD" : "NONE"),
     minViewLevel: feedPost.minViewLevel ?? 0,
+    minViewVipLevel: feedPost.minViewVipLevel ?? 0,
     isFeatured: feedPost.isFeatured,
     type: postType,
     typeLabel: getPostTypeLabel(postType),

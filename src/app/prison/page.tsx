@@ -2,15 +2,24 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { UserStatus } from "@/db/types"
 
+import { ForumPageShell } from "@/components/forum-page-shell"
+import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
 import { prisma } from "@/db/client"
+import { getCurrentUser } from "@/lib/auth"
 import { formatDateTime, serializeDate } from "@/lib/formatters"
+import { getBoards } from "@/lib/boards"
+import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 import { readSearchParam } from "@/lib/search-params"
+import { getSiteSettings } from "@/lib/site-settings"
+import { getZones } from "@/lib/zones"
 
 export const metadata: Metadata = {
   title: "小黑屋",
   description: "查看当前被拉黑和禁言的用户名单。",
 }
+
+export const dynamic = "force-dynamic"
 
 const statusTabs = [
   { key: "ALL", label: "全部" },
@@ -35,7 +44,7 @@ export default async function PrisonPage(props: PageProps<"/prison">) {
     ? { status: { in: [UserStatus.BANNED, UserStatus.MUTED] } }
     : { status: activeStatus === "BANNED" ? UserStatus.BANNED : UserStatus.MUTED }
 
-  const [users, mutedCount, bannedCount] = await Promise.all([
+  const [users, mutedCount, bannedCount, boards, zones, currentUser, hotTopics, settings] = await Promise.all([
     prisma.user.findMany({
       where,
       orderBy: [{ updatedAt: "desc" }],
@@ -51,15 +60,26 @@ export default async function PrisonPage(props: PageProps<"/prison">) {
     }),
     prisma.user.count({ where: { status: UserStatus.MUTED } }),
     prisma.user.count({ where: { status: UserStatus.BANNED } }),
+    getBoards(),
+    getZones(),
+    getCurrentUser(),
+    getHomeSidebarHotTopics(5),
+    getSiteSettings(),
   ])
 
+  const sidebarUser = await resolveSidebarUser(currentUser, settings)
   const totalCount = mutedCount + bannedCount
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <main className="mx-auto max-w-[1100px] px-4 py-8 lg:px-6">
-        <div className="space-y-6">
+      <div className="mx-auto max-w-[1200px] px-1">
+        <ForumPageShell
+          zones={zones}
+          boards={boards}
+          main={(
+            <main className="py-1 pb-12 mt-6">
+              <div className="space-y-6">
           <section className="rounded-[30px] border border-border bg-card px-6 py-8 shadow-sm sm:px-8 lg:px-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
@@ -159,8 +179,16 @@ export default async function PrisonPage(props: PageProps<"/prison">) {
               )}
             </div>
           </section>
-        </div>
-      </main>
+              </div>
+            </main>
+          )}
+          rightSidebar={(
+            <aside className="mt-6 hidden pb-12 lg:block">
+              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} />
+            </aside>
+          )}
+        />
+      </div>
     </div>
   )
 }

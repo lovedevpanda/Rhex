@@ -1,5 +1,82 @@
 import { prisma } from "@/db/client"
-import { ChangeType, PostRedPacketStatus, PostRedPacketTriggerType } from "@/db/types"
+import { ChangeType, PostRedPacketStatus, PostRedPacketTriggerType, type Prisma } from "@/db/types"
+
+interface PostRedPacketEligibleCandidate {
+  userId: number
+}
+
+async function findPostRedPacketEligibleCandidates(
+  tx: Prisma.TransactionClient,
+  input: {
+    redPacketId: string
+    postId: string
+    triggerType: PostRedPacketTriggerType
+  },
+): Promise<PostRedPacketEligibleCandidate[]> {
+  const claimedUserIds = await tx.postRedPacketClaim.findMany({
+    where: {
+      redPacketId: input.redPacketId,
+    },
+    select: {
+      userId: true,
+    },
+  }).then((records) => records.map((record) => record.userId))
+
+  const unclaimedUserFilter = claimedUserIds.length > 0 ? { notIn: claimedUserIds } : undefined
+
+  if (input.triggerType === "REPLY") {
+    return tx.comment.findMany({
+      where: {
+        postId: input.postId,
+        userId: unclaimedUserFilter,
+        user: {
+          status: {
+            notIn: ["MUTED", "BANNED"],
+          },
+        },
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ["userId"],
+    })
+  }
+
+  if (input.triggerType === "LIKE") {
+    return tx.like.findMany({
+      where: {
+        postId: input.postId,
+        targetType: "POST",
+        userId: unclaimedUserFilter,
+        user: {
+          status: {
+            notIn: ["MUTED", "BANNED"],
+          },
+        },
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ["userId"],
+    })
+  }
+
+  return tx.favorite.findMany({
+    where: {
+      postId: input.postId,
+      userId: unclaimedUserFilter,
+      user: {
+        status: {
+          notIn: ["MUTED", "BANNED"],
+        },
+      },
+    },
+    select: {
+      userId: true,
+    },
+    distinct: ["userId"],
+  })
+}
 
 export function sumTodayPostRedPacketPoints(senderId: number, start: Date, end: Date) {
   return prisma.postRedPacket.aggregate({
@@ -26,6 +103,15 @@ export async function claimPostRedPacketInTransaction(input: {
   triggerCommentId?: string
   pointName: string
   buildClaimReason: (params: { amount: number; pointName: string; postId: string; triggerType: PostRedPacketTriggerType }) => string
+  resolveRecipient: (params: {
+    packet: {
+      claimOrderMode: string
+    }
+    eligibleCandidates: PostRedPacketEligibleCandidate[]
+  }) => {
+    userId: number
+    triggerCommentId?: string
+  } | null
   allocateAmount: (packet: {
     grantMode: string
     remainingPoints: number
@@ -85,6 +171,36 @@ export async function claimPostRedPacketInTransaction(input: {
       const nextStatus = packet.claimedCount >= packet.packetCount ? "COMPLETED" : "EXPIRED"
       await tx.postRedPacket.update({ where: { id: packet.id }, data: { status: nextStatus } })
       return { claimed: false as const, reason: "红包已领完" }
+    }
+
+    const eligibleCandidates = packet.claimOrderMode === "FIRST_COME_FIRST_SERVED"
+      ? [{ userId: user.id }]
+      : await findPostRedPacketEligibleCandidates(tx, {
+          redPacketId: packet.id,
+          postId: post.id,
+          triggerType: input.triggerType,
+        })
+
+    const resolvedRecipient = input.resolveRecipient({
+      packet: {
+        claimOrderMode: packet.claimOrderMode,
+      },
+      eligibleCandidates,
+    })
+
+    if (!resolvedRecipient) {
+      return { claimed: false as const, reason: "当前暂无可领取的红包名额" }
+    }
+
+    const recipientUser = resolvedRecipient.userId === user.id
+      ? user
+      : await tx.user.findUnique({
+          where: { id: resolvedRecipient.userId },
+          select: { id: true, points: true, status: true, username: true },
+        })
+
+    if (!recipientUser || recipientUser.status === "MUTED" || recipientUser.status === "BANNED") {
+      return { claimed: false as const, reason: "随机候选用户已失效，请稍后重试" }
     }
 
     const amount = input.allocateAmount(packet)
@@ -152,9 +268,9 @@ export async function claimPostRedPacketInTransaction(input: {
         data: {
           redPacketId: packet.id,
           postId: post.id,
-          userId: user.id,
+          userId: recipientUser.id,
           triggerType: input.triggerType,
-          triggerCommentId: input.triggerCommentId,
+          triggerCommentId: resolvedRecipient.triggerCommentId,
           amount,
         },
       })
@@ -175,7 +291,7 @@ export async function claimPostRedPacketInTransaction(input: {
           where: {
             redPacketId_userId: {
               redPacketId: packet.id,
-              userId: input.userId,
+              userId: recipientUser.id,
             },
           },
           select: {
@@ -183,14 +299,16 @@ export async function claimPostRedPacketInTransaction(input: {
           },
         })
 
-        return { claimed: false as const, reason: "你已经领取过该红包", amount: duplicatedClaim?.amount }
+        return recipientUser.id === input.userId
+          ? { claimed: false as const, reason: "你已经领取过该红包", amount: duplicatedClaim?.amount }
+          : { claimed: false as const, reason: "本次随机红包未命中你" }
       }
 
       throw error
     }
 
     await tx.user.update({
-      where: { id: user.id },
+      where: { id: recipientUser.id },
       data: {
         points: { increment: amount },
       },
@@ -198,7 +316,7 @@ export async function claimPostRedPacketInTransaction(input: {
 
     await tx.pointLog.create({
       data: {
-        userId: user.id,
+        userId: recipientUser.id,
         changeType: ChangeType.INCREASE,
         changeValue: amount,
         reason: input.buildClaimReason({ amount, pointName: input.pointName, postId: post.id, triggerType: input.triggerType }),
@@ -207,7 +325,9 @@ export async function claimPostRedPacketInTransaction(input: {
       },
     })
 
-    return { claimed: true as const, amount, pointName: input.pointName }
+    return recipientUser.id === input.userId
+      ? { claimed: true as const, amount, pointName: input.pointName }
+      : { claimed: false as const, reason: "本次随机红包未命中你" }
   })
 }
 

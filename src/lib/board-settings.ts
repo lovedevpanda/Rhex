@@ -1,6 +1,7 @@
 import type { Board, User, Zone } from "@/db/types"
 
 import { normalizePostTypes, type LocalPostType } from "@/lib/post-types"
+import { isVipActive } from "@/lib/vip-status"
 
 export interface EffectiveBoardSettings {
   postPointDelta: number
@@ -62,8 +63,7 @@ export function canUserAccess(user: Pick<User, "points" | "level" | "vipLevel" |
   const minPoints = action === "view" ? settings.minViewPoints : action === "post" ? settings.minPostPoints : settings.minReplyPoints
   const minLevel = action === "view" ? settings.minViewLevel : action === "post" ? settings.minPostLevel : settings.minReplyLevel
   const minVipLevel = action === "view" ? settings.minViewVipLevel : action === "post" ? settings.minPostVipLevel : settings.minReplyVipLevel
-  const isVipActive = Boolean(user?.vipExpiresAt && new Date(user.vipExpiresAt).getTime() > Date.now())
-  const currentVipLevel = isVipActive ? (user?.vipLevel ?? 0) : 0
+  const currentVipLevel = isVipActive(user) ? (user?.vipLevel ?? 0) : 0
 
   if (minVipLevel > 0 && currentVipLevel < minVipLevel) {
 

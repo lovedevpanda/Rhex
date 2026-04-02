@@ -11,6 +11,7 @@ export interface SiteCommentReplyItem {
   authorId: number
   authorUsername: string
   authorAvatarPath?: string | null
+  authorRole: "USER" | "MODERATOR" | "ADMIN"
   authorStatus: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   authorIsVip?: boolean
   authorVipLevel?: number
@@ -23,6 +24,7 @@ export interface SiteCommentReplyItem {
   authorDisplayedBadges?: Array<{
     id: string
     name: string
+    description?: string | null
     color: string
     iconText?: string | null
   }>
@@ -41,6 +43,7 @@ export interface SiteCommentItem {
   authorId: number
   authorUsername: string
   authorAvatarPath?: string | null
+  authorRole: "USER" | "MODERATOR" | "ADMIN"
   authorStatus: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   authorIsVip?: boolean
   authorVipLevel?: number
@@ -53,6 +56,7 @@ export interface SiteCommentItem {
   authorDisplayedBadges?: Array<{
     id: string
     name: string
+    description?: string | null
     color: string
     iconText?: string | null
   }>
@@ -85,6 +89,7 @@ interface CommentQueryUser {
   username: string
   nickname: string | null
   avatarPath: string | null
+  role: "USER" | "MODERATOR" | "ADMIN"
   status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
   vipLevel: number | null
   vipExpiresAt: Date | null
@@ -94,6 +99,7 @@ interface CommentQueryUser {
     badge: {
       id: string
       name: string
+      description?: string | null
       color: string
       iconText?: string | null
       status: boolean
@@ -127,6 +133,7 @@ function mapDisplayedBadges(user: CommentQueryUser) {
     .map((item) => ({
       id: item.badge.id,
       name: item.badge.name,
+      description: item.badge.description,
       color: item.badge.color,
       iconText: item.badge.iconText,
     }))
@@ -169,7 +176,7 @@ export async function getCommentsByPostId(
     }
 
     const [total, rawRootComments] = await Promise.all([
-      countRootCommentsByPostId(postId),
+      countRootCommentsByPostId(postId, viewer?.userId),
       findRootCommentsByPostId({
         postId,
         sort,
@@ -225,6 +232,7 @@ export async function getCommentsByPostId(
         authorId: comment.userId,
         authorUsername: comment.user.username,
         authorAvatarPath: comment.user.avatarPath,
+        authorRole: comment.user.role,
         authorStatus: comment.user.status,
         authorIsVip: replyVipState.authorIsVip,
         authorVipLevel: replyVipState.authorVipLevel,
@@ -253,6 +261,7 @@ export async function getCommentsByPostId(
         authorId: comment.userId,
         authorUsername: comment.user.username,
         authorAvatarPath: comment.user.avatarPath,
+        authorRole: comment.user.role,
         authorStatus: comment.user.status,
         authorIsVip: isVipActive(comment.user),
         authorVipLevel: getVipLevel(comment.user),

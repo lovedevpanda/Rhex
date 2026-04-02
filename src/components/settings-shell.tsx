@@ -18,7 +18,7 @@ interface SettingsShellProps {
 
 export function SettingsShell({ children, pointName }: SettingsShellProps) {
   const navItems: SettingsNavItem[] = [
-    { key: "profile", label: "资料设置", description: "维护基础资料、头像、邮箱与密码。" },
+    { key: "profile", label: "基础设置", description: "维护基础资料、头像、邮箱与密码。" },
     { key: "invite", label: "邀请中心", description: "查看邀请数据并管理邀请入口。" },
     { key: "post-management", label: "帖子管理", description: "查看我的帖子、回复、收藏与点赞。" },
     { key: "level", label: "我的等级", description: "查看成长进度、升级条件与当前等级。" },

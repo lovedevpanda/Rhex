@@ -23,6 +23,7 @@ interface ListPostAuthor extends VipStateSource {
     badge: {
       id: string
       name: string
+      description?: string | null
       color: string
       iconText?: string | null
       status: boolean
@@ -62,6 +63,7 @@ interface ListPostSource {
   pinScope?: string | null
   isFeatured: boolean
   minViewLevel?: number | null
+  minViewVipLevel?: number | null
   bountyPoints?: number | null
   lotteryStatus?: LotteryStatus | null
   lotteryTriggerMode?: LotteryTriggerMode | null
@@ -122,6 +124,7 @@ export function mapListPost(post: ListPostSource) {
       .map((item) => ({
         id: item.badge.id,
         name: item.badge.name,
+        description: item.badge.description,
         color: item.badge.color,
         iconText: item.badge.iconText,
       })),
@@ -140,6 +143,7 @@ export function mapListPost(post: ListPostSource) {
     pinScope: post.pinScope ?? (post.isPinned ? "BOARD" : "NONE"),
     hasRedPacket: Boolean(post.redPacket),
     minViewLevel: post.minViewLevel ?? 0,
+    minViewVipLevel: post.minViewVipLevel ?? 0,
     isFeatured: post.isFeatured,
 
     bounty: post.type === "BOUNTY"

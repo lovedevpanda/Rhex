@@ -44,7 +44,6 @@ export function SettingsSidebarNav({ items }: SettingsSidebarNavProps) {
             >
               <div className="min-w-0">
                 <p className={cn("text-sm font-medium leading-5", active ? "text-background" : "text-foreground")}>{item.label}</p>
-                <p className={cn("mt-0.5 line-clamp-1 text-[11px] leading-4", active ? "text-background/75" : "text-muted-foreground")}>{item.description}</p>
               </div>
               <ChevronRight className={cn("h-3.5 w-3.5 shrink-0", active ? "text-background/75" : "text-muted-foreground")} />
 

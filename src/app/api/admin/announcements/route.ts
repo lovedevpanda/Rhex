@@ -13,7 +13,7 @@ export const GET = createAdminRouteHandler(async () => {
   const items = await getAdminAnnouncementList()
   return apiSuccess(items)
 }, {
-  errorMessage: "获取公告失败",
+  errorMessage: "获取站点文档失败",
   logPrefix: "[api/admin/announcements:GET] unexpected error",
   unauthorizedMessage: "无权访问",
 })
@@ -25,41 +25,51 @@ export const POST = createAdminRouteHandler(async ({ request }) => {
   if (action === "delete") {
     await removeAdminAnnouncement(String(body.id ?? ""))
     revalidatePath("/")
+    revalidatePath("/help")
     revalidatePath("/announcements")
     revalidatePath("/admin")
-    return apiSuccess(undefined, "公告已删除")
+    return apiSuccess(undefined, "站点文档已删除")
   }
 
   if (action === "toggle-pin") {
     await toggleAdminAnnouncementPin(String(body.id ?? ""), Boolean(body.isPinned))
     revalidatePath("/")
+    revalidatePath("/help")
     revalidatePath("/announcements")
     revalidatePath("/admin")
-    return apiSuccess(undefined, "公告置顶状态已更新")
+    return apiSuccess(undefined, "置顶状态已更新")
   }
 
   if (action === "update-status") {
     await updateAdminAnnouncementStatus(String(body.id ?? ""), String(body.status ?? "DRAFT"))
     revalidatePath("/")
+    revalidatePath("/help")
     revalidatePath("/announcements")
     revalidatePath("/admin")
-    return apiSuccess(undefined, "公告状态已更新")
+    return apiSuccess(undefined, "站点文档状态已更新")
   }
 
   await saveAdminAnnouncement({
     id: body.id,
+    type: body.type,
     title: body.title,
     content: body.content,
+    sourceType: body.sourceType,
+    slug: body.slug,
+    linkUrl: body.linkUrl,
+    titleColor: body.titleColor,
+    titleBold: body.titleBold,
     status: body.status,
     isPinned: body.isPinned,
   })
 
   revalidatePath("/")
+  revalidatePath("/help")
   revalidatePath("/announcements")
   revalidatePath("/admin")
-  return apiSuccess(undefined, body.id ? "公告已更新" : "公告已创建")
+  return apiSuccess(undefined, body.id ? "站点文档已更新" : "站点文档已创建")
 }, {
-  errorMessage: "公告操作失败",
+  errorMessage: "站点文档操作失败",
   logPrefix: "[api/admin/announcements:POST] unexpected error",
   unauthorizedMessage: "无权操作",
 })

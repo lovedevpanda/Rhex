@@ -1,17 +1,22 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Sparkles, ThumbsUp } from "lucide-react"
 
 import { ChangeType } from "@/db/types"
 import { BadgeCenter } from "@/components/badge-center"
+import { BrowsingSettingsPanel } from "@/components/browsing-settings-panel"
 import { InviteCodePurchaseCard } from "@/components/invite-code-purchase-card"
 import { InviteLinkCopyButton } from "@/components/invite-link-copy-button"
 import { LevelBadge } from "@/components/level-badge"
+import { PostListLink } from "@/components/post-list-link"
 import { ProfileEditForm } from "@/components/profile-edit-form"
+import { ReadingHistoryPanel } from "@/components/reading-history-panel"
 import { RedeemCodeCard } from "@/components/redeem-code-card"
 import { SettingsShell } from "@/components/settings-shell"
 import { SettingsTabs } from "@/components/settings-tabs"
 import { SiteHeader } from "@/components/site-header"
+import { UserBlockToggleButton } from "@/components/user-block-toggle-button"
 import { VerificationCenter } from "@/components/verification-center"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { describeBadgeRule, getBadgeCenterData } from "@/lib/badges"
@@ -21,16 +26,21 @@ import { getUserPointLogs } from "@/lib/points"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
 import { getCurrentUserLevelProgressView } from "@/lib/user-level-view"
-import { getUserBoardFollows, getUserFavoritePosts, getUserLikedPosts, getUserPostFollows, getUserPosts, getUserReplies, getUserTagFollows, getUserUserFollows } from "@/lib/user-panel"
+import { getUserBlocks, getUserBoardFollows, getUserFavoritePosts, getUserLikedPosts, getUserPostFollows, getUserPosts, getUserReplies, getUserTagFollows, getUserUserFollows } from "@/lib/user-panel"
 import { getUserAccountSettings, getUserProfile } from "@/lib/users"
 import { getCurrentUserVerificationData } from "@/lib/verifications"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 type SettingsTabKey = "profile" | "invite" | "post-management" | "level" | "badges" | "verifications" | "points" | "follows"
+type ProfileTabKey = "basic" | "browsing"
 type PostManagementTabKey = "posts" | "replies" | "favorites" | "likes"
-type FollowTabKey = "boards" | "users" | "tags" | "posts"
+type FollowTabKey = "boards" | "users" | "tags" | "posts" | "history" | "blocks"
 
 const tabs: SettingsTabKey[] = ["profile", "invite", "post-management", "level", "badges", "verifications", "points", "follows"]
+const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
+  { key: "basic", label: "资料设置" },
+  { key: "browsing", label: "浏览设置" },
+]
 const postManagementTabs: Array<{ key: PostManagementTabKey; label: string }> = [
   { key: "posts", label: "我的帖子" },
   { key: "replies", label: "我的回复" },
@@ -42,7 +52,33 @@ const followTabs: Array<{ key: FollowTabKey; label: string }> = [
   { key: "users", label: "用户" },
   { key: "tags", label: "标签" },
   { key: "posts", label: "帖子" },
+  { key: "history", label: "足迹" },
+  { key: "blocks", label: "拉黑" },
 ]
+
+const settingsTabTitles: Record<SettingsTabKey, string> = {
+  profile: "个人设置",
+  invite: "邀请中心",
+  "post-management": "帖子管理",
+  level: "等级中心",
+  badges: "勋章中心",
+  verifications: "认证中心",
+  points: "积分记录",
+  follows: "关注管理",
+}
+
+export async function generateMetadata(props: PageProps<"/settings">): Promise<Metadata> {
+  const searchParams = await props.searchParams
+  const currentTabValue = readSearchParam(searchParams?.tab)
+  const currentTab: SettingsTabKey = tabs.includes((currentTabValue as SettingsTabKey) ?? "profile")
+    ? ((currentTabValue as SettingsTabKey) ?? "profile")
+    : "profile"
+  const settings = await getSiteSettings()
+
+  return {
+    title: `${settingsTabTitles[currentTab]} - ${settings.siteName}`,
+  }
+}
 
 export default async function SettingsPage(props: PageProps<"/settings">) {
   const searchParams = await props.searchParams;
@@ -62,11 +98,15 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
   }
 
   const currentTabValue = readSearchParam(searchParams?.tab)
+  const currentProfileTabValue = readSearchParam(searchParams?.profileTab)
   const currentPostTabValue = readSearchParam(searchParams?.postTab)
   const currentFollowTabValue = readSearchParam(searchParams?.followTab)
   const currentTab: SettingsTabKey = tabs.includes((currentTabValue as SettingsTabKey) ?? "profile")
     ? ((currentTabValue as SettingsTabKey) ?? "profile")
     : "profile"
+  const currentProfileTab: ProfileTabKey = profileTabs.some((tab) => tab.key === currentProfileTabValue)
+    ? (currentProfileTabValue as ProfileTabKey)
+    : "basic"
   const currentPostTab: PostManagementTabKey = postManagementTabs.some((tab) => tab.key === currentPostTabValue)
     ? (currentPostTabValue as PostManagementTabKey)
     : "posts"
@@ -75,7 +115,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     : "boards"
   const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
 
-  const [userPosts, replies, favoritePosts, likedPosts, followedBoards, followedUsers, followedTags, followedPosts, levelView, badges, verificationData, pointLogs] = await Promise.all([
+  const [userPosts, replies, favoritePosts, likedPosts, followedBoards, followedUsers, followedTags, followedPosts, blockedUsers, levelView, badges, verificationData, pointLogs] = await Promise.all([
     currentTab === "post-management" && currentPostTab === "posts"
       ? getUserPosts(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserPosts>> | null>(null),
@@ -100,6 +140,9 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     currentTab === "follows" && currentFollowTab === "posts"
       ? getUserPostFollows(currentUser.id, { page: currentPage, pageSize: 10 })
       : Promise.resolve<Awaited<ReturnType<typeof getUserPostFollows>> | null>(null),
+    currentTab === "follows" && currentFollowTab === "blocks"
+      ? getUserBlocks(currentUser.id, { page: currentPage, pageSize: 12 })
+      : Promise.resolve<Awaited<ReturnType<typeof getUserBlocks>> | null>(null),
     currentTab === "level" ? getCurrentUserLevelProgressView() : Promise.resolve(null),
     currentTab === "badges" ? getBadgeCenterData(currentUser.id) : Promise.resolve([]),
     currentTab === "verifications" ? getCurrentUserVerificationData() : Promise.resolve({ currentUserId: currentUser.id, types: [], approvedVerification: null }),
@@ -142,26 +185,16 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
       <main className="mx-auto max-w-[1240px] px-4 py-8 lg:px-6">
         <SettingsShell profile={profile} pointName={settings.pointName}>
           {currentTab === "profile" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>资料设置</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <ProfileEditForm
-                  username={profile.username}
-                  initialNickname={profile.displayName}
-                  initialBio={profile.bio}
-                  initialGender={profile.gender ?? null}
-                  initialAvatarPath={profile.avatarPath}
-                  initialEmail={dbUser?.email ?? null}
-                  initialEmailVerified={Boolean(dbUser?.emailVerifiedAt)}
-                  nicknameChangePointCost={nicknameChangePointCost}
-                  nicknameChangePriceDescription={nicknameChangePriceDescription}
-                  pointName={settings.pointName}
-                  avatarMaxFileSizeMb={settings.uploadAvatarMaxFileSizeMb}
-                />
-              </CardContent>
-            </Card>
+            <ProfilePanel
+              currentTab={currentProfileTab}
+              tabs={profileTabs}
+              profile={profile}
+              dbUser={dbUser}
+              nicknameChangePointCost={nicknameChangePointCost}
+              nicknameChangePriceDescription={nicknameChangePriceDescription}
+              pointName={settings.pointName}
+              avatarMaxFileSizeMb={settings.uploadAvatarMaxFileSizeMb}
+            />
           ) : null}
 
           {currentTab === "invite" ? (
@@ -259,10 +292,61 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
           {currentTab === "points" ? <PointsPanel pointLogs={pointLogs} currentPoints={profile.points} pointName={settings.pointName} /> : null}
 
-          {currentTab === "follows" ? <FollowsPanel currentTab={currentFollowTab} tabs={followTabs} followedBoards={followedBoards} followedUsers={followedUsers} followedTags={followedTags} followedPosts={followedPosts} postLinkDisplayMode={settings.postLinkDisplayMode} /> : null}
+      {currentTab === "follows" ? <FollowsPanel currentTab={currentFollowTab} tabs={followTabs} followedBoards={followedBoards} followedUsers={followedUsers} followedTags={followedTags} followedPosts={followedPosts} blockedUsers={blockedUsers} postLinkDisplayMode={settings.postLinkDisplayMode} /> : null}
         </SettingsShell>
       </main>
     </div>
+  )
+}
+
+function ProfilePanel({
+  currentTab,
+  tabs,
+  profile,
+  dbUser,
+  nicknameChangePointCost,
+  nicknameChangePriceDescription,
+  pointName,
+  avatarMaxFileSizeMb,
+}: {
+  currentTab: ProfileTabKey
+  tabs: Array<{ key: ProfileTabKey; label: string }>
+  profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+  dbUser: Awaited<ReturnType<typeof getUserAccountSettings>>
+  nicknameChangePointCost: number
+  nicknameChangePriceDescription: string
+  pointName: string
+  avatarMaxFileSizeMb: number
+}) {
+  return (
+    <Card>
+      <CardHeader className="space-y-4">
+        <div className="space-y-1">
+          <CardTitle>{currentTab === "basic" ? "资料设置" : "浏览设置"}</CardTitle>
+          <p className="text-sm text-muted-foreground">在这里维护个人资料和当前浏览器的浏览偏好。</p>
+        </div>
+        <SettingsTabs tabs={tabs} queryKey="profileTab" basePath="/settings?tab=profile" />
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {currentTab === "basic" ? (
+          <ProfileEditForm
+            username={profile.username}
+            initialNickname={profile.displayName}
+            initialBio={profile.bio}
+            initialGender={profile.gender ?? null}
+            initialAvatarPath={profile.avatarPath}
+            initialEmail={dbUser?.email ?? null}
+            initialEmailVerified={Boolean(dbUser?.emailVerifiedAt)}
+            nicknameChangePointCost={nicknameChangePointCost}
+            nicknameChangePriceDescription={nicknameChangePriceDescription}
+            pointName={pointName}
+            avatarMaxFileSizeMb={avatarMaxFileSizeMb}
+          />
+        ) : null}
+
+        {currentTab === "browsing" ? <BrowsingSettingsPanel /> : null}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -423,8 +507,11 @@ function MyRepliesPanel({ replies, postLinkDisplayMode }: { replies: Awaited<Ret
       </CardHeader>
       <CardContent className="space-y-4">
         {replies.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有发表过回复。</p> : null}
-        {replies.items.map((reply) => (
-          <Link key={reply.id} href={getPostPath({ id: reply.postId, slug: reply.postSlug }, { mode: postLinkDisplayMode })} className="block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
+        {replies.items.map((reply) => {
+          const postPath = getPostPath({ id: reply.postId, slug: reply.postSlug }, { mode: postLinkDisplayMode })
+
+          return (
+          <div key={reply.id} className="rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{reply.boardName}</span>
               <span>·</span>
@@ -436,14 +523,16 @@ function MyRepliesPanel({ replies, postLinkDisplayMode }: { replies: Awaited<Ret
                 </>
               ) : null}
             </div>
-            <h2 className="mt-2 text-base font-semibold">{reply.postTitle}</h2>
+            <PostListLink href={postPath} visitedPath={postPath} dimWhenRead className="mt-2 inline-block">
+              <h2 className="text-base font-semibold">{reply.postTitle}</h2>
+            </PostListLink>
             <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{reply.content}</p>
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <ThumbsUp className="h-3.5 w-3.5" />
               <span>{reply.likeCount} 次点赞</span>
             </div>
-          </Link>
-        ))}
+          </div>
+        )})}
 
         {replies.total > 0 ? <PaginationBar page={replies.page} hasPrevPage={replies.hasPrevPage} hasNextPage={replies.hasNextPage} basePath="/settings?tab=post-management&postTab=replies" /> : null}
       </CardContent>
@@ -458,6 +547,7 @@ function FollowsPanel({
   followedUsers,
   followedTags,
   followedPosts,
+  blockedUsers,
   postLinkDisplayMode,
 }: {
   currentTab: FollowTabKey
@@ -466,6 +556,7 @@ function FollowsPanel({
   followedUsers: Awaited<ReturnType<typeof getUserUserFollows>> | null
   followedTags: Awaited<ReturnType<typeof getUserTagFollows>> | null
   followedPosts: Awaited<ReturnType<typeof getUserPostFollows>> | null
+  blockedUsers: Awaited<ReturnType<typeof getUserBlocks>> | null
   postLinkDisplayMode: "SLUG" | "ID"
 }) {
   return (
@@ -484,7 +575,20 @@ function FollowsPanel({
       {currentTab === "users" ? <FollowUsersPanel followedUsers={followedUsers} /> : null}
       {currentTab === "tags" ? <FollowTagsPanel followedTags={followedTags} /> : null}
       {currentTab === "posts" ? <FollowPostsPanel followedPosts={followedPosts} postLinkDisplayMode={postLinkDisplayMode} /> : null}
+      {currentTab === "history" ? <ReadingHistoryTabPanel /> : null}
+      {currentTab === "blocks" ? <BlockedUsersPanel blockedUsers={blockedUsers} /> : null}
     </div>
+  )
+}
+
+function ReadingHistoryTabPanel() {
+  return (
+    <ReadingHistoryPanel
+      variant="page"
+      title="足迹"
+      showClearButton
+      emptyDescription="浏览过的帖子会自动保存在当前浏览器本地，最多保留 2000 条。"
+    />
   )
 }
 
@@ -644,6 +748,60 @@ function FollowPostsPanel({
   return <PostListPanel title="关注帖子" emptyText="当前还没有关注任何帖子。" posts={followedPosts} postLinkDisplayMode={postLinkDisplayMode} paginationBase="/settings?tab=follows&followTab=posts" />
 }
 
+function BlockedUsersPanel({ blockedUsers }: { blockedUsers: Awaited<ReturnType<typeof getUserBlocks>> | null }) {
+  if (!blockedUsers) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">暂时无法加载拉黑列表，请稍后刷新重试。</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle>拉黑用户</CardTitle>
+          <span className="text-sm text-muted-foreground">共 {blockedUsers.total} 位用户 · 第 {blockedUsers.page} / {blockedUsers.totalPages} 页</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {blockedUsers.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有拉黑任何用户。</p> : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {blockedUsers.items.map((user) => (
+            <div key={user.id} className="rounded-[18px] border border-border bg-card px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <Link href={`/users/${user.username}`} className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{user.displayName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">@{user.username}</p>
+                </Link>
+                <UserBlockToggleButton
+                  targetUserId={user.id}
+                  initialBlocked
+                  activeLabel="取消拉黑"
+                  inactiveLabel="拉黑用户"
+                  showLabel
+                  reloadOnChange
+                  className="h-8 rounded-xl px-3 text-xs"
+                />
+              </div>
+              <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">{user.bio}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                <span>Lv.{user.level}</span>
+                <span>帖子 {user.postCount}</span>
+                <span>粉丝 {user.followerCount}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {blockedUsers.total > 0 ? <PaginationBar page={blockedUsers.page} hasPrevPage={blockedUsers.hasPrevPage} hasNextPage={blockedUsers.hasNextPage} basePath="/settings?tab=follows&followTab=blocks" /> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 function FavoritesPanel({ favoritePosts, postLinkDisplayMode }: { favoritePosts: Awaited<ReturnType<typeof getUserFavoritePosts>> | null; postLinkDisplayMode: "SLUG" | "ID" }) {
   if (!favoritePosts) {
     return (
@@ -691,17 +849,22 @@ function PostListPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {posts.items.length === 0 ? <p className="text-sm text-muted-foreground">{emptyText}</p> : null}
-        {posts.items.map((post) => (
-          <Link key={post.id} href={getPostPath({ id: post.id, slug: post.slug }, { mode: postLinkDisplayMode })} className="block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
+        {posts.items.map((post) => {
+          const postPath = getPostPath({ id: post.id, slug: post.slug }, { mode: postLinkDisplayMode })
+
+          return (
+          <div key={post.id} className="rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{post.board}</span>
               <span>·</span>
               <span>{post.publishedAt}</span>
             </div>
-            <h2 className="mt-2 text-base font-semibold">{post.title}</h2>
+            <PostListLink href={postPath} visitedPath={postPath} dimWhenRead className="mt-2 inline-block">
+              <h2 className="text-base font-semibold">{post.title}</h2>
+            </PostListLink>
             <p className="mt-2 text-sm text-muted-foreground">{post.excerpt}</p>
-          </Link>
-        ))}
+          </div>
+        )})}
 
         {posts.total > 0 ? <PaginationBar page={posts.page} hasPrevPage={posts.hasPrevPage} hasNextPage={posts.hasNextPage} basePath={paginationBase} /> : null}
       </CardContent>

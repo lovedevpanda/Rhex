@@ -31,7 +31,7 @@ export async function updatePostFlow(input: {
     apiError(400, validated.message ?? "参数错误")
   }
 
-  const { title, content, coverPath, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, commentsVisibleToAuthorOnly, minViewLevel, } = validated.data
+  const { title, content, coverPath, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, commentsVisibleToAuthorOnly, minViewLevel, minViewVipLevel } = validated.data
   const rawAppendedContent = (input.body as Record<string, unknown> | null)?.appendedContent
   const appendedContent = typeof rawAppendedContent === "string"
     ? rawAppendedContent.trim()
@@ -105,6 +105,7 @@ export async function updatePostFlow(input: {
     let finalContent = serializedContent
 
     await prisma.$transaction(async (tx) => {
+      const activityAt = new Date()
       let nextContent = serializedContent
       let nextSummary = summary
 
@@ -126,12 +127,14 @@ export async function updatePostFlow(input: {
       await tx.post.update({
         where: { id: input.postId },
         data: {
+          activityAt,
           title: titleSafety.sanitizedText,
           content: nextContent,
           coverPath,
           summary: nextSummary,
           commentsVisibleToAuthorOnly,
           minViewLevel,
+          minViewVipLevel,
           reviewNote: titleSafety.shouldReview || contentSafety.shouldReview || tagsSafety?.shouldReview ? "编辑内容命中敏感词规则，请复核" : undefined,
         },
       })
@@ -161,6 +164,7 @@ export async function updatePostFlow(input: {
   const nextSortOrder = (post.appendices[0]?.sortOrder ?? -1) + 1
 
   await prisma.$transaction(async (tx) => {
+    const activityAt = new Date()
     let nextAppendedContent = appendSafety.sanitizedText
 
     if (!appendSafety.shouldReview) {
@@ -178,8 +182,9 @@ export async function updatePostFlow(input: {
     await tx.post.update({
       where: { id: input.postId },
       data: {
+        activityAt,
         appendedContent: nextAppendedContent,
-        lastAppendedAt: new Date(),
+        lastAppendedAt: activityAt,
         reviewNote: appendSafety.shouldReview ? "追加内容命中敏感词审核规则，请复核" : undefined,
         appendices: {
           create: {

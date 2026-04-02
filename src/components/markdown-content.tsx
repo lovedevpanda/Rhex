@@ -189,14 +189,14 @@ function applyMarkdownEmojiShortcodes(input: string, emojiItems: MarkdownEmojiIt
   })
 }
 
-const ALLOWED_MARKDOWN_HTML_ALIGNMENTS = new Set(["left", "center", "right"])
+const ALLOWED_MARKDOWN_HTML_ALIGNMENTS = new Set(["left", "center", "right", "justify"])
 
 function sanitizeMarkdownInlineHtml(input: string) {
   return input.replace(/<(\/)?([a-zA-Z][\w-]*)([^>]*)>/g, (raw, closingSlash: string | undefined, rawTagName: string, rawAttributes: string) => {
     const tagName = rawTagName.toLowerCase()
 
     if (closingSlash) {
-      if (tagName === "center" || tagName === "p") {
+      if (tagName === "center" || tagName === "p" || tagName === "u") {
         return `</${tagName}>`
       }
       return escapeHtml(raw)
@@ -206,11 +206,15 @@ function sanitizeMarkdownInlineHtml(input: string) {
       return "<center>"
     }
 
+    if (tagName === "u") {
+      return "<u>"
+    }
+
     if (tagName !== "p") {
       return escapeHtml(raw)
     }
 
-    const alignMatch = rawAttributes.match(/\balign\s*=\s*(["']?)(left|center|right)\1/i)
+    const alignMatch = rawAttributes.match(/\balign\s*=\s*(["']?)(left|center|right|justify)\1/i)
     const alignment = alignMatch?.[2]?.toLowerCase()
     if (!alignment || !ALLOWED_MARKDOWN_HTML_ALIGNMENTS.has(alignment)) {
       return escapeHtml(raw)
@@ -361,6 +365,7 @@ function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
     .replace(/<abbr /g, '<abbr class="cursor-help underline decoration-dotted underline-offset-4" ')
     .replace(/<mark>/g, '<mark class="rounded bg-amber-200/70 px-1 text-foreground dark:bg-amber-400/20">')
     .replace(/<ins>/g, '<ins class="decoration-emerald-500 decoration-2 underline-offset-4">')
+    .replace(/<u>/g, '<u class="decoration-current underline underline-offset-4">')
     .replace(/<sup>/g, '<sup class="align-super text-[0.7em]">')
     .replace(/<sub>/g, '<sub class="align-sub text-[0.7em]">')
     .replace(/<section class="footnotes">/g, '<section class="footnotes mt-8 border-t border-border pt-4">')

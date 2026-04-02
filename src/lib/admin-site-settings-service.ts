@@ -1,15 +1,19 @@
 import { prisma } from "@/db/client"
+import { listActiveGiftDefinitions, syncGiftDefinitions } from "@/db/post-gift-queries"
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
 
 import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/markdown-emoji"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { normalizePostListDisplayMode } from "@/lib/post-list-display"
-import { mergeCheckInMakeUpPriceSettings, mergeCheckInRewardSettings, mergeInviteCodePurchasePriceSettings, mergeNicknameChangePointCostSettings } from "@/lib/site-settings-app-state"
+import { mergeCheckInMakeUpPriceSettings, mergeCheckInRewardSettings, mergeHomeSidebarAnnouncementSettings, mergeInviteCodePurchasePriceSettings, mergeMarkdownImageUploadSettings, mergeNicknameChangePointCostSettings, mergeVipLevelIconSettings, resolveHomeSidebarAnnouncementSettings, resolveMarkdownImageUploadSettings } from "@/lib/site-settings-app-state"
+import { mergeSiteSearchSettings, resolveSiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizeCaptchaMode, normalizeFooterLinks } from "@/lib/shared/config-parsers"
 import { normalizeHeatColors, normalizeHeatThresholds, normalizePositiveInteger, normalizeTippingAmounts } from "@/lib/shared/normalizers"
 import { createSiteSettingsRecordWithFullData, updateSiteSettingsHeaderApps } from "@/db/site-settings-write-queries"
 import { normalizeHeaderAppIconName, normalizeSiteHeaderAppLinks } from "@/lib/site-header-app-links"
 import { invalidateSiteSettingsCache } from "@/lib/site-settings"
+import { getDefaultTippingGiftItemsFromAmounts, normalizeTippingGiftItems } from "@/lib/tipping-gifts"
+import { normalizeVipLevelIcons } from "@/lib/vip-level-icons"
 
 export async function getOrCreateSiteSettings() {
   const existing = await prisma.siteSetting.findFirst({ orderBy: { createdAt: "asc" } })
@@ -35,12 +39,30 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const postLinkDisplayMode = readOptionalStringField(body, "postLinkDisplayMode") === "ID" ? "ID" : "SLUG"
     const homeFeedPostListDisplayMode = normalizePostListDisplayMode(body.homeFeedPostListDisplayMode)
     const homeSidebarStatsCardEnabled = body.homeSidebarStatsCardEnabled === undefined ? existing.homeSidebarStatsCardEnabled : Boolean(body.homeSidebarStatsCardEnabled)
+    const existingHomeSidebarAnnouncementSettings = resolveHomeSidebarAnnouncementSettings({
+      appStateJson: existing.appStateJson,
+      enabledFallback: true,
+    })
+    const homeSidebarAnnouncementsEnabled = body.homeSidebarAnnouncementsEnabled === undefined
+      ? existingHomeSidebarAnnouncementSettings.enabled
+      : Boolean(body.homeSidebarAnnouncementsEnabled)
     const postEditableMinutes = Math.max(0, readOptionalNumberField(body, "postEditableMinutes") ?? 10)
     const commentEditableMinutes = Math.max(0, readOptionalNumberField(body, "commentEditableMinutes") ?? 5)
+    const existingSearchSettings = resolveSiteSearchSettings(existing.appStateJson)
+    const searchEnabled = body.searchEnabled === undefined ? existingSearchSettings.enabled : Boolean(body.searchEnabled)
 
     if (!siteName || !siteDescription) {
       apiError(400, "站点名称和描述不能为空")
     }
+
+    const appStateWithHomeSidebarAnnouncement = mergeHomeSidebarAnnouncementSettings(existing.appStateJson, {
+      enabled: homeSidebarAnnouncementsEnabled,
+    })
+
+    const appStateJson = mergeSiteSearchSettings(appStateWithHomeSidebarAnnouncement, {
+      enabled: searchEnabled,
+      externalEngines: existingSearchSettings.externalEngines,
+    })
 
     const settings = await prisma.siteSetting.update({
       where: { id: existing.id },
@@ -55,6 +77,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         postLinkDisplayMode,
         homeFeedPostListDisplayMode,
         homeSidebarStatsCardEnabled,
+        appStateJson,
         postEditableMinutes,
         commentEditableMinutes,
       },
@@ -190,6 +213,11 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const tippingDailyLimit = Math.max(1, readOptionalNumberField(body, "tippingDailyLimit") ?? 1)
     const tippingPerPostLimit = Math.max(1, readOptionalNumberField(body, "tippingPerPostLimit") ?? 1)
     const tippingAmounts = normalizeTippingAmounts(body.tippingAmounts)
+    const existingTippingGifts = await listActiveGiftDefinitions()
+    const tippingGifts = normalizeTippingGiftItems(
+      body.tippingGifts,
+      existingTippingGifts.length > 0 ? existingTippingGifts : getDefaultTippingGiftItemsFromAmounts(tippingAmounts),
+    )
     const postRedPacketEnabled = Boolean(body.postRedPacketEnabled)
     const postRedPacketMaxPoints = Math.max(1, readOptionalNumberField(body, "postRedPacketMaxPoints") ?? 1)
     const postRedPacketDailyLimit = Math.max(1, readOptionalNumberField(body, "postRedPacketDailyLimit") ?? 1)
@@ -202,7 +230,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const heatStageColors = normalizeHeatColors(body.heatStageColors)
 
     if (tippingEnabled && tippingAmounts.length === 0) {
-      apiError(400, "开启打赏后，至少配置一个固定打赏金额")
+      apiError(400, "开启打赏后，至少配置一个积分打赏档位")
     }
 
     if (postRedPacketEnabled && postRedPacketDailyLimit < postRedPacketMaxPoints) {
@@ -217,24 +245,30 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
       apiError(400, "帖子热度颜色必须配置 9 段颜色")
     }
 
-    const settings = await prisma.siteSetting.update({
-      where: { id: existing.id },
-      data: {
-        tippingEnabled,
-        tippingDailyLimit,
-        tippingPerPostLimit,
-        tippingAmounts: tippingAmounts.join(","),
-        postRedPacketEnabled,
-        postRedPacketMaxPoints,
-        postRedPacketDailyLimit,
-        heatViewWeight,
-        heatCommentWeight,
-        heatLikeWeight,
-        heatTipCountWeight,
-        heatTipPointsWeight,
-        heatStageThresholds: heatStageThresholds.join(","),
-        heatStageColors: heatStageColors.join(","),
-      },
+    const settings = await prisma.$transaction(async (tx) => {
+      const nextSettings = await tx.siteSetting.update({
+        where: { id: existing.id },
+        data: {
+          tippingEnabled,
+          tippingDailyLimit,
+          tippingPerPostLimit,
+          tippingAmounts: tippingAmounts.join(","),
+          postRedPacketEnabled,
+          postRedPacketMaxPoints,
+          postRedPacketDailyLimit,
+          heatViewWeight,
+          heatCommentWeight,
+          heatLikeWeight,
+          heatTipCountWeight,
+          heatTipPointsWeight,
+          heatStageThresholds: heatStageThresholds.join(","),
+          heatStageColors: heatStageColors.join(","),
+        },
+      })
+
+      await syncGiftDefinitions(tippingGifts, tx)
+
+      return nextSettings
     })
 
     invalidateSiteSettingsCache()
@@ -289,6 +323,11 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const postOfflineVip1Price = Math.max(0, readOptionalNumberField(body, "postOfflineVip1Price") ?? 0)
     const postOfflineVip2Price = Math.max(0, readOptionalNumberField(body, "postOfflineVip2Price") ?? 0)
     const postOfflineVip3Price = Math.max(0, readOptionalNumberField(body, "postOfflineVip3Price") ?? 0)
+    const vipLevelIcons = normalizeVipLevelIcons({
+      vip1: readOptionalStringField(body, "vipLevelIconVip1"),
+      vip2: readOptionalStringField(body, "vipLevelIconVip2"),
+      vip3: readOptionalStringField(body, "vipLevelIconVip3"),
+    })
     const appStateWithCheckInRewards = mergeCheckInRewardSettings(existing.appStateJson, {
       vip1: checkInVip1Reward,
       vip2: checkInVip2Reward,
@@ -309,6 +348,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
       vip2: inviteCodeVip2Price,
       vip3: inviteCodeVip3Price,
     })
+    const appStateWithVipLevelIcons = mergeVipLevelIconSettings(appStateJson, vipLevelIcons)
 
     if (existing.inviteCodePurchaseEnabled && inviteCodePrice < 1) {
       apiError(400, "开启积分购买邀请码时，普通用户价格必须大于 0")
@@ -324,7 +364,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         checkInVipMakeUpCardPrice,
         nicknameChangePointCost,
         inviteCodePrice,
-        appStateJson,
+        appStateJson: appStateWithVipLevelIcons,
         vipMonthlyPrice,
         vipQuarterlyPrice,
         vipYearlyPrice,
@@ -351,6 +391,13 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     const uploadAllowedImageTypes = Array.from(new Set(readOptionalStringField(body, "uploadAllowedImageTypes").split(/[，,\s]+/).map((item) => item.trim().toLowerCase().replace(/^\./, "")).filter(Boolean)))
     const uploadMaxFileSizeMb = normalizePositiveInteger(body.uploadMaxFileSizeMb, 5)
     const uploadAvatarMaxFileSizeMb = normalizePositiveInteger(body.uploadAvatarMaxFileSizeMb, 2)
+    const existingMarkdownImageUploadSettings = resolveMarkdownImageUploadSettings({
+      appStateJson: existing.appStateJson,
+      enabledFallback: true,
+    })
+    const markdownImageUploadEnabled = body.markdownImageUploadEnabled === undefined
+      ? existingMarkdownImageUploadSettings.enabled
+      : Boolean(body.markdownImageUploadEnabled)
 
     if (uploadAllowedImageTypes.length === 0) {
       apiError(400, "请至少配置一种允许上传的图片格式")
@@ -359,6 +406,10 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
     if (uploadAvatarMaxFileSizeMb > uploadMaxFileSizeMb) {
       apiError(400, "头像上传大小限制不能大于通用上传大小限制")
     }
+
+    const appStateJson = mergeMarkdownImageUploadSettings(existing.appStateJson, {
+      enabled: markdownImageUploadEnabled,
+    })
 
     const settings = await prisma.siteSetting.update({
       where: { id: existing.id },
@@ -373,6 +424,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
         uploadAllowedImageTypes: uploadAllowedImageTypes.join(","),
         uploadMaxFileSizeMb,
         uploadAvatarMaxFileSizeMb,
+        appStateJson,
       },
     })
 

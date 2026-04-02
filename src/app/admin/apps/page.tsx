@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { AdminModuleSearch } from "@/components/admin-module-search"
@@ -6,6 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { HOST_APPS } from "@/lib/apps"
 import { requireAdminUser } from "@/lib/admin"
+import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `应用中心 - ${settings.siteName}`,
+  }
+}
 
 export default async function AdminAppsPage() {
   const admin = await requireAdminUser()

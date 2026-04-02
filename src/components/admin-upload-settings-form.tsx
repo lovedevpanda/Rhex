@@ -19,6 +19,7 @@ interface AdminUploadSettingsFormProps {
     uploadAllowedImageTypes: string[]
     uploadMaxFileSizeMb: number
     uploadAvatarMaxFileSizeMb: number
+    markdownImageUploadEnabled: boolean
   }
 }
 
@@ -34,6 +35,7 @@ export function AdminUploadSettingsForm({ initialSettings }: AdminUploadSettings
   const [uploadAllowedImageTypes, setUploadAllowedImageTypes] = useState(initialSettings.uploadAllowedImageTypes.join(", "))
   const [uploadMaxFileSizeMb, setUploadMaxFileSizeMb] = useState(String(initialSettings.uploadMaxFileSizeMb))
   const [uploadAvatarMaxFileSizeMb, setUploadAvatarMaxFileSizeMb] = useState(String(initialSettings.uploadAvatarMaxFileSizeMb))
+  const [markdownImageUploadEnabled, setMarkdownImageUploadEnabled] = useState(initialSettings.markdownImageUploadEnabled)
   const [feedback, setFeedback] = useState("")
   const [isPending, startTransition] = useTransition()
 
@@ -55,6 +57,7 @@ export function AdminUploadSettingsForm({ initialSettings }: AdminUploadSettings
             uploadAllowedImageTypes,
             uploadMaxFileSizeMb: Number(uploadMaxFileSizeMb),
             uploadAvatarMaxFileSizeMb: Number(uploadAvatarMaxFileSizeMb),
+            markdownImageUploadEnabled,
             section: "upload",
           })
           setFeedback(result.message)
@@ -77,6 +80,7 @@ export function AdminUploadSettingsForm({ initialSettings }: AdminUploadSettings
           <TextField label="OSS Region" value={uploadOssRegion} onChange={setUploadOssRegion} placeholder="如 ap-guangzhou" />
           <TextField label="OSS Endpoint" value={uploadOssEndpoint} onChange={setUploadOssEndpoint} placeholder="如 https://oss.example.com" />
           <SwitchField label="必须登录后上传" checked={uploadRequireLogin} onChange={setUploadRequireLogin} description="关闭后游客也能调用上传接口，但当前上传记录仍依赖用户归属，通常建议保持开启。" />
+          <SwitchField label="Markdown 图片上传" checked={markdownImageUploadEnabled} onChange={setMarkdownImageUploadEnabled} description="关闭后，Markdown 编辑器中的图片按钮会改为手动插入远程图片 URL，不再触发本地图片上传。" />
           <TextField label="允许图片格式" value={uploadAllowedImageTypes} onChange={setUploadAllowedImageTypes} placeholder="如 jpg, jpeg, png, gif, webp" />
           <NumberField label="通用图片大小上限（MB）" value={uploadMaxFileSizeMb} onChange={setUploadMaxFileSizeMb} min={1} />
           <NumberField label="头像大小上限（MB）" value={uploadAvatarMaxFileSizeMb} onChange={setUploadAvatarMaxFileSizeMb} min={1} />

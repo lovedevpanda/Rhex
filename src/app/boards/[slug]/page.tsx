@@ -110,7 +110,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <div className="mx-auto max-w-[1200px] px-4">
+      <div className="mx-auto max-w-[1200px] px-1">
         <ForumPageShell
           zones={zones}
           boards={boards}
@@ -149,7 +149,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
 
 
               {!permission.allowed ? (
-                <AccessDeniedCard title="当前节点暂不可访问" description={`该节点设置了${settings.pointName}、等级或 VIP 浏览门槛，未满足条件的用户无法查看节点内容。`} reason={permission.message || "当前没有访问权限"} />
+                <AccessDeniedCard title="当前节点暂不可访问" description={`该节点设置了${settings.pointName}、等级或 VIP 浏览门槛，未满足条件的用户无法查看节点内容。`} reason={permission.message || "当前没有访问权限"} isLoggedIn={Boolean(currentUser)} />
               ) : (
                 <>
          

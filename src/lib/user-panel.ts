@@ -8,6 +8,7 @@ import {
   findUserTagFollowsById,
   findUserUserFollowsById,
 } from "@/db/follow-queries"
+import { countUserBlocks, findUserBlocksById } from "@/db/block-queries"
 import { countUserFavorites, countUserLikedPosts, countUserPosts, countUserReplies, findUserFavoritePostsById, findUserLikedPostsById, findUserPostsById, findUserRepliesById } from "@/db/user-queries"
 import { mapListPost } from "@/lib/post-map"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
@@ -123,6 +124,28 @@ export interface UserTagFollowsResult {
 
 export interface UserPostFollowsResult {
   items: ReturnType<typeof mapListPost>[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export interface UserBlocksResult {
+  items: Array<{
+    id: number
+    username: string
+    displayName: string
+    bio: string
+    avatarPath?: string | null
+    status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+    level: number
+    postCount: number
+    commentCount: number
+    likeReceivedCount: number
+    followerCount: number
+  }>
   page: number
   pageSize: number
   total: number
@@ -358,6 +381,39 @@ export async function getUserPostFollows(userId: number, options: { page?: numbe
 
     return {
       items: follows.map((follow) => mapListPost(follow.post)),
+      ...pagination,
+    }
+  } catch (error) {
+    console.error(error)
+    return {
+      items: [],
+      ...createEmptyPageResult(pageSize),
+    }
+  }
+}
+
+export async function getUserBlocks(userId: number, options: { page?: number; pageSize?: number } = {}): Promise<UserBlocksResult> {
+  const { pageSize, requestedPage } = resolvePagination(options, 12)
+
+  try {
+    const total = await countUserBlocks(userId)
+    const pagination = resolvePagedResult(total, pageSize, requestedPage)
+    const blocks = await findUserBlocksById(userId, { page: pagination.page, pageSize })
+
+    return {
+      items: blocks.map((block) => ({
+        id: block.blocked.id,
+        username: block.blocked.username,
+        displayName: getUserDisplayName(block.blocked),
+        bio: block.blocked.bio?.trim() || "这个用户还没有留下简介。",
+        avatarPath: block.blocked.avatarPath,
+        status: block.blocked.status,
+        level: block.blocked.level,
+        postCount: block.blocked.postCount,
+        commentCount: block.blocked.commentCount,
+        likeReceivedCount: block.blocked.likeReceivedCount,
+        followerCount: block.blocked._count.followedByUsers,
+      })),
       ...pagination,
     }
   } catch (error) {

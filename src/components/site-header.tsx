@@ -6,10 +6,12 @@ import { HeaderUserActions } from "@/components/header-user-actions"
 import { MobileHeaderQuickActions } from "@/components/mobile-header-quick-actions"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getCurrentUser } from "@/lib/auth"
+import { getBoards } from "@/lib/boards"
 import { getHeaderQuickActionsState, getHeaderUnreadCounts } from "@/lib/header"
 import { Button } from "@/components/ui/button"
 import { SearchForm } from "@/components/search-form"
 import { getSiteSettings } from "@/lib/site-settings"
+import { getZones } from "@/lib/zones"
 
 function formatUnreadBadge(count: number) {
   if (count <= 0) {
@@ -36,7 +38,7 @@ function SiteLogoMark({ logoPath }: { logoPath?: string | null }) {
 }
 
 export async function SiteHeader() {
-  const [user, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])
+  const [user, settings, zones, boards] = await Promise.all([getCurrentUser(), getSiteSettings(), getZones(), getBoards()])
   const [{ unreadNotificationCount, unreadMessageCount }, { checkedInToday }] = await Promise.all([
     getHeaderUnreadCounts(user?.id),
     getHeaderQuickActionsState(user?.id),
@@ -53,7 +55,7 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto max-w-[1200px] px-4">
+      <div className="mx-auto max-w-[1200px] px-1">
         <div className="grid h-14 grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="-mr-6 hidden h-14 items-center lg:col-span-2 lg:flex">
             <Link href="/" className="flex items-center gap-2 text-xl leading-none">
@@ -63,20 +65,29 @@ export async function SiteHeader() {
           </div>
 
           <div className="flex h-14 items-center justify-between gap-3 lg:col-span-10">
-            <Link href="/" className="flex items-center gap-2 text-base font-bold leading-none lg:hidden">
-              <SiteLogoMark logoPath={settings.siteLogoPath} />
-              <span className="sr-only">{settings.siteLogoText}</span>
-            </Link>
+            <div className="flex items-center gap-2 lg:hidden">
+              <Link href="/" className="flex items-center gap-2 text-base font-bold leading-none">
+                <SiteLogoMark logoPath={settings.siteLogoPath} />
+                <span className="sr-only">{settings.siteLogoText}</span>
+              </Link>
+              <MobileHeaderQuickActions
+                isLoggedIn={Boolean(user)}
+                checkInEnabled={settings.checkInEnabled}
+                checkedInToday={checkedInToday}
+                appLinks={settings.headerAppLinks}
+                zones={zones}
+                boards={boards}
+              />
+            </div>
 
             <div className="hidden flex-1 md:block">
               <div className="ml-4 max-w-md">
-                <SearchForm compact appLinks={settings.headerAppLinks} appIconName={settings.headerAppIconName} />
+                <SearchForm compact appLinks={settings.headerAppLinks} appIconName={settings.headerAppIconName} search={settings.search} />
               </div>
 
             </div>
 
             <div className="ml-auto flex h-14 items-center gap-1.5">
-              <MobileHeaderQuickActions isLoggedIn={Boolean(user)} checkInEnabled={settings.checkInEnabled} checkedInToday={checkedInToday} />
               <ThemeToggle />
               {user && (user.role === "ADMIN" || user.role === "MODERATOR") ? (
                 <Link href="/admin" className="hidden sm:inline-flex">

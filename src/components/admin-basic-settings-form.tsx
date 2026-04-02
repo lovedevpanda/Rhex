@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button"
 import { TextField } from "@/components/ui/text-field"
 import { toast } from "@/components/ui/toast"
 import { PickerPopover, PickerTriggerField, normalizeHexColor } from "@/components/admin-picker-popover"
+import { AdminTippingGiftListEditor } from "@/components/admin-tipping-gift-list-editor"
 import { calculatePostHeatScore, resolvePostHeatStyle } from "@/lib/post-heat"
 import { POST_LIST_DISPLAY_MODE_DEFAULT, POST_LIST_DISPLAY_MODE_GALLERY, type PostListDisplayMode } from "@/lib/post-list-display"
+import type { SiteSearchSettings, SiteTippingGiftItem } from "@/lib/site-settings"
 
 interface AdminBasicSettingsFormProps {
   initialSettings: {
@@ -23,6 +25,8 @@ interface AdminBasicSettingsFormProps {
     postLinkDisplayMode: "SLUG" | "ID"
     homeFeedPostListDisplayMode: PostListDisplayMode
     homeSidebarStatsCardEnabled: boolean
+    homeSidebarAnnouncementsEnabled: boolean
+    search: SiteSearchSettings
     analyticsCode?: string | null
     inviteRewardInviter: number
     inviteRewardInvitee: number
@@ -39,6 +43,7 @@ interface AdminBasicSettingsFormProps {
     tippingDailyLimit: number
     tippingPerPostLimit: number
     tippingAmounts: number[]
+    tippingGifts: SiteTippingGiftItem[]
     postRedPacketEnabled: boolean
     postRedPacketMaxPoints: number
     postRedPacketDailyLimit: number
@@ -97,6 +102,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
   const [postLinkDisplayMode, setPostLinkDisplayMode] = useState<"SLUG" | "ID">(initialSettings.postLinkDisplayMode)
   const [homeFeedPostListDisplayMode, setHomeFeedPostListDisplayMode] = useState<PostListDisplayMode>(initialSettings.homeFeedPostListDisplayMode)
   const [homeSidebarStatsCardEnabled, setHomeSidebarStatsCardEnabled] = useState(initialSettings.homeSidebarStatsCardEnabled)
+  const [homeSidebarAnnouncementsEnabled, setHomeSidebarAnnouncementsEnabled] = useState(initialSettings.homeSidebarAnnouncementsEnabled)
+  const [searchEnabled, setSearchEnabled] = useState(initialSettings.search.enabled)
   const [analyticsCode, setAnalyticsCode] = useState(initialSettings.analyticsCode ?? "")
   const [postEditableMinutes, setPostEditableMinutes] = useState(String(initialSettings.postEditableMinutes))
   const [commentEditableMinutes, setCommentEditableMinutes] = useState(String(initialSettings.commentEditableMinutes))
@@ -113,6 +120,7 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
   const [tippingDailyLimit, setTippingDailyLimit] = useState(String(initialSettings.tippingDailyLimit))
   const [tippingPerPostLimit, setTippingPerPostLimit] = useState(String(initialSettings.tippingPerPostLimit))
   const [tippingAmounts, setTippingAmounts] = useState(initialSettings.tippingAmounts.join(","))
+  const [tippingGifts, setTippingGifts] = useState(initialSettings.tippingGifts)
   const [postRedPacketEnabled, setPostRedPacketEnabled] = useState(initialSettings.postRedPacketEnabled)
   const [postRedPacketMaxPoints, setPostRedPacketMaxPoints] = useState(String(initialSettings.postRedPacketMaxPoints))
   const [postRedPacketDailyLimit, setPostRedPacketDailyLimit] = useState(String(initialSettings.postRedPacketDailyLimit))
@@ -219,6 +227,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
         postLinkDisplayMode,
         homeFeedPostListDisplayMode,
         homeSidebarStatsCardEnabled,
+        homeSidebarAnnouncementsEnabled,
+        searchEnabled,
         analyticsCode,
         postEditableMinutes: Number(postEditableMinutes),
         commentEditableMinutes: Number(commentEditableMinutes),
@@ -264,6 +274,7 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
       tippingDailyLimit: Number(tippingDailyLimit),
       tippingPerPostLimit: Number(tippingPerPostLimit),
       tippingAmounts,
+      tippingGifts,
       postRedPacketEnabled,
       postRedPacketMaxPoints: Number(postRedPacketMaxPoints),
       postRedPacketDailyLimit: Number(postRedPacketDailyLimit),
@@ -335,7 +346,10 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
               <p className="text-xs leading-6 text-muted-foreground">只影响首页 feed 的普通帖子列表；置顶帖始终保持原来的普通列表样式。</p>
             </div>
             <SwitchField label="首页右侧统计卡片" checked={homeSidebarStatsCardEnabled} onChange={setHomeSidebarStatsCardEnabled} />
+            <SwitchField label="首页右侧站点公告" checked={homeSidebarAnnouncementsEnabled} onChange={setHomeSidebarAnnouncementsEnabled} />
+            <SwitchField label="站内搜索" checked={searchEnabled} onChange={setSearchEnabled} />
           </div>
+          <p className="text-xs leading-6 text-muted-foreground">关闭后，前台搜索入口输入关键词将不再跳转站内搜索，而是弹出 `Google 搜索` 和 `Bing 搜索` 两个外部搜索选项。</p>
           <TextField label="站点 Slogan" value={siteSlogan} onChange={setSiteSlogan} placeholder="如 Waste your time on things you love" />
           <div className="space-y-3 rounded-[24px] border border-border p-5">
             <div>
@@ -469,14 +483,15 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile" }: Ad
           <div className="rounded-[24px] border border-border p-5 space-y-4">
             <div>
               <h3 className="text-sm font-semibold">帖子打赏</h3>
-              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制打赏开关、次数限制与固定打赏金额。</p>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制打赏开关、次数限制与送礼配置。礼物名称、图标和价格都可在后台维护。</p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <SwitchField label="开启帖子打赏" checked={tippingEnabled} onChange={setTippingEnabled} />
               <TextField label="每日可打赏次数" value={tippingDailyLimit} onChange={setTippingDailyLimit} placeholder="如 3" />
               <TextField label="单帖可打赏次数" value={tippingPerPostLimit} onChange={setTippingPerPostLimit} placeholder="如 1" />
-              <TextField label="固定打赏金额" value={tippingAmounts} onChange={setTippingAmounts} placeholder="如 10,30,50,100" />
             </div>
+            <TextField label="裸积分打赏档位" value={tippingAmounts} onChange={setTippingAmounts} placeholder="如 10,30,50,100" />
+            <AdminTippingGiftListEditor items={tippingGifts} onChange={setTippingGifts} />
           </div>
 
           <div className="rounded-[24px] border border-border p-5 space-y-4">

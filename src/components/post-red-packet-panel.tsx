@@ -8,7 +8,7 @@ import { useMemo, useState } from "react"
 
 import { UserAvatar } from "@/components/user-avatar"
 import { Button } from "@/components/ui/button"
-import type { PostRedPacketSummary } from "@/lib/post-red-packets"
+import { getPostRedPacketClaimOrderModeLabel, getPostRedPacketGrantModeLabel, type PostRedPacketSummary } from "@/lib/post-red-packets"
 
 
 interface PostRedPacketPanelProps {
@@ -79,6 +79,14 @@ export function PostRedPacketPanel({ pointName, summary }: PostRedPacketPanelPro
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-[20px] bg-secondary/40 px-4 py-3">
+                <p className="text-xs text-muted-foreground">金额模式</p>
+                <p className="mt-1 font-semibold">{summary.grantMode ? getPostRedPacketGrantModeLabel(summary.grantMode) : "固定红包"}</p>
+              </div>
+              <div className="rounded-[20px] bg-secondary/40 px-4 py-3">
+                <p className="text-xs text-muted-foreground">领取规则</p>
+                <p className="mt-1 font-semibold">{summary.claimOrderMode ? getPostRedPacketClaimOrderModeLabel(summary.claimOrderMode) : "先到先得"}</p>
+              </div>
               <div className="rounded-[20px] bg-secondary/40 px-4 py-3">
                 <p className="text-xs text-muted-foreground">红包总额</p>
                 <p className="mt-1 font-semibold">{summary.totalPoints} {pointName}</p>

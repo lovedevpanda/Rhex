@@ -37,7 +37,7 @@ export default async function FunsPage() {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <div className="mx-auto max-w-[1200px] px-4">
+      <div className="mx-auto max-w-[1200px] px-1">
         <ForumPageShell
           zones={zones}
           boards={boards}

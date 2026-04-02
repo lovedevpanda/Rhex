@@ -1,10 +1,16 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRight, BookCheck, Crown, FileText, MessageSquareText, Scale, ShieldAlert } from "lucide-react"
+import { BookCheck, Crown, FileText, MessageSquareText, Scale, ShieldAlert } from "lucide-react"
 
+import { ForumPageShell } from "@/components/forum-page-shell"
+import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent } from "@/components/ui/card"
+import { getCurrentUser } from "@/lib/auth"
+import { getBoards } from "@/lib/boards"
+import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 import { getSiteSettings } from "@/lib/site-settings"
+import { getZones } from "@/lib/zones"
 
 const highlights = [
   {
@@ -24,6 +30,8 @@ const highlights = [
   },
 ]
 
+export const dynamic = "force-dynamic"
+
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings()
 
@@ -39,7 +47,14 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function TermsPage() {
-  const settings = await getSiteSettings()
+  const [settings, boards, zones, currentUser, hotTopics] = await Promise.all([
+    getSiteSettings(),
+    getBoards(),
+    getZones(),
+    getCurrentUser(),
+    getHomeSidebarHotTopics(5),
+  ])
+  const sidebarUser = await resolveSidebarUser(currentUser, settings)
 
   const sections = [
     {
@@ -117,41 +132,35 @@ export default async function TermsPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-
-      <main className="mx-auto max-w-[1100px] px-4 py-10 lg:px-6 lg:py-14">
-        <div className="space-y-8">
-          <section className="rounded-[32px] border border-border bg-card px-6 py-8 shadow-sm sm:px-8 sm:py-10 lg:px-12 lg:py-14">
-            <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto max-w-[1200px] px-1">
+        <ForumPageShell
+          zones={zones}
+          boards={boards}
+          main={(
+            <main className="py-1 pb-12 mt-6">
+              <div className="space-y-6">
+          <section className="rounded-[28px] border border-border bg-card px-5 py-6 shadow-sm sm:px-7 sm:py-8">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-3xl">
                 <div className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
                   Terms of Service
                 </div>
-                <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+                <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
                   {settings.siteName} 论坛使用协议
                 </h1>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-                  这份协议用于明确社区成员在注册、浏览、发帖、互动、成长、上传与账户使用过程中的权利、义务与平台治理边界。继续使用论坛，即视为同意受本协议约束。
-                </p>
+        
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                <Link href="/help" className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-background transition-opacity hover:opacity-90">
-                  先看帮助中心
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link href="/faq" className="inline-flex items-center justify-center rounded-full border border-border bg-background px-5 py-3 text-sm font-medium transition-colors hover:bg-accent">
-                  查看 FAQ
-                </Link>
-              </div>
+
             </div>
           </section>
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {highlights.map((item) => {
               const Icon = item.icon
               return (
                 <Card key={item.title} className="shadow-sm">
-                  <CardContent className="p-5">
+                  <CardContent className="p-4">
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-foreground">
                       <Icon className="h-5 w-5" />
                     </div>
@@ -163,10 +172,10 @@ export default async function TermsPage() {
             })}
           </section>
 
-          <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+          <section className="rounded-[24px] border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap gap-2.5">
               {sections.map((section) => (
-                <a key={section.id} href={`#${section.id}`} className="inline-flex items-center gap-2 rounded-full border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground">
+                <a key={section.id} href={`#${section.id}`} className="inline-flex items-center gap-2 rounded-full border border-transparent bg-transparent px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground">
                   <FileText className="h-4 w-4" />
                   {section.title}
                 </a>
@@ -174,21 +183,24 @@ export default async function TermsPage() {
             </div>
           </section>
 
-          <section className="space-y-5">
+          <section className="space-y-4">
             {sections.map((section) => (
               <Card key={section.id} id={section.id} className="shadow-sm">
-                <CardContent className="p-6 sm:p-7">
+                <CardContent className="p-5 sm:p-6">
                   <div className="flex items-start gap-4">
-                    <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-foreground">
+                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent text-foreground">
                       <FileText className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-xl font-semibold tracking-tight">{section.title}</h2>
-                      <div className="mt-4 space-y-4 text-sm leading-7 text-muted-foreground sm:text-[15px]">
+                      <h2 className="text-lg font-semibold tracking-tight">{section.title}</h2>
+                      <ul className="mt-4 space-y-2.5 text-sm leading-7 text-muted-foreground sm:text-[15px]">
                         {section.content.map((paragraph) => (
-                          <p key={paragraph}>{paragraph}</p>
+                          <li key={paragraph} className="flex gap-2">
+                            <span className="mt-[0.7rem] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/45" />
+                            <span>{paragraph}</span>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                   </div>
                 </CardContent>
@@ -196,9 +208,9 @@ export default async function TermsPage() {
             ))}
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-2">
+          <section className="grid gap-4 xl:grid-cols-2">
             <Card className="shadow-sm">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-foreground">
                   <MessageSquareText className="h-5 w-5" />
                 </div>
@@ -215,7 +227,7 @@ export default async function TermsPage() {
             </Card>
 
             <Card className="shadow-sm">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-foreground">
                   <Crown className="h-5 w-5" />
                 </div>
@@ -230,27 +242,16 @@ export default async function TermsPage() {
             </Card>
           </section>
 
-          <section className="rounded-[32px] border border-border bg-muted/30 px-6 py-8 sm:px-8 lg:px-12 lg:py-10">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-2xl">
-                <h2 className="text-2xl font-semibold tracking-tight">建议搭配阅读</h2>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                  如果你想知道规则之外“具体怎么用”，建议接着去看帮助中心与 FAQ；如果你想了解公开治理结果，可继续查看小黑屋页面。
-                </p>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Link href="/help" className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-background transition-opacity hover:opacity-90">
-                  查看帮助中心
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link href="/faq" className="inline-flex items-center justify-center rounded-full border border-border bg-background px-5 py-3 text-sm font-medium transition-colors hover:bg-accent">
-                  查看 FAQ
-                </Link>
-              </div>
-            </div>
-          </section>
-        </div>
-      </main>
+            </main>
+          )}
+          rightSidebar={(
+            <aside className="mt-6 hidden pb-12 lg:block">
+              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} />
+            </aside>
+          )}
+        />
+      </div>
     </div>
   )
 }

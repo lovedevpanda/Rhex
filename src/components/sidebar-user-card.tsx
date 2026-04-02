@@ -390,7 +390,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "ç
         <div className="sidebar-user-card-header p-4">
           <div className="flex items-start gap-3">
             <Link href={`/users/${currentUser.username}`} className={cn("shrink-0", isRestrictedUser && "grayscale")}>
-              <UserAvatar name={currentUser.nickname ?? currentUser.username} avatarPath={currentUser.avatarPath} size="md" />
+              <UserAvatar name={currentUser.nickname ?? currentUser.username} avatarPath={currentUser.avatarPath} size="md" isVip={vipActive} vipLevel={currentUser.vipLevel} />
             </Link>
             <div className={cn("min-w-0 flex-1", isRestrictedUser && "grayscale")}>
               <div className="flex flex-wrap items-center gap-1.5">

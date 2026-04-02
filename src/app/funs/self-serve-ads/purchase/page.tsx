@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { SiteHeader } from "@/components/site-header"
@@ -7,6 +8,14 @@ import { getSelfServeAdsAppConfig } from "@/lib/self-serve-ads"
 import { buildSelfServeAdPriceMap, toSelfServeAdConfig } from "@/lib/self-serve-ads.shared"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `购买广告位 - ${settings.siteName}`,
+  }
+}
 
 
 

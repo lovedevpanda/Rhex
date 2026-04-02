@@ -9,6 +9,7 @@ import { ToastProvider } from "@/components/ui/toast"
 
 import { getRssFeedUrl } from "@/lib/rss"
 
+import { getReadingHistoryInitScript } from "@/lib/local-reading-history"
 import { resolveSiteOrigin } from "@/lib/site-origin"
 import { getSidebarNavigationInitScript } from "@/lib/sidebar-navigation-preference"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -22,6 +23,7 @@ import "./globals.css"
 
 const themeInitScript = getThemeInitScript()
 const sidebarNavigationInitScript = getSidebarNavigationInitScript()
+const readingHistoryInitScript = getReadingHistoryInitScript()
 
 export async function generateMetadata(): Promise<Metadata> {
   const [settings, rssUrl, siteOrigin] = await Promise.all([getSiteSettings(), getRssFeedUrl(), resolveSiteOrigin()])
@@ -48,11 +50,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <script dangerouslySetInnerHTML={{ __html: sidebarNavigationInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript +sidebarNavigationInitScript+readingHistoryInitScript}} />
+
       </head>
       <body>
-        <SiteSettingsProvider markdownEmojiMap={settings.markdownEmojiMap}>
+        <SiteSettingsProvider markdownEmojiMap={settings.markdownEmojiMap} markdownImageUploadEnabled={settings.markdownImageUploadEnabled} vipLevelIcons={settings.vipLevelIcons}>
           <ToastProvider>
             <ConfirmProvider>
               {children}

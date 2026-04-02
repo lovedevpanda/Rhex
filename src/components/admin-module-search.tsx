@@ -22,7 +22,7 @@ const ADMIN_MODULE_SEARCH_ITEMS: AdminModuleSearchItem[] = [
   { href: "/admin?tab=levels", label: "等级系统", category: "模块", description: "配置等级、经验和升级规则。", keywords: ["等级", "经验", "升级", "level", "成长值", "等级规则"] },
   { href: "/admin?tab=badges", label: "勋章系统", category: "模块", description: "配置勋章、授予规则和展示。", keywords: ["勋章", "徽章", "badge", "成就", "佩戴勋章"] },
   { href: "/admin?tab=verifications", label: "认证系统", category: "模块", description: "审核认证类型和用户认证申请。", keywords: ["认证", "实名", "资质", "审核", "认证申请", "实名审核"] },
-  { href: "/admin?tab=announcements", label: "公告管理", category: "模块", description: "管理首页和公告页展示内容。", keywords: ["公告", "通知", "置顶公告", "megaphone", "公告栏"] },
+  { href: "/admin?tab=announcements", label: "站点文档", category: "模块", description: "统一管理公告与帮助文档，支持内部文档和链接跳转。", keywords: ["公告", "帮助文档", "文档", "站点文档", "通知", "置顶公告", "slug"] },
   { href: "/admin?tab=reports", label: "举报中心", category: "模块", description: "处理帖子、回复和用户举报。", keywords: ["举报", "投诉", "违规", "风控", "举报处理"] },
   { href: "/admin?tab=logs", label: "日志中心", category: "模块", description: "查看管理员、登录、积分和上传日志。", keywords: ["日志", "操作记录", "登录日志", "积分日志", "上传日志", "审计日志"] },
   { href: "/admin?tab=logs&logSubTab=admin", label: "管理员日志", category: "日志子页", description: "查看管理员处理举报、审核、封禁、置顶等后台操作记录。", keywords: ["管理员日志", "后台日志", "操作日志", "审核日志", "封禁日志", "禁言日志", "帖子审核日志"] },

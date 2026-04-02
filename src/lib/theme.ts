@@ -1,4 +1,4 @@
-export const THEME_STORAGE_KEY = "bbs-theme"
+export const THEME_STORAGE_KEY = "rhex-theme"
 
 export type ThemeMode = "light" | "dark"
 export type ThemePreference = ThemeMode | "system"

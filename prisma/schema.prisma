@@ -67,6 +67,11 @@ enum PostRedPacketGrantMode {
   RANDOM
 }
 
+enum PostRedPacketClaimOrderMode {
+  FIRST_COME_FIRST_SERVED
+  RANDOM
+}
+
 enum PostRedPacketTriggerType {
   REPLY
   LIKE
@@ -137,6 +142,16 @@ enum AnnouncementStatus {
   DRAFT
   PUBLISHED
   OFFLINE
+}
+
+enum SiteDocumentType {
+  ANNOUNCEMENT
+  HELP
+}
+
+enum SiteDocumentSourceType {
+  DOCUMENT
+  LINK
 }
 
 enum FriendLinkStatus {
@@ -260,6 +275,8 @@ model User {
   boardFollows      BoardFollow[]
   followingUsers    UserFollow[]             @relation("UserFollowSource")
   followedByUsers   UserFollow[]             @relation("UserFollowTarget")
+  blocksInitiated   UserBlock[]              @relation("UserBlockSource")
+  blocksReceived    UserBlock[]              @relation("UserBlockTarget")
   tagFollows        TagFollow[]
   postFollows       PostFollow[]
   favorites         Favorite[]
@@ -270,6 +287,9 @@ model User {
   vipOrders         VipOrder[]
   postTipsSent      PostTip[]      @relation("PostTipSender")
   postTipsReceived  PostTip[]      @relation("PostTipReceiver")
+  postGiftEventsSent     PostGiftEvent[] @relation("PostGiftSender")
+  postGiftEventsReceived PostGiftEvent[] @relation("PostGiftReceiver")
+  postGiftStatsReceived  PostGiftStats[] @relation("PostGiftStatsReceiver")
   redPacketsSent    PostRedPacket[]
   redPacketClaims   PostRedPacketClaim[] @relation("PostRedPacketClaimUser")
   checkInLogs       UserCheckInLog[]
@@ -542,6 +562,19 @@ model UserFollow {
   @@index([followingId, createdAt])
 }
 
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId Int
+  blockedId Int
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  blocker   User     @relation("UserBlockSource", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("UserBlockTarget", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId, createdAt])
+  @@index([blockedId, createdAt])
+}
+
 enum PinScope {
   NONE
   GLOBAL
@@ -567,6 +600,7 @@ model Post {
   isAnnouncement         Boolean      @default(false)
   commentsVisibleToAuthorOnly Boolean @default(false)
   minViewLevel           Int          @default(0)
+  minViewVipLevel        Int          @default(0)
   viewCount              Int          @default(0)
   commentCount           Int          @default(0)
   likeCount              Int          @default(0)
@@ -609,6 +643,8 @@ model Post {
   lotteryWinners         LotteryWinner[]
   appendices             PostAppendix[]
   tips                   PostTip[]
+  giftEvents             PostGiftEvent[]
+  giftStats              PostGiftStats[]
   redPacket              PostRedPacket?
   redPacketClaims        PostRedPacketClaim[]
   followers              PostFollow[]
@@ -1103,11 +1139,21 @@ model Announcement {
   content     String
   status      AnnouncementStatus @default(DRAFT)
   isPinned    Boolean            @default(false)
+  type        SiteDocumentType   @default(ANNOUNCEMENT)
+  sourceType  SiteDocumentSourceType @default(DOCUMENT)
+  slug        String?
+  linkUrl     String?
+  titleColor  String?
+  titleBold   Boolean            @default(false)
   publishedAt DateTime?   @db.Timestamptz(3)    
   createdBy   Int
   createdAt   DateTime   @db.Timestamptz(3)              @default(now())
   updatedAt   DateTime   @db.Timestamptz(3)              @updatedAt
   creator     User               @relation("announcementCreator", fields: [createdBy], references: [id])
+
+  @@index([type, status])
+  @@index([type, publishedAt])
+  @@unique([type, slug])
 }
 
 model SensitiveWord {
@@ -1244,11 +1290,70 @@ model PostTip {
   @@index([postId, senderId, createdAt])
 }
 
+model GiftDefinition {
+  id         String   @id
+  name       String
+  icon       String
+  price      Int
+  sortOrder  Int      @default(0)
+  isEnabled  Boolean  @default(true)
+  createdAt  DateTime @db.Timestamptz(3) @default(now())
+  updatedAt  DateTime @db.Timestamptz(3) @updatedAt
+
+  @@index([isEnabled, sortOrder, createdAt])
+}
+
+model PostGiftEvent {
+  id               String   @id
+  postId           String
+  senderId         Int
+  receiverId       Int
+  giftId           String
+  giftNameSnapshot String
+  giftIconSnapshot String
+  unitPrice        Int
+  quantity         Int      @default(1)
+  totalPoints      Int
+  createdAt        DateTime @db.Timestamptz(3) @default(now())
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender           User     @relation("PostGiftSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver         User     @relation("PostGiftReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([giftId, createdAt])
+  @@index([postId, senderId, createdAt])
+}
+
+model PostGiftStats {
+  id               String   @id
+  postId           String
+  receiverId       Int
+  giftId           String
+  giftNameSnapshot String
+  giftIconSnapshot String
+  unitPrice        Int
+  totalCount       Int      @default(0)
+  totalPoints      Int      @default(0)
+  lastSentAt       DateTime @db.Timestamptz(3) @default(now())
+  createdAt        DateTime @db.Timestamptz(3) @default(now())
+  updatedAt        DateTime @db.Timestamptz(3) @updatedAt
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  receiver         User     @relation("PostGiftStatsReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, giftId])
+  @@index([postId, totalCount])
+  @@index([postId, totalPoints])
+  @@index([receiverId, lastSentAt])
+}
+
 model PostRedPacket {
   id             String                  @id @default(cuid())
   postId          String                  @unique
   senderId        Int
   grantMode       PostRedPacketGrantMode
+  claimOrderMode  PostRedPacketClaimOrderMode @default(FIRST_COME_FIRST_SERVED)
   triggerType     PostRedPacketTriggerType
   totalPoints     Int
   packetCount     Int

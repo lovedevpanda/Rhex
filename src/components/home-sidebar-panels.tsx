@@ -2,6 +2,8 @@ import Link from "next/link"
 import { Flame, Link2 } from "lucide-react"
 
 import { HomeAnnouncementPanel } from "@/components/home-announcement-panel"
+import { PostListLink } from "@/components/post-list-link"
+import { ReadingHistoryPanel } from "@/components/reading-history-panel"
 import { HomeSiteStatsCard } from "@/components/home-site-stats-card"
 import { SidebarUserCard, type SidebarUserCardData } from "@/components/sidebar-user-card"
 import { UserAvatar } from "@/components/user-avatar"
@@ -26,6 +28,7 @@ interface HomeSidebarPanelsProps {
   hotTopics: HotTopicItem[]
   postLinkDisplayMode?: "SLUG" | "ID"
   announcements?: AnnouncementItem[]
+  showAnnouncements?: boolean
   friendLinks?: FriendLinkItem[]
   friendLinksEnabled?: boolean
   createPostHref?: string
@@ -37,30 +40,34 @@ interface HomeSidebarPanelsProps {
   siteDescription?: string
 }
 
-export function HomeSidebarPanels({ user, hotTopics, postLinkDisplayMode = "SLUG", announcements = [], friendLinks = [], friendLinksEnabled = false, createPostHref, topPanels = [], middlePanels = [], bottomPanels = [], stats = null, siteName, siteDescription }: HomeSidebarPanelsProps) {
+export function HomeSidebarPanels({ user, hotTopics, postLinkDisplayMode = "SLUG", announcements = [], showAnnouncements = true, friendLinks = [], friendLinksEnabled = false, createPostHref, topPanels = [], middlePanels = [], bottomPanels = [], stats = null, siteName, siteDescription }: HomeSidebarPanelsProps) {
   return (
     <div className="sticky top-20 min-w-0 w-full max-w-full space-y-4">
       <SidebarUserCard user={user} createPostHref={createPostHref} siteName={siteName} siteDescription={siteDescription} />
+      {user ? <ReadingHistoryPanel variant="sidebar" title="今日访问" limit={5} moreHref="/settings?tab=follows&followTab=history" showOnlyToday requireLoggedIn isLoggedIn hideWhenEmpty stabilizeLayoutOnHydration /> : null}
 
       {topPanels.map((panel) => <div key={panel.id}>{panel.content}</div>)}
 
-      <HomeAnnouncementPanel announcements={announcements} />
+      {showAnnouncements ? <HomeAnnouncementPanel announcements={announcements} /> : null}
 
-      <div className="rounded-[24px] border border-border bg-card p-4 shadow-sm shadow-black/5 dark:shadow-black/30">
-        <div className="mb-4 flex items-center gap-2">
-          <Flame className="h-5 w-5 text-orange-500 dark:text-orange-400" />
-          <h3 className="font-semibold">今日热帖</h3>
+      <div className="rounded-[20px] border border-border bg-card p-3 shadow-sm shadow-black/5 dark:shadow-black/30">
+        <div className="mb-3 flex items-center gap-1.5">
+          <Flame className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+          <h3 className="text-sm font-semibold">今日热帖</h3>
         </div>
-        <div className="space-y-2">
-          {hotTopics.map((topic) => (
-            <Link key={topic.id} href={getPostPath({ id: topic.id, slug: topic.slug }, { mode: postLinkDisplayMode })} className="-mx-1.5 flex items-start gap-2.5 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-accent/70">
-              <UserAvatar name={topic.authorName} avatarPath={topic.authorAvatarPath} size="sm" />
+        <div className="space-y-1.5">
+          {hotTopics.map((topic) => {
+            const postPath = getPostPath({ id: topic.id, slug: topic.slug }, { mode: postLinkDisplayMode })
+
+            return (
+            <PostListLink key={topic.id} href={postPath} visitedPath={postPath} dimWhenRead className="-mx-1 flex items-start gap-2 rounded-lg px-1 py-1 transition-colors hover:bg-accent/70">
+              <UserAvatar name={topic.authorName} avatarPath={topic.authorAvatarPath} size="xs" />
               <div className="min-w-0 flex-1">
-                <div title={topic.title} className="truncate whitespace-nowrap text-sm leading-snug">{topic.title}</div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">最后回复：{topic.lastReplyAuthorName ?? topic.authorName} · {topic.lastRepliedAt}</div>
+                <div title={topic.title} className="truncate whitespace-nowrap text-[13px] leading-snug">{topic.title}</div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">最后回复：{topic.lastReplyAuthorName ?? topic.authorName} · {topic.lastRepliedAt}</div>
               </div>
-            </Link>
-          ))}
+            </PostListLink>
+          )})}
         </div>
       </div>
 

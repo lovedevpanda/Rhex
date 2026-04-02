@@ -36,16 +36,25 @@ export async function searchPosts(keyword: string, page = 1, pageSize = 10): Pro
   }
 
   try {
+    const settings = await getSiteSettings()
+
+    if (!settings.search.enabled) {
+      return {
+        keyword: normalizedKeyword,
+        total: 0,
+        items: [],
+      }
+    }
+
     const where = buildPostSearchWhere(normalizedKeyword)
 
-    const [total, posts, settings] = await Promise.all([
+    const [total, posts] = await Promise.all([
       countSearchPosts(where),
       findSearchPosts({
         where,
         page,
         pageSize,
       }),
-      getSiteSettings(),
     ] as const)
 
 

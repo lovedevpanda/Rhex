@@ -10,7 +10,7 @@ export async function SiteFooter() {
 
   return (
     <footer className="border-t bg-muted/30">
-      <div className="mx-auto max-w-[1200px] px-4 py-8">
+      <div className="mx-auto max-w-[1200px] px-1 py-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="font-semibold text-foreground">{settings.siteName}</div>

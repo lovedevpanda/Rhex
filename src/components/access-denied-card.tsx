@@ -7,9 +7,10 @@ interface AccessDeniedCardProps {
   title: string
   description: string
   reason: string
+  isLoggedIn?: boolean
 }
 
-export function AccessDeniedCard({ title, description, reason }: AccessDeniedCardProps) {
+export function AccessDeniedCard({ title, description, reason, isLoggedIn = false }: AccessDeniedCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -21,9 +22,11 @@ export function AccessDeniedCard({ title, description, reason }: AccessDeniedCar
           当前访问受限：{reason}
         </div>
         <div className="flex gap-3">
-          <Link href="/login">
-            <Button>去登录</Button>
-          </Link>
+          {!isLoggedIn ? (
+            <Link href="/login">
+              <Button>去登录</Button>
+            </Link>
+          ) : null}
           <Link href="/">
             <Button variant="outline">返回首页</Button>
           </Link>

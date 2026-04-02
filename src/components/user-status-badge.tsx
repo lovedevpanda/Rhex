@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { PublicUserStatus } from "@/lib/users"
 
@@ -22,17 +23,18 @@ export function UserStatusBadge({ status, compact = false, className }: { status
   const config = STATUS_CONFIG[status]
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center rounded-full font-semibold tracking-wide",
-        compact ? "h-7 min-w-7 px-2 text-xs" : "px-3 py-1 text-xs",
-        config.className,
-        className,
-      )}
-      aria-label={config.label}
-      title={config.label}
-    >
-      {compact ? config.shortLabel : config.label}
-    </span>
+    <Tooltip content={config.label}>
+      <span
+        className={cn(
+          "inline-flex items-center justify-center rounded-full font-semibold tracking-wide",
+          compact ? "h-7 min-w-7 px-2 text-xs" : "px-3 py-1 text-xs",
+          config.className,
+          className,
+        )}
+        aria-label={config.label}
+      >
+        {compact ? config.shortLabel : config.label}
+      </span>
+    </Tooltip>
   )
 }

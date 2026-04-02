@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
+import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
 import { Button } from "@/components/ui/button"
 import { TextField } from "@/components/ui/text-field"
 import { saveAdminSiteSettings } from "@/lib/admin-site-settings-client"
@@ -30,6 +31,11 @@ interface AdminVipSettingsFormProps {
     vipMonthlyPrice: number
     vipQuarterlyPrice: number
     vipYearlyPrice: number
+    vipLevelIcons: {
+      vip1: string
+      vip2: string
+      vip3: string
+    }
     postOfflinePrice: number
     postOfflineVip1Price: number
     postOfflineVip2Price: number
@@ -60,6 +66,9 @@ export function AdminVipSettingsForm({ initialSettings }: AdminVipSettingsFormPr
   const [vipMonthlyPrice, setVipMonthlyPrice] = useState(String(initialSettings.vipMonthlyPrice))
   const [vipQuarterlyPrice, setVipQuarterlyPrice] = useState(String(initialSettings.vipQuarterlyPrice))
   const [vipYearlyPrice, setVipYearlyPrice] = useState(String(initialSettings.vipYearlyPrice))
+  const [vipLevelIconVip1, setVipLevelIconVip1] = useState(initialSettings.vipLevelIcons.vip1)
+  const [vipLevelIconVip2, setVipLevelIconVip2] = useState(initialSettings.vipLevelIcons.vip2)
+  const [vipLevelIconVip3, setVipLevelIconVip3] = useState(initialSettings.vipLevelIcons.vip3)
   const [postOfflinePrice, setPostOfflinePrice] = useState(String(initialSettings.postOfflinePrice))
   const [postOfflineVip1Price, setPostOfflineVip1Price] = useState(String(initialSettings.postOfflineVip1Price))
   const [postOfflineVip2Price, setPostOfflineVip2Price] = useState(String(initialSettings.postOfflineVip2Price))
@@ -98,6 +107,9 @@ export function AdminVipSettingsForm({ initialSettings }: AdminVipSettingsFormPr
             vipMonthlyPrice: Number(vipMonthlyPrice),
             vipQuarterlyPrice: Number(vipQuarterlyPrice),
             vipYearlyPrice: Number(vipYearlyPrice),
+            vipLevelIconVip1,
+            vipLevelIconVip2,
+            vipLevelIconVip3,
             postOfflinePrice: Number(postOfflinePrice),
             postOfflineVip1Price: Number(postOfflineVip1Price),
             postOfflineVip2Price: Number(postOfflineVip2Price),
@@ -156,12 +168,38 @@ export function AdminVipSettingsForm({ initialSettings }: AdminVipSettingsFormPr
       <div className="rounded-[22px] border border-border bg-card p-4 space-y-5">
         <div>
           <h3 className="text-sm font-semibold">VIP 套餐配置</h3>
-          <p className="mt-1 text-xs text-muted-foreground">统一配置前台可售 VIP 套餐对应的积分价格。</p>
+          <p className="mt-1 text-xs text-muted-foreground">统一配置前台可售 VIP 套餐对应的积分价格与头像角标图标。</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <TextField label="月卡积分价格（VIP1）" value={vipMonthlyPrice} onChange={setVipMonthlyPrice} placeholder="如 3000" />
           <TextField label="季卡积分价格（VIP2）" value={vipQuarterlyPrice} onChange={setVipQuarterlyPrice} placeholder="如 8000" />
           <TextField label="年卡积分价格（VIP3）" value={vipYearlyPrice} onChange={setVipYearlyPrice} placeholder="如 30000" />
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <AdminIconPickerField
+            label="VIP1 头像角标"
+            value={vipLevelIconVip1}
+            onChange={setVipLevelIconVip1}
+            previewColor="#7c3aed"
+            popoverTitle="选择 VIP1 头像角标"
+            description="支持 emoji、符号或完整 SVG，前台会显示在用户头像右下角。"
+          />
+          <AdminIconPickerField
+            label="VIP2 头像角标"
+            value={vipLevelIconVip2}
+            onChange={setVipLevelIconVip2}
+            previewColor="#e11d48"
+            popoverTitle="选择 VIP2 头像角标"
+            description="支持 emoji、符号或完整 SVG，前台会显示在用户头像右下角。"
+          />
+          <AdminIconPickerField
+            label="VIP3 头像角标"
+            value={vipLevelIconVip3}
+            onChange={setVipLevelIconVip3}
+            previewColor="#d97706"
+            popoverTitle="选择 VIP3 头像角标"
+            description="支持 emoji、符号或完整 SVG，前台会显示在用户头像右下角。"
+          />
         </div>
         <div>
           <h3 className="text-sm font-semibold">作者下线帖子价格</h3>

@@ -93,7 +93,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <div className="mx-auto max-w-[1200px] px-4">
+      <div className="mx-auto max-w-[1200px] px-1">
         <ForumPageShell
           zones={allZones}
           boards={allBoards}
@@ -132,7 +132,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
 
               {!permission.allowed ? (
 
-                <AccessDeniedCard title="当前分区暂不可访问" description={`该分区设置了${settings.pointName}、等级或 VIP 浏览门槛，未满足条件的用户无法查看分区内容。`} reason={permission.message || "当前没有访问权限"} />
+                <AccessDeniedCard title="当前分区暂不可访问" description={`该分区设置了${settings.pointName}、等级或 VIP 浏览门槛，未满足条件的用户无法查看分区内容。`} reason={permission.message || "当前没有访问权限"} isLoggedIn={Boolean(currentUser)} />
               ) : (
                 <>
 

@@ -5,6 +5,7 @@ import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board
 import { extractMentionTexts, findMentionUsers, resolveMentionsInText } from "@/lib/comment-mentions"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { getSiteSettings } from "@/lib/site-settings"
+import { ensureUsersCanInteract } from "@/lib/user-blocks"
 import { validateCommentPayload } from "@/lib/validators"
 
 export async function createCommentFlow(input: {
@@ -37,6 +38,15 @@ export async function createCommentFlow(input: {
     apiError(404, "帖子不存在或暂不可评论")
   }
 
+  if (postContext.post.authorId !== input.currentUser.id) {
+    await ensureUsersCanInteract({
+      actorId: input.currentUser.id,
+      targetUserId: postContext.post.authorId,
+      blockedMessage: "你已拉黑该用户，无法在对方帖子下回复",
+      blockedByMessage: "对方已将你拉黑，无法在其帖子下回复",
+    })
+  }
+
   const permission = checkBoardPermission(dbUser, postContext.settings, "reply")
   if (!permission.allowed) {
     apiError(403, permission.message || "当前没有回复权限")
@@ -66,6 +76,15 @@ export async function createCommentFlow(input: {
     normalizedParentId = parentComment.parentId ?? parentComment.id
     normalizedReplyToUserId = parentComment.userId
     normalizedReplyToUserName = parentComment.user.nickname ?? parentComment.user.username
+  }
+
+  if (normalizedReplyToUserId && normalizedReplyToUserId !== input.currentUser.id) {
+    await ensureUsersCanInteract({
+      actorId: input.currentUser.id,
+      targetUserId: normalizedReplyToUserId,
+      blockedMessage: "你已拉黑该用户，无法继续回复",
+      blockedByMessage: "对方已将你拉黑，无法继续回复",
+    })
   }
 
   const resolvedComment = resolveMentionsInText(contentSafety.sanitizedText, mentionUsers)

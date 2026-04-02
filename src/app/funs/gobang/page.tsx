@@ -47,7 +47,7 @@ export default async function GobangFunPage() {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <div className="mx-auto max-w-[1200px] px-4 py-8">
+      <div className="mx-auto max-w-[1200px] px-1 py-8">
         <div className="space-y-6">
           <GobangPage config={config} initialMatches={initialMatches} initialSummary={initialSummary} />
         </div>

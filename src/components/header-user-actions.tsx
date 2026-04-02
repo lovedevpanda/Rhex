@@ -7,6 +7,7 @@ import { Bell, MessageSquareMore, User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { UserAvatar } from "@/components/user-avatar"
+import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 
 interface HeaderUserActionsProps {
@@ -114,6 +115,9 @@ export function HeaderUserActions({ user, unreadMessageCount, unreadNotification
     )
   }
 
+  const vipActive = isVipActive(user)
+  const vipLevel = getVipLevel(user)
+
 
   return (
 
@@ -141,7 +145,7 @@ export function HeaderUserActions({ user, unreadMessageCount, unreadNotification
             aria-expanded={mobileMenuOpen}
             aria-haspopup="menu"
           >
-            <UserAvatar name={user.nickname ?? user.username} avatarPath={user.avatarPath} size="sm" />
+            <UserAvatar name={user.nickname ?? user.username} avatarPath={user.avatarPath} size="sm" isVip={vipActive} vipLevel={vipLevel} />
           </button>
 
           {mobileMenuOpen ? (

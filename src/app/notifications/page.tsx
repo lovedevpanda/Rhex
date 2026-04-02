@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { NotificationsPagination } from "@/components/notifications-pagination"
@@ -7,8 +8,17 @@ import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { getUserNotifications, getUserUnreadNotificationCount } from "@/lib/notifications"
+import { getSiteSettings } from "@/lib/site-settings"
 
 const PAGE_SIZE = 20
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `通知 - ${settings.siteName}`,
+  }
+}
 
 function parsePageParam(value: string | string[] | undefined) {
   const rawValue = Array.isArray(value) ? value[0] : value

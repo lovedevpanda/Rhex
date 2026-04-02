@@ -26,6 +26,7 @@ export function DialogPortal({ open, children, onClose, closeOnEscape = true, lo
     }
 
     const previousOverflow = document.body.style.overflow
+    const previousPaddingRight = document.body.style.paddingRight
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && closeOnEscape) {
         onClose?.()
@@ -33,7 +34,12 @@ export function DialogPortal({ open, children, onClose, closeOnEscape = true, lo
     }
 
     if (lockBodyScroll) {
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+      const currentPaddingRight = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0
       document.body.style.overflow = "hidden"
+      if (scrollbarWidth > 0) {
+        document.body.style.paddingRight = `${currentPaddingRight + scrollbarWidth}px`
+      }
     }
 
     if (closeOnEscape) {
@@ -43,6 +49,7 @@ export function DialogPortal({ open, children, onClose, closeOnEscape = true, lo
     return () => {
       if (lockBodyScroll) {
         document.body.style.overflow = previousOverflow
+        document.body.style.paddingRight = previousPaddingRight
       }
 
       if (closeOnEscape) {

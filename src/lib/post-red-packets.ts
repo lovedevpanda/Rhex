@@ -2,7 +2,7 @@ import { randomInt } from "crypto"
 
 
 
-import { ChangeType, PostRedPacketGrantMode, PostRedPacketStatus, PostRedPacketTriggerType, type Prisma } from "@/db/types"
+import { ChangeType, PostRedPacketClaimOrderMode, PostRedPacketGrantMode, PostRedPacketStatus, PostRedPacketTriggerType, type Prisma } from "@/db/types"
 
 import { claimPostRedPacketInTransaction, findCurrentUserPostRedPacketClaim, findPostRedPacketSummaryData } from "@/db/post-red-packet-queries"
 
@@ -18,6 +18,7 @@ import { multiplyPositiveSafeIntegers } from "@/lib/shared/safe-integer"
 export interface NormalizedPostRedPacketConfig {
   enabled: boolean
   grantMode: PostRedPacketGrantMode
+  claimOrderMode: PostRedPacketClaimOrderMode
   triggerType: PostRedPacketTriggerType
   totalPoints: number
   packetCount: number
@@ -43,6 +44,8 @@ export interface PostRedPacketSummary {
   senderId?: number
   senderName?: string
   grantMode?: PostRedPacketGrantMode
+  claimOrderMode?: PostRedPacketClaimOrderMode
+  claimOrderLabel?: string
   triggerType?: PostRedPacketTriggerType
   triggerLabel?: string
   totalPoints: number
@@ -76,6 +79,33 @@ const RED_PACKET_GRANT_MODE_LABELS: Record<PostRedPacketGrantMode, string> = {
   RANDOM: "拼手气红包",
 }
 
+const RED_PACKET_CLAIM_ORDER_MODE_LABELS: Record<PostRedPacketClaimOrderMode, string> = {
+  FIRST_COME_FIRST_SERVED: "先到先得",
+  RANDOM: "随机机会",
+}
+
+interface PostRedPacketAllocationSnapshot {
+  remainingPoints: number
+  remainingCount: number
+  totalPoints: number
+  packetCount: number
+}
+
+interface PostRedPacketRecipientCandidate {
+  userId: number
+}
+
+interface PostRedPacketClaimRecipient {
+  userId: number
+  triggerCommentId?: string
+}
+
+interface PostRedPacketClaimOrderContext {
+  currentUserId: number
+  currentTriggerCommentId?: string
+  eligibleCandidates: PostRedPacketRecipientCandidate[]
+}
+
 function toPositiveInteger(value: unknown) {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -90,6 +120,10 @@ export function getPostRedPacketTriggerLabel(triggerType: PostRedPacketTriggerTy
 
 export function getPostRedPacketGrantModeLabel(grantMode: PostRedPacketGrantMode) {
   return RED_PACKET_GRANT_MODE_LABELS[grantMode]
+}
+
+export function getPostRedPacketClaimOrderModeLabel(claimOrderMode: PostRedPacketClaimOrderMode) {
+  return RED_PACKET_CLAIM_ORDER_MODE_LABELS[claimOrderMode]
 }
 
 export async function normalizePostRedPacketConfig(input: unknown): Promise<{
@@ -114,6 +148,7 @@ export async function normalizePostRedPacketConfig(input: unknown): Promise<{
   }
 
   const grantMode = String(config.grantMode ?? "FIXED").trim().toUpperCase()
+  const claimOrderMode = String(config.claimOrderMode ?? "FIRST_COME_FIRST_SERVED").trim().toUpperCase()
   const triggerType = String(config.triggerType ?? "REPLY").trim().toUpperCase()
   const packetCount = toPositiveInteger(config.packetCount)
   const configuredTotalPoints = toPositiveInteger(config.totalPoints)
@@ -126,6 +161,10 @@ export async function normalizePostRedPacketConfig(input: unknown): Promise<{
 
   if (!(grantMode in RED_PACKET_GRANT_MODE_LABELS)) {
     return { success: false, message: "红包发放方式不合法", data: null }
+  }
+
+  if (!(claimOrderMode in RED_PACKET_CLAIM_ORDER_MODE_LABELS)) {
+    return { success: false, message: "红包领取规则不合法", data: null }
   }
 
   if (!(triggerType in RED_PACKET_TRIGGER_LABELS)) {
@@ -158,6 +197,7 @@ export async function normalizePostRedPacketConfig(input: unknown): Promise<{
     data: {
       enabled: true,
       grantMode: grantMode as PostRedPacketGrantMode,
+      claimOrderMode: claimOrderMode as PostRedPacketClaimOrderMode,
       triggerType: triggerType as PostRedPacketTriggerType,
       totalPoints,
       packetCount,
@@ -196,6 +236,7 @@ export async function buildPostRedPacketCreateInput(params: {
     postId: params.postId,
     senderId: params.senderId,
     grantMode: params.config.grantMode,
+    claimOrderMode: params.config.claimOrderMode,
     triggerType: params.config.triggerType,
     totalPoints: params.config.totalPoints,
     packetCount: params.config.packetCount,
@@ -226,20 +267,48 @@ function allocateRandomAmount(remainingPoints: number, remainingCount: number) {
 
 function allocateRedPacketAmount(packet: {
   grantMode: PostRedPacketGrantMode
-  remainingPoints: number
-  remainingCount: number
-  totalPoints: number
-  packetCount: number
-}) {
+} & PostRedPacketAllocationSnapshot) {
   if (packet.remainingCount <= 0 || packet.remainingPoints <= 0) {
     throw new Error("红包已领完")
   }
 
-  if (packet.grantMode === "FIXED") {
-    return packet.totalPoints / packet.packetCount
+  return packet.grantMode === "FIXED"
+    ? packet.totalPoints / packet.packetCount
+    : allocateRandomAmount(packet.remainingPoints, packet.remainingCount)
+}
+
+function pickRandomCandidate<T>(candidates: readonly T[]) {
+  if (candidates.length === 0) {
+    return null
   }
 
-  return allocateRandomAmount(packet.remainingPoints, packet.remainingCount)
+  return candidates[randomInt(0, candidates.length)] ?? null
+}
+
+function resolveRandomClaimRecipient(context: PostRedPacketClaimOrderContext): PostRedPacketClaimRecipient | null {
+  const selectedCandidate = pickRandomCandidate(context.eligibleCandidates)
+  if (!selectedCandidate) {
+    return null
+  }
+
+  return {
+    userId: selectedCandidate.userId,
+    triggerCommentId: selectedCandidate.userId === context.currentUserId ? context.currentTriggerCommentId : undefined,
+  }
+}
+
+function resolveClaimRecipient(params: {
+  claimOrderMode: PostRedPacketClaimOrderMode
+  context: PostRedPacketClaimOrderContext
+}) {
+  if (params.claimOrderMode === "FIRST_COME_FIRST_SERVED") {
+    return {
+      userId: params.context.currentUserId,
+      triggerCommentId: params.context.currentTriggerCommentId,
+    }
+  }
+
+  return resolveRandomClaimRecipient(params.context)
 }
 
 function buildRedPacketClaimReason(params: {
@@ -270,6 +339,14 @@ export async function tryClaimPostRedPacket(input: {
     triggerCommentId: input.triggerCommentId,
     pointName: settings.pointName,
     buildClaimReason: buildRedPacketClaimReason,
+    resolveRecipient: ({ packet, eligibleCandidates }) => resolveClaimRecipient({
+      claimOrderMode: packet.claimOrderMode as PostRedPacketClaimOrderMode,
+      context: {
+        currentUserId: input.userId,
+        currentTriggerCommentId: input.triggerCommentId,
+        eligibleCandidates,
+      },
+    }),
     allocateAmount: (packet) => allocateRedPacketAmount({
       grantMode: packet.grantMode as PostRedPacketGrantMode,
       remainingPoints: packet.remainingPoints,
@@ -308,6 +385,8 @@ export async function getPostRedPacketSummary(postId: string, currentUserId?: nu
     senderId: packet.sender.id,
     senderName: packet.sender.nickname ?? packet.sender.username,
     grantMode: packet.grantMode,
+    claimOrderMode: packet.claimOrderMode,
+    claimOrderLabel: getPostRedPacketClaimOrderModeLabel(packet.claimOrderMode),
     triggerType: packet.triggerType,
     triggerLabel: getPostRedPacketTriggerLabel(packet.triggerType),
     totalPoints: packet.totalPoints,
@@ -359,6 +438,7 @@ export async function createPostRedPacketAfterPostCreated(params: {
       postId: params.postId,
       senderId: params.senderId,
       grantMode: params.config.grantMode,
+      claimOrderMode: params.config.claimOrderMode,
       triggerType: params.config.triggerType,
       totalPoints: params.config.totalPoints,
       packetCount: params.config.packetCount,

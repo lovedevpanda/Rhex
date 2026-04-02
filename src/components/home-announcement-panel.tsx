@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Megaphone, Pin } from "lucide-react"
+import { ExternalLink, Megaphone, Pin } from "lucide-react"
 
 import type { AnnouncementItem } from "@/lib/announcements"
 
@@ -22,23 +22,36 @@ export function HomeAnnouncementPanel({ announcements }: HomeAnnouncementPanelPr
 
       {announcements.length > 0 ? (
         <div className="space-y-2">
-          {announcements.map((announcement) => (
-            <Link
-              key={announcement.id}
-              href="/announcements"
-              className="block rounded-[18px] border border-border/70 bg-background px-3 py-3 transition hover:border-foreground/15 hover:bg-accent/40"
-            >
+          {announcements.map((announcement) => {
+            const body = (
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     {announcement.isPinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-orange-500" /> : null}
-                    <p className="truncate text-sm font-medium text-foreground">{announcement.title}</p>
+                    <p style={{ color: announcement.titleColor ?? undefined }} className={announcement.titleBold ? "truncate text-sm font-semibold text-foreground" : "truncate text-sm font-medium text-foreground"}>
+                      {announcement.title}
+                    </p>
+                    {announcement.isExternal ? <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">{announcement.publishedAtText}</p>
                 </div>
               </div>
-            </Link>
-          ))}
+            )
+
+            if (announcement.isExternal) {
+              return (
+                <a key={announcement.id} href={announcement.href} target="_blank" rel="noreferrer" className="block rounded-[18px] border border-border/70 bg-background px-3 py-3 transition hover:border-foreground/15 hover:bg-accent/40">
+                  {body}
+                </a>
+              )
+            }
+
+            return (
+              <Link key={announcement.id} href={announcement.href} className="block rounded-[18px] border border-border/70 bg-background px-3 py-3 transition hover:border-foreground/15 hover:bg-accent/40">
+                {body}
+              </Link>
+            )
+          })}
         </div>
       ) : (
         <div className="rounded-[18px] border border-dashed border-border px-3 py-4 text-xs leading-6 text-muted-foreground">

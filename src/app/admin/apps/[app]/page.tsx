@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
 import { AdminModuleSearch } from "@/components/admin-module-search"
@@ -12,9 +13,19 @@ import { getGobangAppConfig, getSelfServeAdsAppConfig, getYinYangContractAppConf
 import { GobangAdminPage } from "@/components/gobang-admin-page"
 import { SelfServeAdsAdminPage } from "@/components/self-serve-ads-admin-page"
 import { YinYangContractAdminPage } from "@/components/yinyang-contract-admin-page"
+import { getSiteSettings } from "@/lib/site-settings"
 
 
 
+
+export async function generateMetadata(props: PageProps<"/admin/apps/[app]">): Promise<Metadata> {
+  const params = await props.params
+  const [app, settings] = await Promise.all([Promise.resolve(getHostAppBySlug(params.app)), getSiteSettings()])
+
+  return {
+    title: `${app?.name ?? "应用后台"} - ${settings.siteName}`,
+  }
+}
 
 export default async function AdminAppPage(props: PageProps<"/admin/apps/[app]">) {
   const params = await props.params;

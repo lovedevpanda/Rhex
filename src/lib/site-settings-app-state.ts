@@ -1,4 +1,6 @@
 import { parseNonNegativeSafeInteger } from "@/lib/shared/safe-integer"
+import { getDefaultTippingGiftItemsFromAmounts, normalizeTippingGiftItems, type SiteTippingGiftItem } from "@/lib/tipping-gifts"
+import { normalizeVipLevelIcons, type VipLevelIcons } from "@/lib/vip-level-icons"
 
 const SITE_SETTINGS_STATE_KEY = "__siteSettings"
 
@@ -55,6 +57,45 @@ export interface InviteCodePurchasePriceSettings {
   vip1: number
   vip2: number
   vip3: number
+}
+
+export interface MarkdownImageUploadSettings {
+  enabled: boolean
+}
+
+export interface HomeSidebarAnnouncementSettings {
+  enabled: boolean
+}
+
+export type VipLevelIconSettings = VipLevelIcons
+
+export function resolveTippingGiftSettings(options: {
+  appStateJson?: string | null
+  fallbackAmounts: number[]
+}) {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const fallbackItems = getDefaultTippingGiftItemsFromAmounts(options.fallbackAmounts)
+
+  return normalizeTippingGiftItems(siteSettingsState.tippingGifts, fallbackItems)
+}
+
+export function mergeTippingGiftSettings(
+  appStateJson: string | null | undefined,
+  input: SiteTippingGiftItem[],
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    tippingGifts: normalizeTippingGiftItems(input),
+  }
+
+  return JSON.stringify(root)
+}
+
+export function getTippingGiftPriceOptions(gifts: SiteTippingGiftItem[]) {
+  return Array.from(new Set(gifts.map((item) => normalizeNonNegativeInteger(item.price, 0)).filter((item) => item > 0)))
 }
 
 export function resolveCheckInRewardSettings(options: {
@@ -206,6 +247,102 @@ export function mergeInviteCodePurchasePriceSettings(
       vip2: normalizeNonNegativeInteger(input.vip2, 0),
       vip3: normalizeNonNegativeInteger(input.vip3, 0),
     },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveMarkdownImageUploadSettings(options: {
+  appStateJson?: string | null
+  enabledFallback?: boolean
+} = {}): MarkdownImageUploadSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const markdownImageUpload = isRecord(siteSettingsState.markdownImageUpload)
+    ? siteSettingsState.markdownImageUpload
+    : {}
+
+  return {
+    enabled: typeof markdownImageUpload.enabled === "boolean"
+      ? markdownImageUpload.enabled
+      : options.enabledFallback ?? true,
+  }
+}
+
+export function mergeMarkdownImageUploadSettings(
+  appStateJson: string | null | undefined,
+  input: MarkdownImageUploadSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    markdownImageUpload: {
+      enabled: input.enabled,
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveHomeSidebarAnnouncementSettings(options: {
+  appStateJson?: string | null
+  enabledFallback?: boolean
+} = {}): HomeSidebarAnnouncementSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const homeSidebarAnnouncement = isRecord(siteSettingsState.homeSidebarAnnouncement)
+    ? siteSettingsState.homeSidebarAnnouncement
+    : {}
+
+  return {
+    enabled: typeof homeSidebarAnnouncement.enabled === "boolean"
+      ? homeSidebarAnnouncement.enabled
+      : options.enabledFallback ?? true,
+  }
+}
+
+export function mergeHomeSidebarAnnouncementSettings(
+  appStateJson: string | null | undefined,
+  input: HomeSidebarAnnouncementSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    homeSidebarAnnouncement: {
+      enabled: input.enabled,
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveVipLevelIconSettings(options: {
+  appStateJson?: string | null
+} = {}): VipLevelIconSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const vipLevelIcons = isRecord(siteSettingsState.vipLevelIcons)
+    ? siteSettingsState.vipLevelIcons
+    : {}
+
+  return normalizeVipLevelIcons({
+    vip1: typeof vipLevelIcons.vip1 === "string" ? vipLevelIcons.vip1 : undefined,
+    vip2: typeof vipLevelIcons.vip2 === "string" ? vipLevelIcons.vip2 : undefined,
+    vip3: typeof vipLevelIcons.vip3 === "string" ? vipLevelIcons.vip3 : undefined,
+  })
+}
+
+export function mergeVipLevelIconSettings(
+  appStateJson: string | null | undefined,
+  input: VipLevelIconSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    vipLevelIcons: normalizeVipLevelIcons(input),
   }
 
   return JSON.stringify(root)

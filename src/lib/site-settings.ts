@@ -1,5 +1,6 @@
 import { cache } from "react"
 
+import { listActiveGiftDefinitions } from "@/db/post-gift-queries"
 import { createSiteSettingsRecord, findSensitiveWordsPage, findSiteSettingsRecord, getSensitiveWordStats } from "@/db/site-settings-queries"
 import {
   normalizeCaptchaMode,
@@ -12,13 +13,18 @@ import {
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
-import { resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveInviteCodePurchasePriceSettings, resolveNicknameChangePointCostSettings } from "@/lib/site-settings-app-state"
+import { resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveHomeSidebarAnnouncementSettings, resolveInviteCodePurchasePriceSettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolveVipLevelIconSettings } from "@/lib/site-settings-app-state"
+import { resolveSiteSearchSettings, type SiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
+import { type SiteTippingGiftItem } from "@/lib/tipping-gifts"
+import { type VipLevelIcons } from "@/lib/vip-level-icons"
 import { normalizeHeaderAppIconName, parseSiteHeaderAppLinks, type SiteHeaderAppLinkItem } from "./site-header-app-links"
 
 export type { FooterLinkItem } from "@/lib/shared/config-parsers"
 
 export type PostLinkDisplayMode = "SLUG" | "ID"
+export type { SiteSearchSettings } from "@/lib/site-search-settings"
+export type { SiteTippingGiftItem } from "@/lib/tipping-gifts"
 
 export interface SiteSettingsData {
   siteName: string
@@ -31,9 +37,12 @@ export interface SiteSettingsData {
   postLinkDisplayMode: PostLinkDisplayMode
   homeFeedPostListDisplayMode: PostListDisplayMode
   homeSidebarStatsCardEnabled: boolean
+  homeSidebarAnnouncementsEnabled: boolean
+  vipLevelIcons: VipLevelIcons
   footerLinks: FooterLinkItem[]
   headerAppLinks: SiteHeaderAppLinkItem[]
   headerAppIconName: string
+  search: SiteSearchSettings
   analyticsCode?: string | null
   friendLinksEnabled: boolean
   friendLinkApplicationEnabled: boolean
@@ -75,6 +84,7 @@ export interface SiteSettingsData {
   tippingDailyLimit: number
   tippingPerPostLimit: number
   tippingAmounts: number[]
+  tippingGifts: SiteTippingGiftItem[]
   postRedPacketEnabled: boolean
   postRedPacketMaxPoints: number
   postRedPacketDailyLimit: number
@@ -110,6 +120,7 @@ export interface SiteSettingsData {
   uploadAllowedImageTypes: string[]
   uploadMaxFileSizeMb: number
   uploadAvatarMaxFileSizeMb: number
+  markdownImageUploadEnabled: boolean
   markdownEmojiMapJson?: string | null
   markdownEmojiMap: Array<{ shortcode: string; label: string; icon: string }>
   appStateJson?: string | null
@@ -144,7 +155,9 @@ async function readSiteSettingsFromDB(): Promise<ServerSiteSettingsData> {
     return getDefaultServerSiteSettings()
   }
 
-  return mapSiteSettings(record)
+  const databaseTippingGifts = await listActiveGiftDefinitions()
+
+  return mapSiteSettings(record, databaseTippingGifts)
 }
 
 export function invalidateSiteSettingsCache() {
@@ -238,7 +251,7 @@ function mapSiteSettings(record: {
   friendLinksEnabled: boolean
   friendLinkApplicationEnabled: boolean
   friendLinkAnnouncement: string
-}): ServerSiteSettingsData {
+}, tippingGifts: SiteTippingGiftItem[] = []): ServerSiteSettingsData {
   const checkInRewards = resolveCheckInRewardSettings({
     appStateJson: record.appStateJson,
     normalReward: record.checkInReward,
@@ -256,6 +269,19 @@ function mapSiteSettings(record: {
     appStateJson: record.appStateJson,
     normalPrice: record.nicknameChangePointCost,
   })
+  const tippingAmounts = parseTippingAmounts(record.tippingAmounts)
+  const searchSettings = resolveSiteSearchSettings(record.appStateJson)
+  const homeSidebarAnnouncementSettings = resolveHomeSidebarAnnouncementSettings({
+    appStateJson: record.appStateJson,
+    enabledFallback: true,
+  })
+  const vipLevelIcons = resolveVipLevelIconSettings({
+    appStateJson: record.appStateJson,
+  })
+  const markdownImageUploadSettings = resolveMarkdownImageUploadSettings({
+    appStateJson: record.appStateJson,
+    enabledFallback: true,
+  })
 
   return {
     siteName: record.siteName,
@@ -268,9 +294,12 @@ function mapSiteSettings(record: {
     postLinkDisplayMode: record.postLinkDisplayMode === "ID" ? "ID" : "SLUG",
     homeFeedPostListDisplayMode: normalizePostListDisplayMode(record.homeFeedPostListDisplayMode),
     homeSidebarStatsCardEnabled: record.homeSidebarStatsCardEnabled,
+    homeSidebarAnnouncementsEnabled: homeSidebarAnnouncementSettings.enabled,
+    vipLevelIcons,
     footerLinks: parseFooterLinks(record.footerLinksJson),
     headerAppLinks: parseSiteHeaderAppLinks(record.headerAppLinksJson),
     headerAppIconName: normalizeHeaderAppIconName(record.headerAppIconName),
+    search: searchSettings,
     analyticsCode: record.analyticsCode,
     friendLinksEnabled: record.friendLinksEnabled,
     friendLinkApplicationEnabled: record.friendLinkApplicationEnabled,
@@ -311,7 +340,8 @@ function mapSiteSettings(record: {
     tippingEnabled: record.tippingEnabled,
     tippingDailyLimit: record.tippingDailyLimit,
     tippingPerPostLimit: record.tippingPerPostLimit,
-    tippingAmounts: parseTippingAmounts(record.tippingAmounts),
+    tippingAmounts,
+    tippingGifts,
     postRedPacketEnabled: record.postRedPacketEnabled,
     postRedPacketMaxPoints: record.postRedPacketMaxPoints,
     postRedPacketDailyLimit: record.postRedPacketDailyLimit,
@@ -353,6 +383,7 @@ function mapSiteSettings(record: {
     uploadAllowedImageTypes: String(record.uploadAllowedImageTypes || "jpg,jpeg,png,gif,webp").split(/[，,\s]+/).map((item) => item.trim().toLowerCase()).filter(Boolean),
     uploadMaxFileSizeMb: record.uploadMaxFileSizeMb,
     uploadAvatarMaxFileSizeMb: record.uploadAvatarMaxFileSizeMb,
+    markdownImageUploadEnabled: markdownImageUploadSettings.enabled,
     markdownEmojiMap: parseMarkdownEmojiMapJson(record.markdownEmojiMapJson),
     appStateJson: record.appStateJson,
   }

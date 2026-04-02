@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 
 import { CreatePostForm } from "@/components/create-post-form"
@@ -42,6 +43,16 @@ function mapBoardOption(board: SiteBoardItem): BoardOptionItem {
 
 function isPostStillEditable(createdAt: Date | string, editableMinutes: number) {
   return new Date(createdAt).getTime() + Math.max(0, editableMinutes) * 60 * 1000 > Date.now()
+}
+
+export async function generateMetadata(props: PageProps<"/write">): Promise<Metadata> {
+  const searchParams = await props.searchParams
+  const mode = readSearchParam(searchParams?.mode) === "edit" ? "编辑帖子" : "发布帖子"
+  const settings = await getSiteSettings()
+
+  return {
+    title: `${mode} - ${settings.siteName}`,
+  }
 }
 
 export default async function WritePage(props: PageProps<"/write">) {
@@ -145,6 +156,7 @@ export default async function WritePage(props: PageProps<"/write">) {
                     purchaseUnlockContent: purchaseUnlockBlock?.text ?? "",
                     purchasePrice: purchaseUnlockBlock?.price ?? null,
                     minViewLevel: editingPost.minViewLevel,
+                    minViewVipLevel: editingPost.minViewVipLevel,
                     boardSlug: editingPost.board.slug,
                     postType: editingPost.type,
                     bountyPoints: editingPost.bountyPoints,
@@ -154,6 +166,7 @@ export default async function WritePage(props: PageProps<"/write">) {
                       ? {
                           enabled: true,
                           grantMode: editingPost.redPacket.grantMode,
+                          claimOrderMode: editingPost.redPacket.claimOrderMode,
                           triggerType: editingPost.redPacket.triggerType,
                           totalPoints: editingPost.redPacket.totalPoints,
                           unitPoints: editingPost.redPacket.grantMode === "FIXED"

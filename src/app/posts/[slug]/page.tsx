@@ -1,37 +1,34 @@
 import type { Metadata } from "next"
-import { Eye, MessageCircle } from "lucide-react"
-import Link from "next/link"
+import { MessageCircle } from "lucide-react"
 import { notFound } from "next/navigation"
 
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
+import { CommentReplyToggleButton } from "@/components/comment-reply-toggle-button"
 import { CommentThread } from "@/components/comment-thread"
-import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { ForumPageShell } from "@/components/forum-page-shell"
-import { LevelIcon } from "@/components/level-icon"
 import { MarkdownContent } from "@/components/markdown-content"
+import { PostAppendixTimeline } from "@/components/post-appendix-timeline"
+import { PostDetailHeader } from "@/components/post-detail-header"
 
 import { PostAdminPanel } from "@/components/post-admin-panel"
 import { PostEditPanel } from "@/components/post-edit-panel"
 import { PostEngagementBar } from "@/components/post-engagement-bar"
+import { PostReadingHistoryRecorder } from "@/components/post-reading-history-recorder"
 import { PostSidebarPanels } from "@/components/post-sidebar-panels"
 import { RestrictedPostBlock } from "@/components/restricted-post-block"
 import { BountyPanel, LotteryPanel, PollPanel } from "@/components/post-type-panels"
 
 import { SiteHeader } from "@/components/site-header"
-import { UserAvatar } from "@/components/user-avatar"
-import { UserDisplayedBadges } from "@/components/user-displayed-badges"
-import { UserStatusBadge } from "@/components/user-status-badge"
-import { UserVerificationBadge } from "@/components/user-verification-badge"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { VipBadge } from "@/components/vip-badge"
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
 import { getBoards } from "@/lib/boards"
 import { getCommentsByPostId, getUserReplyCountByPost } from "@/lib/comments"
 import { isUserFollowingTarget } from "@/lib/follows"
 import { resolveSidebarUser } from "@/lib/home-sidebar"
+import { checkPostAccessPermission, mergeAccessPermissions, resolvePostAccessRequirements } from "@/lib/post-access"
 import { getPostDetailBySlug, getPostSeoBySlug, incrementPostViewCount } from "@/lib/posts"
 
 import { getPostSidebarData } from "@/lib/post-sidebar"
@@ -45,11 +42,7 @@ import { buildArticleJsonLd, buildMetadataKeywords } from "@/lib/seo"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
 
-import { formatRelativeTime } from "@/lib/formatters"
-import { cn } from "@/lib/utils"
-
 import { getZones } from "@/lib/zones"
-import { getVipNameClass } from "@/lib/vip-status"
 import { getCanonicalPostPath } from "@/lib/post-links"
 
 export async function generateMetadata(props: PageProps<"/posts/[slug]">): Promise<Metadata> {
@@ -122,12 +115,8 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
   const boardAccessContext = await boardAccessContextPromise
 
   const viewPermission = boardAccessContext ? checkBoardPermission(currentUser, boardAccessContext.settings, "view") : { allowed: true, message: "" }
-  const postLevelPermission = currentUser && currentUser.level >= (basePost.minViewLevel ?? 0)
-    ? { allowed: true, message: "" }
-    : (basePost.minViewLevel ?? 0) <= 0
-      ? { allowed: true, message: "" }
-      : { allowed: false, message: `该帖子要求用户等级至少达到 Lv.${basePost.minViewLevel}` }
-  const mergedViewPermission = !viewPermission.allowed ? viewPermission : postLevelPermission
+  const postViewPermission = checkPostAccessPermission(currentUser, resolvePostAccessRequirements(basePost))
+  const mergedViewPermission = mergeAccessPermissions(viewPermission, postViewPermission)
   const canViewRestrictedPost = basePost.status === "NORMAL" && (mergedViewPermission.allowed || isOwnerOrAdmin)
   const shouldRenderOfflineNotice = basePost.status === "OFFLINE" && !canViewOfflinePost
 
@@ -179,6 +168,9 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       enabled: tipSummary.enabled,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
+      gifts: tipSummary.gifts,
+      giftStats: tipSummary.giftStats,
+      recentGiftEvents: tipSummary.recentGiftEvents,
       allowedAmounts: tipSummary.allowedAmounts,
       dailyLimit: tipSummary.dailyLimit,
       perPostLimit: tipSummary.perPostLimit,
@@ -204,6 +196,17 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       }) }
     : basePost
   const isRestrictedAuthor = displayPost.authorStatus === "BANNED" || displayPost.authorStatus === "MUTED"
+  const currentZone = displayPost.boardSlug ? zones.find((zone) => zone.boardSlugs.includes(displayPost.boardSlug!)) ?? null : null
+  const currentZoneBoards = currentZone
+    ? boards
+        .filter((board) => currentZone.boardSlugs.includes(board.slug))
+        .map((board) => ({
+          slug: board.slug,
+          name: board.name,
+          icon: board.icon,
+          count: board.count,
+        }))
+    : []
 
   const sidebarUser = await sidebarUserPromise
 
@@ -245,7 +248,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       <SiteHeader />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <main className="mx-auto max-w-[1200px] px-4">
+      <main className="mx-auto max-w-[1200px] px-1">
         <ForumPageShell
           zones={zones}
           boards={boards}
@@ -267,177 +270,93 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                 </CardContent>
               </Card>
             ) : !canViewRestrictedPost && basePost.status === "NORMAL" ? (
-              <AccessDeniedCard title="当前帖子暂不可查看" description="该帖子所在节点、分区或帖子本身设置了浏览门槛，未满足条件的用户无法查看帖子正文与互动内容。" reason={mergedViewPermission.message || "当前没有访问权限"} />
+              <AccessDeniedCard title="当前帖子暂不可查看" description="该帖子所在节点、分区或帖子本身设置了浏览门槛，未满足条件的用户无法查看帖子正文与互动内容。" reason={mergedViewPermission.message || "当前没有访问权限"} isLoggedIn={Boolean(currentUser)} />
             ) : (
 
               <>
-                <Card>
-                  <CardContent className="pt-4 px-4 pb-4 sm:px-6 sm:pb-6 md:px-8 md:pb-8">
-                    <div className="space-y-3 sm:space-y-4">
-                      <div className="flex items-start justify-between gap-3 sm:hidden">
-                        <div className={cn("min-w-0 flex-1 space-y-2", isRestrictedAuthor && "grayscale")}>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
-                            <LevelIcon icon={displayPost.boardIcon} className="h-3.5 w-3.5 text-sm" svgClassName="[&>svg]:block" />
-                            <Link href={`/boards/${displayPost.boardSlug}`} className="truncate hover:underline">
-                              {displayPost.board}
-                            </Link>
-                            <span>·</span>
-                            <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("truncate", getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true }))}>
-                              {displayPost.author}
-                            </Link>
-                            <UserDisplayedBadges badges={displayPost.authorDisplayedBadges} compact />
-                            {displayPost.authorIsVip ? <VipBadge level={displayPost.authorVipLevel} compact /> : null}
-                            {isRestrictedAuthor ? <UserStatusBadge status={displayPost.authorStatus} compact /> : null}
-                            <span>·</span>
-                            <span>{displayPost.publishedAt}</span>
-                            {displayPost.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px]">{displayPost.typeLabel}</span> : null}
-                            {displayPost.isPinned ? <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
-                            {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          <FollowToggleButton
-                            targetType="post"
-                            targetId={displayPost.id}
-                            initialFollowed={isFollowingPost}
-                            activeLabel="已关注帖子"
-                            inactiveLabel="关注帖子"
-                          />
-                          <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-2.5 py-1 text-[13px] text-muted-foreground">
-                            <Eye className="h-3.5 w-3.5" />
-                            {displayPost.stats.views}
-                          </span>
-                        </div>
-                      </div>
-
-                      <h1 className={displayPost.isFeatured ? "text-[15px] font-semibold leading-7 text-emerald-700 sm:hidden dark:text-emerald-300" : displayPost.isPinned ? "text-[15px] font-semibold leading-7 text-orange-700 sm:hidden dark:text-orange-300" : "text-[15px] font-semibold leading-7 sm:hidden"}>{displayPost.title}</h1>
-
-
-                      <div className="hidden sm:flex sm:flex-col sm:gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
-                        <div className="flex min-w-0 items-start gap-4">
-                          <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("shrink-0", isRestrictedAuthor && "grayscale")}>
-                            <UserAvatar name={displayPost.author} avatarPath={displayPost.authorAvatarPath} size="lg" />
-                          </Link>
-                          <div className={cn("min-w-0 flex-1 space-y-3", isRestrictedAuthor && "grayscale")}>
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                              <LevelIcon icon={displayPost.boardIcon} className="h-4 w-4 text-sm" svgClassName="[&>svg]:block" />
-                              <Link href={`/boards/${displayPost.boardSlug}`} className="truncate hover:underline">
-                                {displayPost.board}
-                              </Link>
-                              <span>·</span>
-                              <UserVerificationBadge verification={displayPost.authorVerification ?? null} compact />
-                              <Link href={`/users/${displayPost.authorUsername ?? displayPost.author}`} className={cn("truncate", getVipNameClass(displayPost.authorIsVip, displayPost.authorVipLevel, { emphasize: true }))}>
-                                {displayPost.author}
-                              </Link>
-                              <UserDisplayedBadges badges={displayPost.authorDisplayedBadges} compact />
-                              {displayPost.authorIsVip ? <VipBadge level={displayPost.authorVipLevel} compact /> : null}
-                              {isRestrictedAuthor ? <UserStatusBadge status={displayPost.authorStatus} compact /> : null}
-                              <span>·</span>
-                              <span>{displayPost.publishedAt}</span>
-                              {displayPost.type !== "NORMAL" ? <span className="rounded-full bg-secondary px-3 py-1 text-xs">{displayPost.typeLabel}</span> : null}
-                              {displayPost.isPinned ? <span className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
-                              {displayPost.isFeatured ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">精华</span> : null}
-                            </div>
-
-                            <h1 className={displayPost.isFeatured ? "text-base font-semibold leading-snug text-emerald-700 sm:text-lg md:text-xl dark:text-emerald-300" : displayPost.isPinned ? "text-base font-semibold leading-snug text-orange-700 sm:text-lg md:text-xl dark:text-orange-300" : "text-base font-semibold leading-snug sm:text-lg md:text-xl"}>{displayPost.title}</h1>
-
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center justify-end gap-2 text-sm text-muted-foreground md:pt-1">
-                          <FollowToggleButton
-                            targetType="post"
-                            targetId={displayPost.id}
-                            initialFollowed={isFollowingPost}
-                            activeLabel="已关注帖子"
-                            inactiveLabel="关注帖子"
-                          />
-                          <span className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5">
-                            <Eye className="h-4 w-4" />
-                            {displayPost.stats.views}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 space-y-4">
-                      {displayPost.bounty ? (
-                        <BountyPanel
+              <div className="space-y-0">
+                  <Card className={displayPost.appendices && displayPost.appendices.length > 0 ? "rounded-b-none" : undefined}>
+                    <CardContent className="pt-4 px-4 pb-4 sm:px-6 sm:pb-6 md:px-8 md:pb-8">
+                      {displayPost.status === "NORMAL" && canViewRestrictedPost ? (
+                        <PostReadingHistoryRecorder
                           postId={displayPost.id}
-                          points={displayPost.bounty.points}
-                          pointName={settings.pointName}
-                          isResolved={displayPost.bounty.isResolved}
-                          acceptedAnswerAuthor={displayPost.bounty.acceptedAnswerAuthor}
+                          postSlug={displayPost.slug}
+                          postPath={canonicalPath}
+                          title={displayPost.title}
+                          boardName={displayPost.board}
+                          boardSlug={displayPost.boardSlug}
+                          postCreatedAt={displayPost.createdAt}
                         />
                       ) : null}
-                      {displayPost.poll ? <PollPanel postId={displayPost.id} totalVotes={displayPost.poll.totalVotes} hasVoted={displayPost.poll.hasVoted} expiresAt={displayPost.poll.expiresAt} options={displayPost.poll.options} /> : null}
-                      {displayPost.lottery ? <LotteryPanel postId={displayPost.id} lottery={displayPost.lottery} isOwnerOrAdmin={isOwnerOrAdmin} /> : null}
+
+                      <PostDetailHeader
+                        post={displayPost}
+                        isFollowingPost={isFollowingPost}
+                        isRestrictedAuthor={isRestrictedAuthor}
+                        zone={currentZone ? { slug: currentZone.slug, name: currentZone.name } : null}
+                        zoneBoards={currentZoneBoards}
+                      />
+
+                      <div className="mt-6 space-y-4">
+                        {displayPost.bounty ? (
+                          <BountyPanel
+                            postId={displayPost.id}
+                            points={displayPost.bounty.points}
+                            pointName={settings.pointName}
+                            isResolved={displayPost.bounty.isResolved}
+                            acceptedAnswerAuthor={displayPost.bounty.acceptedAnswerAuthor}
+                          />
+                        ) : null}
+                        {displayPost.poll ? <PollPanel postId={displayPost.id} totalVotes={displayPost.poll.totalVotes} hasVoted={displayPost.poll.hasVoted} expiresAt={displayPost.poll.expiresAt} options={displayPost.poll.options} /> : null}
+                        {displayPost.lottery ? <LotteryPanel postId={displayPost.id} lottery={displayPost.lottery} isOwnerOrAdmin={isOwnerOrAdmin} /> : null}
 
 
-                    </div>
-
-                    <div className="mt-8 space-y-5 text-[15px] leading-8 text-foreground/90 dark:text-foreground/85">
-                      {(displayPost.contentBlocks ?? []).map((block) => (
-                        block.type === "PUBLIC"
-                          ? <MarkdownContent key={block.id} content={block.text} markdownEmojiMap={settings.markdownEmojiMap} />
-
-                          : (
-                            <RestrictedPostBlock
-                              key={block.id}
-                              type={block.type}
-                              postId={displayPost.id}
-                              blockId={block.id}
-                              text={block.text}
-                              visible={block.visible}
-                              currentUserId={currentUser?.id}
-                              pointName={settings.pointName}
-                              replyThreshold={block.replyThreshold}
-                              price={block.price}
-                              userReplyCount={userReplyCount}
-                              isOwnerOrAdmin={isOwnerOrAdmin}
-
-                            />
-                          )
-                      ))}
-                    </div>
-
-                    {displayPost.appendices && displayPost.appendices.length > 0 ? (
-                      <div className="mt-10 border-t border-border/70 pt-6">
-                        <div style={{ borderLeft: "3px solid #aead96" }} className="overflow-hidden rounded-2xl bg-secondary/20 dark:bg-secondary/10">
-                          {displayPost.appendices.map((appendix, index) => (
-                            <section key={appendix.id} className={index === 0 ? "px-2 py-4" : "border-t border-border/50 px-2 py-4"}>
-                              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                <h3 className="font-semibold text-foreground/90">第 {appendix.floor} 条附言</h3>
-                                <span>·</span>
-                                <span>{formatRelativeTime(appendix.createdAt)}</span>
-                              </div>
-                              <div className="mt-2 pl-0.5">
-                                <MarkdownContent content={appendix.content} className="text-[15px] leading-8 tracking-[0.018em] text-muted-foreground dark:text-muted-foreground/90" markdownEmojiMap={settings.markdownEmojiMap} />
-                              </div>
-                            </section>
-                          ))}
-                        </div>
                       </div>
-                    ) : null}
 
-                    <PostEngagementBar
-                      postId={displayPost.id}
-                      author={sidebarData.author}
-                      likeCount={displayPost.stats.likes}
-                      favoriteCount={displayPost.stats.favorites}
-                      initialLiked={displayPost.viewerState?.liked}
-                      initialFavored={displayPost.viewerState?.favored}
-                      canReport={Boolean(currentUser && currentUser.id !== displayPost.authorId)}
-                      reportLabel={displayPost.title}
-                      redPacket={displayPost.redPacket}
-                      tipping={displayPost.tipping}
-                    />
+                      <div className="mt-8 space-y-5 text-[15px] leading-8 text-foreground/90 dark:text-foreground/85">
+                        {(displayPost.contentBlocks ?? []).map((block) => (
+                          block.type === "PUBLIC"
+                            ? <MarkdownContent key={block.id} content={block.text} markdownEmojiMap={settings.markdownEmojiMap} />
 
+                            : (
+                              <RestrictedPostBlock
+                                key={block.id}
+                                type={block.type}
+                                postId={displayPost.id}
+                                blockId={block.id}
+                                text={block.text}
+                                visible={block.visible}
+                                currentUserId={currentUser?.id}
+                                pointName={settings.pointName}
+                                replyThreshold={block.replyThreshold}
+                                price={block.price}
+                                userReplyCount={userReplyCount}
+                                isOwnerOrAdmin={isOwnerOrAdmin}
 
+                              />
+                            )
+                        ))}
+                      </div>
 
-                  </CardContent>
-                </Card>
+                      <PostEngagementBar
+                        postId={displayPost.id}
+                        author={sidebarData.author}
+                        likeCount={displayPost.stats.likes}
+                        favoriteCount={displayPost.stats.favorites}
+                        initialLiked={displayPost.viewerState?.liked}
+                        initialFavored={displayPost.viewerState?.favored}
+                        canReport={Boolean(currentUser && currentUser.id !== displayPost.authorId)}
+                        reportLabel={displayPost.title}
+                        redPacket={displayPost.redPacket}
+                        tipping={displayPost.tipping}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {displayPost.appendices && displayPost.appendices.length > 0 ? (
+                    <PostAppendixTimeline appendices={displayPost.appendices} markdownEmojiMap={settings.markdownEmojiMap} />
+                  ) : null}
+                </div>
 
                 {currentUser?.id === displayPost.authorId ? (
                   <PostEditPanel
@@ -479,10 +398,15 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle>回复讨论</CardTitle>
-                      <span className="flex items-center gap-1 text-sm font-normal text-muted-foreground">
-                        <MessageCircle className="h-4 w-4" />
-                        {displayPost.stats.comments}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                          <MessageCircle className="h-4 w-4" />
+                          {displayPost.stats.comments}
+                        </span>
+                        {currentUser && displayPost.status === "NORMAL" ? (
+                          <CommentReplyToggleButton threadId={displayPost.id} />
+                        ) : null}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -495,6 +419,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                       <p className="text-sm text-muted-foreground">当前还没有回复，欢迎成为第一个参与讨论的人。</p>
                     ) : null}
                     <CommentThread
+                      threadId={displayPost.id}
                       comments={commentResult.items}
                       postId={displayPost.id}
                       canReply={Boolean(currentUser && displayPost.status === "NORMAL")}

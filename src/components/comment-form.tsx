@@ -30,7 +30,7 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
   const [content, setContent] = useState(initialContent)
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState(!compact)
+  const [expanded, setExpanded] = useState(mode === "edit" || !compact)
 
   useEffect(() => {
     setContent(initialContent)
@@ -123,7 +123,7 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
   }
 
   return (
-    <form onSubmit={handleSubmit} className={compact ? "space-y-3 rounded-[18px] border border-border bg-card p-4" : "space-y-4"}>
+    <form onSubmit={handleSubmit} className={compact ? "min-w-0 w-full space-y-3 rounded-[18px] border border-border bg-card p-4" : "min-w-0 w-full space-y-4"}>
       {disabledMessage ? <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{disabledMessage}</div> : null}
       <RefinedRichPostEditor
         value={content}
@@ -134,10 +134,10 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
         markdownEmojiMap={markdownEmojiMap}
         placeholder={mode === "edit" ? `修改评论内容…可在 ${editWindowMinutes} 分钟内编辑` : replyToUserName ? `回复 @${replyToUserName}…` : "写下你的回复…支持 @用户名 提及"}
       />
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : <span className="text-xs text-muted-foreground">{commentsVisibleToAuthorOnly ? "当前帖子开启了评论仅楼主可见，你的评论仅楼主、管理员和你自己可见。" : "可使用 @用户名 提及他人"}</span>}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {(compact || replyToUserName || mode === "edit") ? (
             <Button type="button" variant="ghost" onClick={() => {
               setExpanded(false)

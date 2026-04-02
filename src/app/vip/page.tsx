@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { Crown, ShieldCheck } from "lucide-react"
 
@@ -10,6 +11,16 @@ import { getCurrentUser } from "@/lib/auth"
 import { formatDateTime } from "@/lib/formatters"
 import { getSiteSettings } from "@/lib/site-settings"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `VIP - ${settings.siteName}`,
+    description: `查看 ${settings.siteName} 的 VIP 权益、会员等级说明与开通方式。`,
+  }
+}
+
 function formatPointValue(value: number, pointName: string, suffix: string) {
   return value > 0 ? `${value} ${pointName}${suffix}` : `免费${suffix}`
 }

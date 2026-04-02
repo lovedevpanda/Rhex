@@ -103,7 +103,7 @@ import { ChevronDown, ImageIcon, Info, Loader2, MessageSquareLock, Sparkles, Upl
 import { AdminModal } from "@/components/admin-modal"
 import { BoardSelectField } from "@/components/board-select-field"
 import { HiddenContentModal } from "@/components/hidden-content-modal"
-import { PostDraftNotice } from "@/components/post-draft-notice"
+import { PostDraftNotice, type PostDraftNoticeAction } from "@/components/post-draft-notice"
 import { PostViewLevelModal } from "@/components/post-view-level-modal"
 import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
@@ -158,6 +158,7 @@ interface CreatePostFormProps {
     purchaseUnlockContent?: string
     purchasePrice?: number | null
     minViewLevel?: number | null
+    minViewVipLevel?: number | null
     tags?: string[]
     lotteryConfig?: {
       startsAt?: string | null
@@ -169,6 +170,7 @@ interface CreatePostFormProps {
     redPacketConfig?: {
       enabled?: boolean
       grantMode?: "FIXED" | "RANDOM"
+      claimOrderMode?: "FIRST_COME_FIRST_SERVED" | "RANDOM"
       triggerType?: "REPLY" | "LIKE" | "FAVORITE"
       totalPoints?: number | null
       unitPoints?: number | null
@@ -231,9 +233,11 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   const [purchaseUnlockContent, setPurchaseUnlockContent] = useState(initialValues?.purchaseUnlockContent ?? "")
   const [purchasePrice, setPurchasePrice] = useState(String(initialValues?.purchasePrice ?? 20))
   const [minViewLevel, setMinViewLevel] = useState(String(initialValues?.minViewLevel ?? 0))
+  const [minViewVipLevel, setMinViewVipLevel] = useState(String(initialValues?.minViewVipLevel ?? 0))
   const [boardSlug, setBoardSlug] = useState(initialValues?.boardSlug ?? boardOptions[0]?.items[0]?.value ?? "")
   const [redPacketEnabled, setRedPacketEnabled] = useState(Boolean(initialValues?.redPacketConfig?.enabled))
   const [redPacketGrantMode, setRedPacketGrantMode] = useState(initialValues?.redPacketConfig?.grantMode ?? "FIXED")
+  const [redPacketClaimOrderMode, setRedPacketClaimOrderMode] = useState(initialValues?.redPacketConfig?.claimOrderMode ?? "FIRST_COME_FIRST_SERVED")
   const [redPacketTriggerType, setRedPacketTriggerType] = useState(initialValues?.redPacketConfig?.triggerType ?? "REPLY")
   const [redPacketUnitPoints, setRedPacketUnitPoints] = useState(String(initialValues?.redPacketConfig?.unitPoints ?? initialValues?.redPacketConfig?.totalPoints ?? 10))
   const [redPacketTotalPoints, setRedPacketTotalPoints] = useState(String(initialValues?.redPacketConfig?.totalPoints ?? 10))
@@ -253,7 +257,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   const [lotteryParticipantGoal, setLotteryParticipantGoal] = useState(String(initialValues?.lotteryConfig?.participantGoal ?? ""))
   const [lotteryPrizes, setLotteryPrizes] = useState(initialValues?.lotteryConfig?.prizes && initialValues.lotteryConfig.prizes.length > 0 ? initialValues.lotteryConfig.prizes.map((item) => ({ title: item.title, quantity: String(item.quantity), description: item.description })) : [{ title: "一等奖", quantity: "1", description: "填写奖品描述" }])
   const [lotteryConditions, setLotteryConditions] = useState(initialValues?.lotteryConfig?.conditions && initialValues.lotteryConfig.conditions.length > 0 ? initialValues.lotteryConfig.conditions.map((item) => ({ type: item.type, value: item.value, operator: item.operator ?? "GTE", description: item.description ?? "", groupKey: item.groupKey ?? "default" })) : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)])
-  const [message, setMessage] = useState("")
+  const [, setMessage] = useState("")
   const [pendingDraftToRestore, setPendingDraftToRestore] = useState<LocalPostDraft | null>(null)
   const [pendingDraftUpdatedAt, setPendingDraftUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -295,6 +299,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
         purchaseUnlockContent: initialValues.purchaseUnlockContent ?? "",
         purchasePrice: String(initialValues.purchasePrice ?? 20),
         minViewLevel: String(initialValues.minViewLevel ?? 0),
+        minViewVipLevel: String(initialValues.minViewVipLevel ?? 0),
         manualTags: normalizeManualTags(initialValues.tags ?? []),
         lotteryStartsAt: initialValues.lotteryConfig?.startsAt ?? "",
         lotteryEndsAt: initialValues.lotteryConfig?.endsAt ?? "",
@@ -307,6 +312,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
           : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)],
         redPacketEnabled: Boolean(initialValues.redPacketConfig?.enabled),
         redPacketGrantMode: initialValues.redPacketConfig?.grantMode ?? "FIXED",
+        redPacketClaimOrderMode: initialValues.redPacketConfig?.claimOrderMode ?? "FIRST_COME_FIRST_SERVED",
         redPacketTriggerType: initialValues.redPacketConfig?.triggerType ?? "REPLY",
         redPacketUnitPoints: String(initialValues.redPacketConfig?.unitPoints ?? initialValues.redPacketConfig?.totalPoints ?? 10),
         redPacketTotalPoints: String(initialValues.redPacketConfig?.totalPoints ?? 10),
@@ -331,6 +337,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     purchaseUnlockContent,
     purchasePrice,
     minViewLevel,
+    minViewVipLevel,
     manualTags,
     lotteryStartsAt,
     lotteryEndsAt,
@@ -339,6 +346,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     lotteryConditions,
     redPacketEnabled,
     redPacketGrantMode,
+    redPacketClaimOrderMode,
     redPacketTriggerType,
     redPacketUnitPoints,
     redPacketTotalPoints,
@@ -356,6 +364,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     lotteryStartsAt,
     manualTags,
     minViewLevel,
+    minViewVipLevel,
     pollExpiresAt,
     pollOptions,
     postType,
@@ -363,6 +372,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     purchaseUnlockContent,
     redPacketEnabled,
     redPacketGrantMode,
+    redPacketClaimOrderMode,
     redPacketPacketCount,
     redPacketTotalPoints,
     redPacketTriggerType,
@@ -452,6 +462,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     setPurchaseUnlockContent(draft.purchaseUnlockContent)
     setPurchasePrice(draft.purchasePrice)
     setMinViewLevel(draft.minViewLevel)
+    setMinViewVipLevel(draft.minViewVipLevel)
     setManualTags(normalizeManualTags(draft.manualTags))
     setLotteryStartsAt(draft.lotteryStartsAt)
     setLotteryEndsAt(draft.lotteryEndsAt)
@@ -460,6 +471,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     setLotteryConditions(draft.lotteryConditions.length > 0 ? draft.lotteryConditions : [buildLotteryConditionItem("REPLY_CONTENT_LENGTH", pointName)])
     setRedPacketEnabled(draft.redPacketEnabled)
     setRedPacketGrantMode(draft.redPacketGrantMode)
+    setRedPacketClaimOrderMode(draft.redPacketClaimOrderMode)
     setRedPacketTriggerType(draft.redPacketTriggerType)
     setRedPacketUnitPoints(draft.redPacketUnitPoints)
     setRedPacketTotalPoints(draft.redPacketTotalPoints)
@@ -477,11 +489,6 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
     }
 
     restoreDraft(pendingDraftToRestore)
-  }
-
-  function handleDismissPendingDraft() {
-    setPendingDraftToRestore(null)
-    setPendingDraftUpdatedAt(null)
   }
 
   function handleManualDraftSave() {
@@ -722,6 +729,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
       ? {
           enabled: true,
           grantMode: redPacketGrantMode,
+          claimOrderMode: redPacketClaimOrderMode,
           triggerType: redPacketTriggerType,
           totalPoints: redPacketGrantMode === "RANDOM" ? parsePositiveSafeInteger(redPacketTotalPoints) ?? 0 : fixedRedPacketTotalPoints ?? 0,
           unitPoints: normalizedRedPacketUnitPoints ?? 0,
@@ -741,6 +749,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
           purchaseUnlockContent,
           purchasePrice: purchaseUnlockContent.trim() ? Number(purchasePrice) : undefined,
           minViewLevel: Number(minViewLevel),
+          minViewVipLevel: Number(minViewVipLevel),
           boardSlug,
           postType,
           bountyPoints: postType === "BOUNTY" ? Number(bountyPoints) : undefined,
@@ -758,6 +767,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
           purchaseUnlockContent,
           purchasePrice: purchaseUnlockContent.trim() ? Number(purchasePrice) : undefined,
           minViewLevel: Number(minViewLevel),
+          minViewVipLevel: Number(minViewVipLevel),
           boardSlug,
           postType,
           bountyPoints: postType === "BOUNTY" ? Number(bountyPoints) : undefined,
@@ -803,6 +813,18 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
   ] as const satisfies Array<{ value: LocalPostType; label: string; hint: string }>
 
   const availablePostTypes = postTypes.filter((item) => allowedPostTypes.includes(item.value))
+  const draftMetaTimestamp = pendingDraftUpdatedAt ?? lastSavedDraftAt
+  const draftNoticeActions: PostDraftNoticeAction[] = []
+
+  if (pendingDraftToRestore) {
+    draftNoticeActions.push({ label: "恢复草稿", onClick: handleRestorePendingDraft, variant: "outline" })
+  }
+
+  if (pendingDraftToRestore || lastSavedDraftAt) {
+    draftNoticeActions.push({ label: "清除草稿", onClick: handleClearDraft, variant: "ghost" })
+  }
+
+  draftNoticeActions.push({ label: "保存草稿", onClick: handleManualDraftSave, variant: "outline" })
 
   return (
     <>
@@ -1068,11 +1090,14 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
             />
             <HiddenConfigChip
               icon={<Info className="h-4 w-4" />}
-              title="浏览等级"
-              active={Number(minViewLevel) > 0}
-              summary={Number(minViewLevel) > 0 ? `Lv.${Number(minViewLevel)}` : "公开可见"}
+              title="浏览门槛"
+              active={Number(minViewLevel) > 0 || Number(minViewVipLevel) > 0}
+              summary={Number(minViewVipLevel) > 0 ? `VIP${Number(minViewVipLevel)}${Number(minViewLevel) > 0 ? ` / Lv.${Number(minViewLevel)}` : ""}` : Number(minViewLevel) > 0 ? `Lv.${Number(minViewLevel)}` : "公开可见"}
               onClick={() => setActiveModal("view-level")}
-              onClear={() => setMinViewLevel("0")}
+              onClear={() => {
+                setMinViewLevel("0")
+                setMinViewVipLevel("0")
+              }}
             />
             {postRedPacketEnabled ? (
               <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2">
@@ -1103,7 +1128,7 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
             </div>
           ) : null}
           {redPacketEnabled ? (
-            <div className="mt-4 grid gap-3 rounded-[20px] border border-rose-200 bg-rose-50/80 p-4 md:grid-cols-2 xl:grid-cols-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+            <div className="mt-4 grid gap-3 rounded-[20px] border border-rose-200 bg-rose-50/80 p-4 md:grid-cols-2 xl:grid-cols-5 dark:border-rose-500/20 dark:bg-rose-500/10">
               <div className="space-y-2">
                 <p className="text-sm font-medium">发放方式</p>
                 <select value={redPacketGrantMode} onChange={(event) => setRedPacketGrantMode(event.target.value as "FIXED" | "RANDOM")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" disabled={mode === "edit"}>
@@ -1112,7 +1137,14 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
                 </select>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">领取条件</p>
+                <p className="text-sm font-medium">领取规则</p>
+                <select value={redPacketClaimOrderMode} onChange={(event) => setRedPacketClaimOrderMode(event.target.value as "FIRST_COME_FIRST_SERVED" | "RANDOM")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" disabled={mode === "edit"}>
+                  <option value="FIRST_COME_FIRST_SERVED">先到先得</option>
+                  <option value="RANDOM">随机机会</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">触发行为</p>
                 <select value={redPacketTriggerType} onChange={(event) => setRedPacketTriggerType(event.target.value as "REPLY" | "LIKE" | "FAVORITE")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" disabled={mode === "edit"}>
                   <option value="REPLY">回复帖子</option>
                   <option value="LIKE">点赞帖子</option>
@@ -1127,40 +1159,30 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
                 <p className="text-sm font-medium">红包份数</p>
                 <input value={redPacketPacketCount} onChange={(event) => setRedPacketPacketCount(event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" placeholder="如 10" disabled={mode === "edit"} />
               </div>
-              <div className="md:col-span-2 xl:col-span-4 rounded-[16px] bg-background/80 px-4 py-3 text-xs leading-6 text-muted-foreground">
+              <div className="md:col-span-2 xl:col-span-5 rounded-[16px] bg-background/80 px-4 py-3 text-xs leading-6 text-muted-foreground">
                 <p>领取行为满足后自动发放；所有红包均按整数分配，每人至少 1 {pointName}。</p>
                 <p>{redPacketGrantMode === "FIXED" ? `当前总计需要 ${fixedRedPacketTotalPoints ?? 0} ${pointName}。` : "拼手气红包要求总积分不小于份数。"}</p>
+                <p>{redPacketClaimOrderMode === "FIRST_COME_FIRST_SERVED" ? "先到先得会按触发先后直接发放。" : "随机机会会在当前满足条件但尚未领取的用户池中随机命中，让后来触发的用户也有机会获得红包。"}</p>
               </div>
             </div>
           ) : null}
         </div>
 
-        {pendingDraftToRestore ? (
-          <PostDraftNotice
-            title="检测到本地草稿"
-            description={`你在${mode === "edit" ? "编辑帖子" : "发帖"}页有一份未提交内容，可选择恢复继续编辑，或先忽略后手动处理。`}
-            meta={pendingDraftUpdatedAt ? `保存于 ${new Date(pendingDraftUpdatedAt).toLocaleString()}` : undefined}
-            tone="warning"
-            primaryAction={{ label: "恢复草稿", onClick: handleRestorePendingDraft, variant: "outline" }}
-            secondaryAction={{ label: "暂不恢复", onClick: handleDismissPendingDraft, variant: "ghost" }}
-          />
-        ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:items-center">
+          <div>
             <PostDraftNotice
-              title={lastSavedDraftAt ? (draftRestored ? "已恢复草稿" : "本地草稿") : "草稿状态"}
-              description={lastSavedDraftAt ? `最近保存于 ${new Date(lastSavedDraftAt).toLocaleString()}` : "尚未检测到本地草稿，编辑内容会自动暂存到本地。"}
-              compact
-              primaryAction={{ label: "保存草稿", onClick: handleManualDraftSave, variant: "outline" }}
-              secondaryAction={lastSavedDraftAt ? { label: "清除草稿", onClick: handleClearDraft, variant: "ghost" } : undefined}
-              className="w-full sm:w-auto"
+              title={pendingDraftToRestore ? "检测到本地草稿" : lastSavedDraftAt ? (draftRestored ? "已恢复草稿" : "本地草稿") : "草稿状态"}
+              description={pendingDraftToRestore ? `你在${mode === "edit" ? "编辑帖子" : "发帖"}页有一份未提交内容，可直接恢复继续编辑。` : lastSavedDraftAt ? "当前内容会继续自动暂存到本地。" : "当前内容会自动暂存到本地。"}
+              meta={draftMetaTimestamp ? `保存于 ${new Date(draftMetaTimestamp).toLocaleString()}` : undefined}
+              tone={pendingDraftToRestore ? "warning" : "info"}
+              size="dense"
+              actions={draftNoticeActions}
+              className="w-full"
             />
-            <Button disabled={loading || !canPostInBoard}>{loading ? (mode === "edit" ? "保存中..." : "发布中...") : (mode === "edit" ? "保存帖子" : "发布帖子")}</Button>
           </div>
+          <Button className="h-8 rounded-full px-4 text-xs sm:h-9 sm:px-4 sm:text-sm" disabled={loading || !canPostInBoard}>
+            {loading ? (mode === "edit" ? "保存中..." : "发布中...") : (mode === "edit" ? "保存帖子" : "发布帖子")}
+          </Button>
         </div>
       </form>
 
@@ -1343,8 +1365,11 @@ export function CreatePostForm({ boardOptions, pointName, postRedPacketEnabled =
 
       <PostViewLevelModal
         open={activeModal === "view-level"}
-        value={minViewLevel}
-        onChange={setMinViewLevel}
+        value={{ minViewLevel, minViewVipLevel }}
+        onChange={({ minViewLevel: nextMinViewLevel, minViewVipLevel: nextMinViewVipLevel }) => {
+          setMinViewLevel(nextMinViewLevel)
+          setMinViewVipLevel(nextMinViewVipLevel)
+        }}
         onClose={() => setActiveModal(null)}
       />
 

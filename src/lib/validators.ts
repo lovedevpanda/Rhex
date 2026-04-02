@@ -129,6 +129,7 @@ export function validatePostPayload(body: unknown): ValidationResult<{
   purchaseUnlockContent: string
   purchasePrice: number | null
   minViewLevel: number
+  minViewVipLevel: number
   lotteryConfig: Record<string, unknown> | null
 }> {
 
@@ -145,6 +146,7 @@ export function validatePostPayload(body: unknown): ValidationResult<{
   const purchaseUnlockContent = normalizeString(getField(body, "purchaseUnlockContent"))
   const rawPurchasePrice = parsePositiveSafeInteger(getField(body, "purchasePrice") ?? 0) ?? 0
   const rawMinViewLevel = parseNonNegativeSafeInteger(getField(body, "minViewLevel") ?? 0) ?? 0
+  const rawMinViewVipLevel = parseNonNegativeSafeInteger(getField(body, "minViewVipLevel") ?? 0) ?? 0
 
   const pollOptionsRaw = getField(body, "pollOptions")
   const pollOptions = Array.isArray(pollOptionsRaw)
@@ -194,6 +196,10 @@ export function validatePostPayload(body: unknown): ValidationResult<{
     return { success: false, message: "帖子最低浏览等级需为 0-999 的整数" }
   }
 
+  if (!Number.isInteger(rawMinViewVipLevel) || rawMinViewVipLevel < 0 || rawMinViewVipLevel > 999) {
+    return { success: false, message: "帖子最低 VIP 浏览等级需为 0-999 的整数" }
+  }
+
   if (postType === "BOUNTY") {
     if (!Number.isInteger(rawBountyPoints) || rawBountyPoints < 1) {
       return { success: false, message: "悬赏数值必须是大于 0 的整数" }
@@ -239,6 +245,7 @@ export function validatePostPayload(body: unknown): ValidationResult<{
       purchaseUnlockContent,
       purchasePrice: purchaseUnlockContent ? rawPurchasePrice : null,
       minViewLevel: rawMinViewLevel,
+      minViewVipLevel: rawMinViewVipLevel,
       lotteryConfig,
     },
   }

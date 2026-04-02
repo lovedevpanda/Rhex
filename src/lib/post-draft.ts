@@ -14,6 +14,7 @@ export interface LocalPostDraft {
   purchaseUnlockContent: string
   purchasePrice: string
   minViewLevel: string
+  minViewVipLevel: string
   manualTags: string[]
   lotteryStartsAt: string
   lotteryEndsAt: string
@@ -22,6 +23,7 @@ export interface LocalPostDraft {
   lotteryConditions: Array<{ type: string; value: string; operator: string; description: string; groupKey: string }>
   redPacketEnabled: boolean
   redPacketGrantMode: "FIXED" | "RANDOM"
+  redPacketClaimOrderMode: "FIRST_COME_FIRST_SERVED" | "RANDOM"
   redPacketTriggerType: "REPLY" | "LIKE" | "FAVORITE"
   redPacketUnitPoints: string
   redPacketTotalPoints: string
@@ -36,7 +38,7 @@ export interface StoredLocalPostDraft {
   data: LocalPostDraft
 }
 
-const STORAGE_KEY_PREFIX = "bbs:post-draft"
+const STORAGE_KEY_PREFIX = "rhex:post-draft"
 
 export function createEmptyLocalPostDraft(boardSlug = ""): LocalPostDraft {
   return {
@@ -53,6 +55,7 @@ export function createEmptyLocalPostDraft(boardSlug = ""): LocalPostDraft {
     purchaseUnlockContent: "",
     purchasePrice: "20",
     minViewLevel: "0",
+    minViewVipLevel: "0",
     manualTags: [],
     lotteryStartsAt: "",
     lotteryEndsAt: "",
@@ -61,6 +64,7 @@ export function createEmptyLocalPostDraft(boardSlug = ""): LocalPostDraft {
     lotteryConditions: [{ type: "REPLY_CONTENT_LENGTH", value: "10", operator: "GTE", description: "回帖内容至少 10 字", groupKey: "default" }],
     redPacketEnabled: false,
     redPacketGrantMode: "FIXED",
+    redPacketClaimOrderMode: "FIRST_COME_FIRST_SERVED",
     redPacketTriggerType: "REPLY",
     redPacketUnitPoints: "10",
     redPacketTotalPoints: "10",

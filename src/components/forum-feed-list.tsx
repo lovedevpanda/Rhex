@@ -17,6 +17,36 @@ interface ForumFeedListProps {
   postLinkDisplayMode?: "SLUG" | "ID"
 }
 
+interface FeedDisplayItem {
+  id: string
+  slug: string
+  title: string
+  type: ForumFeedItem["type"]
+  typeLabel: string
+  pinScope?: string | null
+  pinLabel?: string | null
+  hasRedPacket: boolean
+  minViewLevel?: number
+  minViewVipLevel?: number
+  isFeatured: boolean
+  boardName: string
+  boardSlug: string
+  boardIcon: string
+  authorName: string
+  authorUsername: string
+  authorAvatarPath: string | null
+  authorStatus?: ForumFeedItem["authorStatus"]
+  authorIsVip: boolean
+  authorVipLevel?: number | null
+  authorNameClassName: string
+  metaPrimary: string
+  metaSecondary?: string | null
+  commentCount: number
+  commentAccentColor: string
+  coverImage?: string | null
+  excerpt: string
+}
+
 const tabs: Array<{ key: Exclude<FeedSort, "weekly">; label: string; icon: typeof Clock3 }> = [
   { key: "latest", label: "最新", icon: Clock3 },
   { key: "new", label: "新贴", icon: Sparkles },
@@ -37,8 +67,48 @@ function getFeedPinLabel(pinScope?: string | null) {
 export async function ForumFeedList({ items, currentSort, listDisplayMode, postLinkDisplayMode = "SLUG" }: ForumFeedListProps) {
   const settings = await getSiteSettings()
   const resolvedListDisplayMode = normalizePostListDisplayMode(listDisplayMode)
-  const pinnedItems = items.filter((item) => item.pinScope === "GLOBAL")
-  const normalItems = items.filter((item) => item.pinScope !== "GLOBAL")
+  const mapFeedDisplayItem = (item: ForumFeedItem): FeedDisplayItem => {
+    const commentHeat = resolvePostHeatStyle({
+      views: item.viewCount,
+      comments: item.commentCount,
+      likes: item.likeCount,
+      tipCount: item.tipCount,
+      tipPoints: item.tipTotalPoints,
+    }, settings)
+    const authorIsVip = isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt })
+
+    return {
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      type: item.type,
+      typeLabel: item.typeLabel,
+      pinScope: item.pinScope,
+      pinLabel: getFeedPinLabel(item.pinScope),
+      hasRedPacket: item.hasRedPacket,
+      minViewLevel: item.minViewLevel ?? undefined,
+      minViewVipLevel: item.minViewVipLevel ?? undefined,
+      isFeatured: item.isFeatured,
+      boardName: item.boardName,
+      boardSlug: item.boardSlug,
+      boardIcon: item.boardIcon,
+      authorName: item.authorName,
+      authorUsername: item.authorUsername,
+      authorAvatarPath: item.authorAvatarPath,
+      authorStatus: item.authorStatus,
+      authorIsVip,
+      authorVipLevel: item.authorVipLevel,
+      authorNameClassName: getVipNameClass(authorIsVip, item.authorVipLevel, { emphasize: true }),
+      metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
+      metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+      commentCount: item.commentCount,
+      commentAccentColor: commentHeat.color,
+      coverImage: item.coverImage,
+      excerpt: item.summary,
+    }
+  }
+  const pinnedItems = items.filter((item) => item.pinScope === "GLOBAL").map(mapFeedDisplayItem)
+  const normalItems = items.filter((item) => item.pinScope !== "GLOBAL").map(mapFeedDisplayItem)
 
   return (
     <div className="overflow-hidden rounded-md bg-background">
@@ -62,14 +132,6 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
 
       <div className="lg:pl-4">
         {pinnedItems.map((item) => {
-          const commentHeat = resolvePostHeatStyle({
-            views: item.viewCount,
-            comments: item.commentCount,
-            likes: item.likeCount,
-            tipCount: item.tipCount,
-            tipPoints: item.tipTotalPoints,
-          }, settings)
-
           return (
             <ForumPostListItem
               key={item.id}
@@ -83,6 +145,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 pinLabel: getFeedPinLabel(item.pinScope),
                 hasRedPacket: item.hasRedPacket,
                 minViewLevel: item.minViewLevel ?? undefined,
+                minViewVipLevel: item.minViewVipLevel ?? undefined,
                 isFeatured: item.isFeatured,
                 boardName: item.boardName,
                 boardSlug: item.boardSlug,
@@ -91,11 +154,13 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 authorUsername: item.authorUsername,
                 authorAvatarPath: item.authorAvatarPath,
                 authorStatus: item.authorStatus,
-                authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
-                metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+                authorIsVip: item.authorIsVip,
+                authorVipLevel: item.authorVipLevel,
+                authorNameClassName: item.authorNameClassName,
+                metaPrimary: item.metaPrimary,
+                metaSecondary: item.metaSecondary,
                 commentCount: item.commentCount,
-                commentAccentColor: commentHeat.color,
+                commentAccentColor: item.commentAccentColor,
               }}
               showBoard
               postLinkDisplayMode={postLinkDisplayMode}
@@ -110,52 +175,38 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
         ) : null}
         {resolvedListDisplayMode === "GALLERY" ? (
           <PostGalleryGrid
-            items={normalItems.map((item) => {
-              const commentHeat = resolvePostHeatStyle({
-                views: item.viewCount,
-                comments: item.commentCount,
-                likes: item.likeCount,
-                tipCount: item.tipCount,
-                tipPoints: item.tipTotalPoints,
-              }, settings)
-
-              return {
-                id: item.id,
-                slug: item.slug,
-                title: item.title,
-                excerpt: item.summary,
-                coverImage: item.coverImage,
-                type: item.type,
-                typeLabel: item.typeLabel,
-                pinScope: item.pinScope,
-                pinLabel: getFeedPinLabel(item.pinScope),
-                hasRedPacket: item.hasRedPacket,
-                minViewLevel: item.minViewLevel ?? undefined,
-                isFeatured: item.isFeatured,
-                boardName: item.boardName,
-                boardSlug: item.boardSlug,
-                boardIcon: item.boardIcon,
-                authorName: item.authorName,
-                authorUsername: item.authorUsername,
-                authorStatus: item.authorStatus,
-                authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
-                metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
-                commentCount: item.commentCount,
-                commentAccentColor: commentHeat.color,
-              }
-            })}
+            items={normalItems.map((item) => ({
+              id: item.id,
+              slug: item.slug,
+              title: item.title,
+              excerpt: item.excerpt,
+              coverImage: item.coverImage,
+              type: item.type,
+              typeLabel: item.typeLabel,
+              pinScope: item.pinScope,
+              pinLabel: item.pinLabel,
+              hasRedPacket: item.hasRedPacket,
+              minViewLevel: item.minViewLevel,
+              minViewVipLevel: item.minViewVipLevel,
+              isFeatured: item.isFeatured,
+              boardName: item.boardName,
+              boardSlug: item.boardSlug,
+              boardIcon: item.boardIcon,
+              authorName: item.authorName,
+              authorUsername: item.authorUsername,
+              authorStatus: item.authorStatus,
+              authorIsVip: item.authorIsVip,
+              authorVipLevel: item.authorVipLevel,
+              authorNameClassName: item.authorNameClassName,
+              metaPrimary: item.metaPrimary,
+              metaSecondary: item.metaSecondary,
+              commentCount: item.commentCount,
+              commentAccentColor: item.commentAccentColor,
+            }))}
+            showBoard
             postLinkDisplayMode={postLinkDisplayMode}
           />
         ) : normalItems.map((item) => {
-          const commentHeat = resolvePostHeatStyle({
-            views: item.viewCount,
-            comments: item.commentCount,
-            likes: item.likeCount,
-            tipCount: item.tipCount,
-            tipPoints: item.tipTotalPoints,
-          }, settings)
-
           return (
             <ForumPostListItem
               key={item.id}
@@ -169,6 +220,7 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 pinLabel: getFeedPinLabel(item.pinScope),
                 hasRedPacket: item.hasRedPacket,
                 minViewLevel: item.minViewLevel ?? undefined,
+                minViewVipLevel: item.minViewVipLevel ?? undefined,
                 isFeatured: item.isFeatured,
                 boardName: item.boardName,
                 boardSlug: item.boardSlug,
@@ -177,11 +229,13 @@ export async function ForumFeedList({ items, currentSort, listDisplayMode, postL
                 authorUsername: item.authorUsername,
                 authorAvatarPath: item.authorAvatarPath,
                 authorStatus: item.authorStatus,
-                authorNameClassName: getVipNameClass(isVipActive({ vipLevel: item.authorVipLevel, vipExpiresAt: item.authorVipExpiresAt }), item.authorVipLevel, { emphasize: true }),
-                metaPrimary: currentSort === "new" ? item.publishedAt : item.lastRepliedAt,
-                metaSecondary: (currentSort === "latest" || currentSort === "following") && item.latestReplyAuthorName ? `最新回复 ${item.latestReplyAuthorName}` : null,
+                authorIsVip: item.authorIsVip,
+                authorVipLevel: item.authorVipLevel,
+                authorNameClassName: item.authorNameClassName,
+                metaPrimary: item.metaPrimary,
+                metaSecondary: item.metaSecondary,
                 commentCount: item.commentCount,
-                commentAccentColor: commentHeat.color,
+                commentAccentColor: item.commentAccentColor,
               }}
               showBoard
               postLinkDisplayMode={postLinkDisplayMode}

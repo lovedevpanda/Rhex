@@ -1,3 +1,5 @@
+import { Tooltip } from "@/components/ui/tooltip"
+
 interface VipBadgeProps {
   level?: number | null
   compact?: boolean
@@ -21,10 +23,13 @@ function getVipBadgeClasses(level: number, compact: boolean) {
 
 export function VipBadge({ level = 1, compact = false }: VipBadgeProps) {
   const normalizedLevel = Math.max(1, level ?? 1)
+  const label = `VIP${normalizedLevel} 会员`
 
   return (
-    <span className={getVipBadgeClasses(normalizedLevel, compact)}>
-      VIP{normalizedLevel}
-    </span>
+    <Tooltip content={label}>
+      <span className={getVipBadgeClasses(normalizedLevel, compact)} aria-label={label}>
+        VIP{normalizedLevel}
+      </span>
+    </Tooltip>
   )
 }

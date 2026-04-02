@@ -30,6 +30,7 @@ import { UserStatus } from "@/db/types"
 import { apiError } from "@/lib/api-route"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { messageEventBus } from "@/lib/message-event-bus"
+import { ensureUsersCanInteract } from "@/lib/user-blocks"
 import type {
 
 
@@ -413,6 +414,13 @@ export async function ensureConversationWithUser(currentUserId: number, targetUs
     apiError(400, "不能给自己发送私信")
   }
 
+  await ensureUsersCanInteract({
+    actorId: currentUserId,
+    targetUserId,
+    blockedMessage: "你已拉黑该用户，无法发起私信",
+    blockedByMessage: "对方已将你拉黑，无法发起私信",
+  })
+
 
   const recipient = await findMessageRecipientById(targetUserId)
 
@@ -452,6 +460,13 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
   if (content.length > 1000) {
     throw new Error("消息内容不能超过 1000 个字符")
   }
+
+  await ensureUsersCanInteract({
+    actorId: senderId,
+    targetUserId: recipientId,
+    blockedMessage: "你已拉黑该用户，无法发送私信",
+    blockedByMessage: "对方已将你拉黑，无法发送私信",
+  })
 
   const conversation = await getOrCreateConversation(senderId, recipientId)
 

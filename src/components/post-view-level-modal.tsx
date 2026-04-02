@@ -7,8 +7,11 @@ import { DialogBackdrop, DialogPanel, DialogPortal, DialogPositioner } from "@/c
 
 interface PostViewLevelModalProps {
   open: boolean
-  value: string
-  onChange: (value: string) => void
+  value: {
+    minViewLevel: string
+    minViewVipLevel: string
+  }
+  onChange: (value: { minViewLevel: string; minViewVipLevel: string }) => void
   onClose: () => void
 }
 
@@ -26,14 +29,18 @@ export function PostViewLevelModal({ open, value, onChange, onClose }: PostViewL
 }
 
 function PostViewLevelModalBody({ initialValue, onChange, onClose }: {
-  initialValue: string
-  onChange: (value: string) => void
+  initialValue: { minViewLevel: string; minViewVipLevel: string }
+  onChange: (value: { minViewLevel: string; minViewVipLevel: string }) => void
   onClose: () => void
 }) {
-  const [draftValue, setDraftValue] = useState(initialValue)
+  const [draftLevelValue, setDraftLevelValue] = useState(initialValue.minViewLevel)
+  const [draftVipLevelValue, setDraftVipLevelValue] = useState(initialValue.minViewVipLevel)
 
   function handleSave() {
-    onChange(draftValue)
+    onChange({
+      minViewLevel: draftLevelValue,
+      minViewVipLevel: draftVipLevelValue,
+    })
     onClose()
   }
 
@@ -41,8 +48,8 @@ function PostViewLevelModalBody({ initialValue, onChange, onClose }: {
     <DialogPanel className="max-w-lg">
       <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
         <div>
-          <h4 className="text-lg font-semibold">设置帖子最低浏览等级</h4>
-          <p className="mt-1 text-sm text-muted-foreground">设置为 0 表示公开浏览；设置更高等级后，仅满足门槛的用户可查看帖子正文。</p>
+          <h4 className="text-lg font-semibold">设置帖子浏览门槛</h4>
+          <p className="mt-1 text-sm text-muted-foreground">等级和 VIP 任一设置为大于 0 时，只有满足全部门槛的用户才可查看帖子正文。</p>
         </div>
         <Button type="button" variant="ghost" onClick={onClose}>关闭</Button>
       </div>
@@ -51,17 +58,26 @@ function PostViewLevelModalBody({ initialValue, onChange, onClose }: {
         <div className="space-y-2">
           <p className="text-sm font-medium">最低浏览等级</p>
           <input
-            value={draftValue}
-            onChange={(event) => setDraftValue(event.target.value)}
+            value={draftLevelValue}
+            onChange={(event) => setDraftLevelValue(event.target.value)}
             className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-none"
             placeholder="输入等级，0 表示公开可见"
+          />
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">最低 VIP 浏览等级</p>
+          <input
+            value={draftVipLevelValue}
+            onChange={(event) => setDraftVipLevelValue(event.target.value)}
+            className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-none"
+            placeholder="输入 VIP 等级，0 表示不限制"
           />
         </div>
       </div>
 
       <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
         <Button type="button" variant="ghost" onClick={onClose}>取消</Button>
-        <Button type="button" onClick={handleSave}>保存浏览门槛</Button>
+        <Button type="button" onClick={handleSave}>保存访问门槛</Button>
       </div>
     </DialogPanel>
   )

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
@@ -5,6 +6,15 @@ import { ForgotPasswordForm } from "@/components/forgot-password-form"
 import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
+import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `找回密码 - ${settings.siteName}`,
+  }
+}
 
 export default async function ForgotPasswordPage() {
   const user = await getCurrentUser()

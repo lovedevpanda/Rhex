@@ -26,6 +26,7 @@ const commentUserSelect = {
   username: true,
   nickname: true,
   avatarPath: true,
+  role: true,
   status: true,
   vipLevel: true,
   vipExpiresAt: true,
@@ -115,12 +116,34 @@ export function buildCommentReplyInclude(viewerUserId?: number) {
   }
 }
 
-export function countRootCommentsByPostId(postId: string) {
+function buildCommentBlockVisibilityWhere(viewerUserId?: number): Prisma.CommentWhereInput {
+  if (!viewerUserId) {
+    return {}
+  }
+
+  return {
+    user: {
+      blocksInitiated: {
+        none: {
+          blockedId: viewerUserId,
+        },
+      },
+      blocksReceived: {
+        none: {
+          blockerId: viewerUserId,
+        },
+      },
+    },
+  }
+}
+
+export function countRootCommentsByPostId(postId: string, viewerUserId?: number) {
   return prisma.comment.count({
     where: {
       postId,
       status: "NORMAL",
       parentId: null,
+      ...buildCommentBlockVisibilityWhere(viewerUserId),
     },
   })
 }
@@ -195,6 +218,7 @@ export function findRootCommentsByPostId(params: {
       postId: params.postId,
       status: "NORMAL",
       parentId: null,
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
     },
     include: buildCommentListInclude(params.viewerUserId),
     orderBy: [
@@ -221,6 +245,7 @@ export function findRepliesByParentIds(params: {
       postId: params.postId,
       status: "NORMAL",
       parentId: { in: params.parentIds },
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
     },
     include: buildCommentReplyInclude(params.viewerUserId),
     orderBy: [{ createdAt: params.sort === "newest" ? "desc" : "asc" }],

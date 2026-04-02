@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth"
-import { apiSuccess, createUserRouteHandler, readJsonBody, requireNumberField, requireSearchParam, requireStringField } from "@/lib/api-route"
+import { apiSuccess, createUserRouteHandler, readJsonBody, readOptionalStringField, requireNumberField, requireSearchParam, requireStringField } from "@/lib/api-route"
 import { getPostTipSummary, tipPost } from "@/lib/post-tips"
 
 export async function GET(request: Request) {
@@ -14,16 +14,18 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const postId = requireStringField(body, "postId", "缺少帖子参数")
   const amount = requireNumberField(body, "amount", "缺少打赏金额")
+  const giftId = readOptionalStringField(body, "giftId") || undefined
 
   const result = await tipPost({
     postId,
     senderId: currentUser.id,
     amount,
+    giftId,
   })
 
   const summary = await getPostTipSummary(postId, currentUser.id)
 
-  return apiSuccess(summary, `已成功打赏 ${result.amount} ${result.pointName}`)
+  return apiSuccess(summary, result.gift ? `已送出 ${result.gift.name}` : `已成功打赏 ${result.amount} ${result.pointName}`)
 }, {
   errorMessage: "打赏失败",
   logPrefix: "[api/posts/tip] unexpected error",

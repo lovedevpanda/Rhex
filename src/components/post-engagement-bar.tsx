@@ -8,6 +8,8 @@ import { PostRedPacketPanel } from "@/components/post-red-packet-panel"
 import { PostTipPanel } from "@/components/post-tip-panel"
 import { ReportDialog } from "@/components/report-dialog"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
+import type { PostGiftRecentEventItem, PostGiftStatItem } from "@/db/post-gift-queries"
+import type { SiteTippingGiftItem } from "@/lib/site-settings"
 
 
 
@@ -29,6 +31,9 @@ interface PostEngagementBarProps {
     enabled: boolean
     pointName: string
     currentUserPoints: number
+    gifts: SiteTippingGiftItem[]
+    giftStats: PostGiftStatItem[]
+    recentGiftEvents: PostGiftRecentEventItem[]
     allowedAmounts: number[]
     dailyLimit: number
     perPostLimit: number
@@ -121,6 +126,9 @@ export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0
                 enabled={tipping.enabled}
                 pointName={tipping.pointName}
                 currentUserPoints={tipping.currentUserPoints}
+                gifts={tipping.gifts}
+                giftStats={tipping.giftStats}
+                recentGiftEvents={tipping.recentGiftEvents}
                 allowedAmounts={tipping.allowedAmounts}
                 dailyLimit={tipping.dailyLimit}
                 perPostLimit={tipping.perPostLimit}

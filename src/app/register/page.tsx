@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
@@ -7,6 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings()
+
+  return {
+    title: `注册 - ${settings.siteName}`,
+    description: `注册 ${settings.siteName} 账户，加入社区讨论并建立你的个人主页。`,
+  }
+}
 
 export default async function RegisterPage(props: PageProps<"/register">) {
   const searchParams = await props.searchParams;

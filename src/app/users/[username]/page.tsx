@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import { AccessDeniedCard } from "@/components/access-denied-card"
 import { ForumPostStream } from "@/components/forum-post-stream"
 import { LevelBadge } from "@/components/level-badge"
 import { LevelIcon } from "@/components/level-icon"
@@ -18,6 +19,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getGrantedBadgesForUser } from "@/lib/badges"
 import { isUserFollowingTarget } from "@/lib/follows"
 import { getSiteSettings } from "@/lib/site-settings"
+import { getUserProfileAccessState } from "@/lib/user-blocks"
 import { cn } from "@/lib/utils"
 import { getUserProfile, getUserPosts } from "@/lib/users"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
@@ -47,20 +49,41 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
     notFound()
   }
 
-  const posts = await getUserPosts(params.username)
-  const badgeItems = await getGrantedBadgesForUser(user.id)
-  const canToggleFollow = !currentUser || currentUser.id !== user.id
-  const isFollowingUser = currentUser && currentUser.id !== user.id
-    ? await isUserFollowingTarget({
-        userId: currentUser.id,
-        targetType: "user",
-        targetId: user.id,
-      })
-    : false
+  const profileAccess = await getUserProfileAccessState(currentUser?.id, user.id)
+
+  if (!profileAccess.allowed) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <main className="mx-auto max-w-[960px] px-4 py-8">
+          <AccessDeniedCard
+            title="当前主页暂不可访问"
+            description="该用户已对你的访问做出限制，因此你无法查看其主页内容、动态与互动信息。"
+            reason={profileAccess.reason}
+            isLoggedIn={Boolean(currentUser)}
+          />
+        </main>
+      </div>
+    )
+  }
+
+  const [posts, badgeItems, isFollowingUser] = await Promise.all([
+    getUserPosts(params.username),
+    getGrantedBadgesForUser(user.id),
+    currentUser && currentUser.id !== user.id && !profileAccess.relation.isBlocked
+      ? isUserFollowingTarget({
+          userId: currentUser.id,
+          targetType: "user",
+          targetId: user.id,
+        })
+      : Promise.resolve(false),
+  ])
+
+  const canToggleFollow = (!currentUser || currentUser.id !== user.id) && !profileAccess.relation.isBlocked
 
   const vipActive = isVipActive(user)
   const vipLevel = getVipLevel(user)
-  const canSendMessage = currentUser && currentUser.username !== user.username
+  const canSendMessage = Boolean(currentUser && currentUser.username !== user.username && !profileAccess.relation.isBlocked)
   const isRestrictedUser = user.status === "BANNED" || user.status === "MUTED"
   const restrictionLabel = user.status === "BANNED" ? "封禁中" : user.status === "MUTED" ? "禁言中" : null
   const restrictionDescription = user.status === "BANNED" ? "该用户当前因封禁处于受限状态" : user.status === "MUTED" ? "该用户当前处于禁言状态" : null
@@ -87,14 +110,14 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
   return (
     <div className="min-h-screen  text-foreground dark:bg-[#0f1115]">
       <SiteHeader />
-      <main className={cn("mx-auto max-w-[1200px] px-4 py-6 lg:px-6", isRestrictedUser && "grayscale") }>
+      <main className={cn("mx-auto max-w-[1200px] px-1 py-6 lg:px-6", isRestrictedUser && "grayscale") }>
         <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
             <Card className="relative rounded-2xl border border-[#e8e8e8]  shadow-sm">
               <CardContent className="p-5">
                 <div className="flex flex-col items-center text-center">
                   {isRestrictedUser ? <UserStatusBadge status={user.status} compact className="absolute right-4 top-4 shadow-sm" /> : null}
-                  <UserAvatar name={user.displayName} avatarPath={user.avatarPath} size="lg" />
+                  <UserAvatar name={user.displayName} avatarPath={user.avatarPath} size="lg" isVip={vipActive} vipLevel={vipLevel} />
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                     <UserVerificationBadge verification={user.verification ?? null} />
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">{user.displayName}</h1>
@@ -174,6 +197,12 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 initialFollowed: isFollowingUser,
                 activeLabel: "已关注用户",
                 inactiveLabel: "关注用户",
+              } : null}
+              blockAction={currentUser && currentUser.id !== user.id ? {
+                targetId: user.id,
+                initialBlocked: profileAccess.relation.hasBlocked,
+                activeLabel: "已拉黑",
+                inactiveLabel: "拉黑用户",
               } : null}
             />
 

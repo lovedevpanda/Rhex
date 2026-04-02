@@ -4,6 +4,7 @@ import { useState } from "react"
 
 import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { RssSubscribeButton } from "@/components/rss-subscribe-button"
+import { UserBlockToggleButton } from "@/components/user-block-toggle-button"
 import { UserStatusBadge } from "@/components/user-status-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,12 @@ interface UserProfileOverviewCardProps {
   followAction?: {
     targetId: number
     initialFollowed: boolean
+    activeLabel?: string
+    inactiveLabel?: string
+  } | null
+  blockAction?: {
+    targetId: number
+    initialBlocked: boolean
     activeLabel?: string
     inactiveLabel?: string
   } | null
@@ -49,8 +56,11 @@ export function UserProfileOverviewCard({
   rssHref,
   rssLabel = "订阅用户 RSS",
   followAction = null,
+  blockAction = null,
 }: UserProfileOverviewCardProps) {
   const [followerCount, setFollowerCount] = useState(initialFollowerCount)
+  const [isFollowing, setIsFollowing] = useState(followAction?.initialFollowed ?? false)
+  const [isBlocked, setIsBlocked] = useState(blockAction?.initialBlocked ?? false)
   const overviewStats = [...stats, { label: "粉丝", value: followerCount }]
 
   return (
@@ -63,27 +73,53 @@ export function UserProfileOverviewCard({
               <h2 className="text-xl font-semibold text-foreground sm:text-[22px]">{title}</h2>
               {status ? <UserStatusBadge status={status} /> : null}
             </div>
-            <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+            <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:flex-nowrap sm:items-center">
               <RssSubscribeButton
                 href={rssHref}
                 label={rssLabel}
-                className="inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-[#f5f5f5] hover:text-foreground dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
+                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-[#f5f5f5] hover:text-foreground dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
               />
-              {followAction ? (
+              {followAction && !isBlocked ? (
                 <FollowToggleButton
+                  key={`${followAction.targetId}-${isFollowing ? "followed" : "unfollowed"}`}
                   targetType="user"
                   targetId={followAction.targetId}
-                  initialFollowed={followAction.initialFollowed}
+                  initialFollowed={isFollowing}
                   activeLabel={followAction.activeLabel ?? "已关注用户"}
                   inactiveLabel={followAction.inactiveLabel ?? "关注用户"}
                   showLabel
-                  className="h-10 justify-center rounded-xl px-4 text-sm"
+                  className="h-8 shrink-0 whitespace-nowrap justify-center rounded-lg px-3 text-xs"
                   onFollowStateChange={({ followed, changed }) => {
+                    setIsFollowing(followed)
+
                     if (!changed) {
                       return
                     }
 
                     setFollowerCount((currentCount) => Math.max(0, currentCount + (followed ? 1 : -1)))
+                  }}
+                />
+              ) : null}
+              {blockAction ? (
+                <UserBlockToggleButton
+                  targetUserId={blockAction.targetId}
+                  initialBlocked={isBlocked}
+                  activeLabel={blockAction.activeLabel ?? "已拉黑"}
+                  inactiveLabel={blockAction.inactiveLabel ?? "拉黑用户"}
+                  showLabel
+                  reloadOnChange
+                  className="h-8 shrink-0 whitespace-nowrap justify-center rounded-lg px-3 text-xs"
+                  onBlockStateChange={({ blocked, changed }) => {
+                    setIsBlocked(blocked)
+
+                    if (!changed) {
+                      return
+                    }
+
+                    if (blocked && isFollowing) {
+                      setIsFollowing(false)
+                      setFollowerCount((currentCount) => Math.max(0, currentCount - 1))
+                    }
                   }}
                 />
               ) : null}

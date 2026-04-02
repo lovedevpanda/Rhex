@@ -15,6 +15,7 @@ const searchPostListSelect = {
   pinScope: true,
   isFeatured: true,
   minViewLevel: true,
+  minViewVipLevel: true,
   commentCount: true,
   likeCount: true,
   favoriteCount: true,
