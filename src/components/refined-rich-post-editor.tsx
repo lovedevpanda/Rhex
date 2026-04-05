@@ -136,14 +136,15 @@ export function RefinedRichPostEditor({
             activeLineNumber={viewState.activeLineNumber}
             editorScrollTop={viewState.editorScrollTop}
             onChange={onChange}
+            onEditorScrollSync={viewState.setEditorScrollTop}
             onScroll={viewState.handleTextareaScroll}
             onKeyDown={commands.handleTextareaKeyDown}
             onSelect={viewState.handleTextareaSelect}
             onPaste={commands.handlePaste}
           />
-          <div className={viewState.activeTab === "write" ? (viewState.isFullscreen ? "px-3 pb-4 sm:px-5 sm:pb-8" : "px-3 pb-4 sm:px-5") : "px-3 pb-4 sm:px-5"}>
+          <div className={viewState.activeTab === "write" || viewState.activeTab === "live-preview" ? (viewState.isFullscreen ? "px-3 pb-4 sm:px-5 sm:pb-8" : "px-3 pb-4 sm:px-5") : "px-3 pb-4 sm:px-5"}>
             <EditorToolbar
-              visible={viewState.activeTab === "write"}
+              visible={viewState.activeTab === "write" || viewState.activeTab === "live-preview"}
               disabled={disabled}
               isFullscreen={viewState.isFullscreen}
               platform={shortcutPlatform}

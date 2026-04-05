@@ -2,6 +2,7 @@ import type { Prisma } from "@/db/types"
 
 import { prisma } from "@/db/client"
 import { postListInclude } from "@/db/queries"
+import type { TimestampCursorPayload } from "@/lib/cursor-pagination"
 
 export const FOLLOW_TARGET_TYPES = ["board", "user", "tag", "post"] as const
 
@@ -349,11 +350,32 @@ export function countUserBoardFollows(userId: number) {
   })
 }
 
-export function findUserBoardFollowsById(userId: number, options: { page: number; pageSize: number }) {
-  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
+function buildTimestampCursorWhere(cursor: TimestampCursorPayload, direction: "after" | "before") {
+  const createdAt = new Date(cursor.createdAt)
 
-  return prisma.boardFollow.findMany({
-    where: { userId },
+  return {
+    OR: direction === "after"
+      ? [
+          { createdAt: { lt: createdAt } },
+          { createdAt, id: { lt: cursor.id } },
+        ]
+      : [
+          { createdAt: { gt: createdAt } },
+          { createdAt, id: { gt: cursor.id } },
+        ],
+  }
+}
+
+export async function findUserBoardFollowsByIdCursor(params: { userId: number; pageSize: number; after?: TimestampCursorPayload | null; before?: TimestampCursorPayload | null }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
+
+  const rows = await prisma.boardFollow.findMany({
+    where: {
+      userId: params.userId,
+      ...(cursor ? buildTimestampCursorWhere(cursor, pagingDirection) : {}),
+    },
     include: {
       board: {
         include: {
@@ -366,12 +388,19 @@ export function findUserBoardFollowsById(userId: number, options: { page: number
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (options.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
 const userFollowTargetSelect = {
@@ -404,40 +433,64 @@ export function countUserFollowers(userId: number) {
   })
 }
 
-export function findUserUserFollowsById(userId: number, options: { page: number; pageSize: number }) {
-  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
+export async function findUserUserFollowsByIdCursor(params: { userId: number; pageSize: number; after?: TimestampCursorPayload | null; before?: TimestampCursorPayload | null }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
 
-  return prisma.userFollow.findMany({
-    where: { followerId: userId },
+  const rows = await prisma.userFollow.findMany({
+    where: {
+      followerId: params.userId,
+      ...(cursor ? buildTimestampCursorWhere(cursor, pagingDirection) : {}),
+    },
     include: {
       following: {
         select: userFollowTargetSelect,
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (options.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
-export function findUserFollowersById(userId: number, options: { page: number; pageSize: number }) {
-  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
+export async function findUserFollowersByIdCursor(params: { userId: number; pageSize: number; after?: TimestampCursorPayload | null; before?: TimestampCursorPayload | null }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
 
-  return prisma.userFollow.findMany({
-    where: { followingId: userId },
+  const rows = await prisma.userFollow.findMany({
+    where: {
+      followingId: params.userId,
+      ...(cursor ? buildTimestampCursorWhere(cursor, pagingDirection) : {}),
+    },
     include: {
       follower: {
         select: userFollowTargetSelect,
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (options.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
 export async function findFollowFeedTargetIds(userId: number) {
@@ -468,32 +521,44 @@ export function countUserTagFollows(userId: number) {
   })
 }
 
-export function findUserTagFollowsById(userId: number, options: { page: number; pageSize: number }) {
-  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
+export async function findUserTagFollowsByIdCursor(params: { userId: number; pageSize: number; after?: TimestampCursorPayload | null; before?: TimestampCursorPayload | null }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
 
-  return prisma.tagFollow.findMany({
-    where: { userId },
+  const rows = await prisma.tagFollow.findMany({
+    where: {
+      userId: params.userId,
+      ...(cursor ? buildTimestampCursorWhere(cursor, pagingDirection) : {}),
+    },
     include: {
       tag: {
         select: {
           id: true,
           name: true,
           slug: true,
+          postCount: true,
           _count: {
             select: {
-              posts: true,
               followers: true,
             },
           },
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (options.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
 export function countUserPostFollows(userId: number) {
@@ -507,27 +572,37 @@ export function countUserPostFollows(userId: number) {
   })
 }
 
-export function findUserPostFollowsById(userId: number, options: { page: number; pageSize: number }) {
-  const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
+export async function findUserPostFollowsByIdCursor(params: { userId: number; pageSize: number; after?: TimestampCursorPayload | null; before?: TimestampCursorPayload | null }) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
 
-  return prisma.postFollow.findMany({
+  const rows = await prisma.postFollow.findMany({
     where: {
-      userId,
+      userId: params.userId,
       post: {
         status: "NORMAL",
       },
+      ...(cursor ? buildTimestampCursorWhere(cursor, pagingDirection) : {}),
     },
     include: {
       post: {
         include: postListInclude,
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (options.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
 export function findBoardFollowerUserIds(boardId: string) {

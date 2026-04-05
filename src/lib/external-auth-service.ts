@@ -1,17 +1,41 @@
-import { compareSync, hashSync } from "bcryptjs"
-import { randomBytes } from "node:crypto"
+import { compare, hashSync } from "bcryptjs"
 
 import type { NextResponse } from "next/server"
 
-import { prisma } from "@/db/client"
+import {
+  createExternalAuthUserRecord,
+  createUserLoginLogEntry,
+  findAuthenticatedUserSummaryById,
+  findAuthUserStatusById,
+  findExternalAuthLoginCandidate,
+  findInviteCodeRegistrationContext,
+  findUserIdByEmail,
+  findUserIdByUsername,
+  incrementUserInviteCount,
+  markInviteCodeAsUsed,
+  recordSuccessfulExternalLoginByUserId,
+  runExternalAuthTransaction,
+} from "@/db/external-auth-user-queries"
 import { apiError } from "@/lib/api-route"
+import { getExternalAuthProviderLabel } from "@/lib/auth-provider-config"
 import { createSystemNotification } from "@/lib/notification-writes"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { getRequestIp } from "@/lib/request-ip"
 import { createSessionToken, getSessionCookieName, getSessionCookieOptions } from "@/lib/session"
+import {
+  buildExternalAuthMetadataJson,
+  buildPendingExternalAuthState,
+  buildRandomPassword,
+  buildUsernameSuggestions,
+  createOAuthIdentity,
+  createPasskeyIdentity,
+  isValidExternalUsername,
+  normalizeExternalUsernameCandidate,
+  resolveExternalUsernameBase,
+  trimNormalizedEmail,
+} from "@/lib/external-auth-helpers"
 import { createExternalAuthAccount, createPasskeyCredential, deleteExternalAuthAccountsByUserIdAndProvider, deletePasskeyCredentialByIdAndUserId, findExternalAuthAccount, findExternalAuthAccountByUserIdAndProvider, findPasskeyCredentialByCredentialId } from "@/lib/external-auth-store"
-import { getExternalAuthProviderLabel } from "@/lib/auth-provider-config"
-import type { ExternalAuthIdentity, ExternalOAuthProfile, PendingExternalAuthState } from "@/lib/external-auth-types"
+import type { ExternalAuthIdentity, PendingExternalAuthState } from "@/lib/external-auth-types"
 import type { SiteSettingsData } from "@/lib/site-settings"
 import type { StoredPasskeyCredential } from "@/lib/external-auth-store"
 import type { ExternalAuthProvider } from "@/lib/external-auth-types"
@@ -34,121 +58,20 @@ interface ExternalAuthAuthenticatedResult {
 
 export type ExternalAuthResolutionResult = ExternalAuthPendingResult | ExternalAuthAuthenticatedResult
 
-function isValidUsername(value: string) {
-  return /^[a-zA-Z0-9_]{3,20}$/.test(value)
-}
-
-function trimNormalizedEmail(email?: string | null) {
-  const normalized = email?.trim()
-  return normalized ? normalized : null
-}
-
-function buildRandomPassword() {
-  return randomBytes(24).toString("base64url")
-}
-
-function normalizeAsciiValue(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x00-\x7F]/g, "")
-}
-
-function fitUsernameLength(base: string, suffix = "") {
-  const maxBaseLength = Math.max(3, 20 - suffix.length)
-  const normalizedBase = base.slice(0, maxBaseLength).replace(/^_+|_+$/g, "") || "user"
-  const combined = `${normalizedBase}${suffix}`.slice(0, 20)
-  return combined.length >= 3 ? combined : `${combined}${"0".repeat(3 - combined.length)}`
-}
-
-export function normalizeExternalUsernameCandidate(value: string) {
-  const ascii = normalizeAsciiValue(value)
-  const normalized = ascii
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "")
-
-  if (!normalized) {
-    return ""
+function assertUserCanUseAuth(status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE", action: string) {
+  if (status === "BANNED") {
+    apiError(403, `该账号已被拉黑，无法${action}`)
   }
 
-  return fitUsernameLength(normalized)
+  if (status === "INACTIVE") {
+    apiError(403, `该账号未激活，无法${action}`)
+  }
 }
+export { buildUsernameSuggestions, createOAuthIdentity, createPasskeyIdentity, normalizeExternalUsernameCandidate }
 
 async function isUsernameAvailable(username: string) {
-  const existing = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true },
-  })
-
+  const existing = await findUserIdByUsername(username)
   return !existing
-}
-
-export async function buildUsernameSuggestions(base: string, minimumCount = 4) {
-  const normalizedBase = normalizeExternalUsernameCandidate(base) || "user"
-  const candidatePool = new Set<string>()
-
-  for (let index = 0; candidatePool.size < 16 && index < 64; index += 1) {
-    const suffix = index === 0 ? "" : `_${Math.floor(100 + Math.random() * 900)}`
-    candidatePool.add(fitUsernameLength(normalizedBase, suffix))
-  }
-
-  const candidates = Array.from(candidatePool)
-  const existingUsers = await prisma.user.findMany({
-    where: {
-      username: {
-        in: candidates,
-      },
-    },
-    select: {
-      username: true,
-    },
-  })
-  const taken = new Set(existingUsers.map((item) => item.username))
-
-  const available = candidates.filter((item) => !taken.has(item))
-
-  while (available.length < minimumCount) {
-    const fallback = fitUsernameLength("user", `_${Math.floor(1000 + Math.random() * 9000)}`)
-    if (!available.includes(fallback) && !taken.has(fallback)) {
-      available.push(fallback)
-    }
-  }
-
-  return available.slice(0, minimumCount)
-}
-
-function resolveUsernameBase(identity: Pick<ExternalAuthIdentity, "providerUsername" | "displayName" | "providerEmail">) {
-  const emailLocalPart = identity.providerEmail?.split("@")[0]?.trim() ?? ""
-  return identity.providerUsername?.trim()
-    || identity.displayName?.trim()
-    || emailLocalPart
-    || "user"
-}
-
-async function buildPendingState(identity: ExternalAuthIdentity, emailConflictUserId?: number, inviteCodeRequired = false) {
-  const usernameCandidate = normalizeExternalUsernameCandidate(resolveUsernameBase(identity))
-  const usernameSuggestions = await buildUsernameSuggestions(usernameCandidate || "user")
-
-  if (emailConflictUserId && identity.providerEmail) {
-    return {
-      kind: "email_bind_required",
-      ...identity,
-      conflictUserId: emailConflictUserId,
-      conflictEmail: identity.providerEmail,
-      usernameCandidate: usernameCandidate || usernameSuggestions[0] || "user001",
-      usernameSuggestions,
-    } satisfies PendingExternalAuthState
-  }
-
-  return {
-    kind: "username_required",
-    ...identity,
-    usernameCandidate: usernameCandidate || usernameSuggestions[0] || "user001",
-    usernameSuggestions,
-    inviteCodeRequired,
-  } satisfies PendingExternalAuthState
 }
 
 async function createUserFromIdentity(input: {
@@ -168,7 +91,7 @@ async function createUserFromIdentity(input: {
     apiError(400, "当前注册必须填写邀请码")
   }
 
-  if (!isValidUsername(input.username)) {
+  if (!isValidExternalUsername(input.username)) {
     apiError(400, "用户名需为 3-20 位字母、数字或下划线")
   }
 
@@ -178,10 +101,7 @@ async function createUserFromIdentity(input: {
 
   const email = trimNormalizedEmail(input.identity.providerEmail)
   if (email) {
-    const emailOwner = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    })
+    const emailOwner = await findUserIdByEmail(email)
 
     if (emailOwner) {
       apiError(409, "邮箱已被使用，请绑定已有账户")
@@ -195,26 +115,12 @@ async function createUserFromIdentity(input: {
   const inviteeReward = Math.max(0, input.siteSettings.inviteRewardInvitee)
   const registerInitialPoints = Math.max(0, input.siteSettings.registerInitialPoints)
 
-  const user = await prisma.$transaction(async (tx) => {
+  const user = await runExternalAuthTransaction(async (tx) => {
     let inviter: null | { id: number; username: string; points: number } = null
     let inviteCodeRecord: null | { id: string; code: string } = null
 
     if (inviteCode) {
-      const foundCode = await tx.inviteCode.findUnique({
-        where: { code: inviteCode },
-        select: {
-          id: true,
-          code: true,
-          usedById: true,
-          createdBy: {
-            select: {
-              id: true,
-              username: true,
-              points: true,
-            },
-          },
-        },
-      })
+      const foundCode = await findInviteCodeRegistrationContext(inviteCode, tx)
 
       if (!foundCode) {
         apiError(404, "邀请码不存在")
@@ -241,22 +147,16 @@ async function createUserFromIdentity(input: {
 
     const inviteeRegisterReward = inviter && inviteeReward > 0 ? inviteeReward : 0
 
-    const createdUser = await tx.user.create({
-      data: {
-        username: input.username,
-        passwordHash: hashSync(randomPassword, 10),
-        email,
-        emailVerifiedAt: email && input.identity.emailVerified ? new Date() : null,
-        nickname: input.username,
-        lastLoginAt: new Date(),
-        lastLoginIp: loginIp,
-        inviterId: inviter?.id,
-        points: 0,
-      },
-      select: {
-        id: true,
-        username: true,
-      },
+    const createdUser = await createExternalAuthUserRecord({
+      client: tx,
+      username: input.username,
+      passwordHash: hashSync(randomPassword, 10),
+      email,
+      emailVerifiedAt: email && input.identity.emailVerified ? new Date() : null,
+      nickname: input.username,
+      lastLoginAt: new Date(),
+      lastLoginIp: loginIp,
+      inviterId: inviter?.id,
     })
 
     if (input.identity.method === "oauth" && input.identity.provider && input.identity.providerAccountId) {
@@ -267,11 +167,7 @@ async function createUserFromIdentity(input: {
         providerAccountId: input.identity.providerAccountId,
         providerUsername: input.identity.providerUsername ?? null,
         providerEmail: email,
-        metadataJson: JSON.stringify({
-          displayName: input.identity.displayName ?? null,
-          avatarUrl: input.identity.avatarUrl ?? null,
-          emailVerified: Boolean(input.identity.emailVerified),
-        }),
+        metadataJson: buildExternalAuthMetadataJson(input.identity),
       })
     }
 
@@ -284,31 +180,14 @@ async function createUserFromIdentity(input: {
     }
 
     if (inviteCodeRecord) {
-      await tx.inviteCode.update({
-        where: { id: inviteCodeRecord.id },
-        data: {
-          usedById: createdUser.id,
-          usedAt: new Date(),
-        },
-      })
+      await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
     }
 
     if (inviter) {
-      await tx.user.update({
-        where: { id: inviter.id },
-        data: {
-          inviteCount: { increment: 1 },
-        },
-      })
+      await incrementUserInviteCount(inviter.id, tx)
     }
 
-    await tx.userLoginLog.create({
-      data: {
-        userId: createdUser.id,
-        ip: loginIp,
-        userAgent,
-      },
-    })
+    await createUserLoginLogEntry(createdUser.id, loginIp, userAgent, tx)
 
     await createSystemNotification({
       client: tx,
@@ -406,11 +285,7 @@ async function linkIdentityToUser(input: {
         providerAccountId: input.identity.providerAccountId,
         providerUsername: input.identity.providerUsername ?? null,
         providerEmail: trimNormalizedEmail(input.identity.providerEmail),
-        metadataJson: JSON.stringify({
-          displayName: input.identity.displayName ?? null,
-          avatarUrl: input.identity.avatarUrl ?? null,
-          emailVerified: Boolean(input.identity.emailVerified),
-        }),
+        metadataJson: buildExternalAuthMetadataJson(input.identity),
       })
     }
   }
@@ -435,21 +310,13 @@ export async function connectExternalAuthIdentityToUser(input: {
   identity: ExternalAuthIdentity
   userId: number
 }) {
-  const user = await prisma.user.findUnique({
-    where: { id: input.userId },
-    select: {
-      id: true,
-      status: true,
-    },
-  })
+  const user = await findAuthUserStatusById(input.userId)
 
   if (!user) {
     apiError(404, "站内账户不存在")
   }
 
-  if (user.status === "BANNED") {
-    apiError(403, "该账号已被拉黑，无法绑定新的登录方式")
-  }
+  assertUserCanUseAuth(user.status, "绑定新的登录方式")
 
   await linkIdentityToUser(input)
 }
@@ -475,14 +342,19 @@ export async function resolveExternalAuth(identity: ExternalAuthIdentity, siteSe
     const existingAccount = await findExternalAuthAccount(identity.provider, identity.providerAccountId)
 
     if (existingAccount) {
+      const linkedUser = await findAuthenticatedUserSummaryById(existingAccount.userId)
+
+      if (!linkedUser) {
+        apiError(404, "关联的站内账户不存在")
+      }
+
+      assertUserCanUseAuth(linkedUser.status, "登录")
+
       return {
         kind: "authenticated",
         user: {
-          id: existingAccount.userId,
-          username: (await prisma.user.findUnique({
-            where: { id: existingAccount.userId },
-            select: { username: true },
-          }))?.username ?? apiError(404, "关联的站内账户不存在"),
+          id: linkedUser.id,
+          username: linkedUser.username,
         },
         created: false,
       }
@@ -492,15 +364,12 @@ export async function resolveExternalAuth(identity: ExternalAuthIdentity, siteSe
   const email = trimNormalizedEmail(identity.providerEmail)
 
   if (email) {
-    const emailOwner = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    })
+    const emailOwner = await findUserIdByEmail(email)
 
     if (emailOwner) {
       return {
         kind: "pending",
-        state: await buildPendingState(identity, emailOwner.id),
+        state: await buildPendingExternalAuthState(identity, { emailConflictUserId: emailOwner.id }),
       }
     }
   }
@@ -512,11 +381,11 @@ export async function resolveExternalAuth(identity: ExternalAuthIdentity, siteSe
   if (siteSettings.registrationRequireInviteCode) {
     return {
       kind: "pending",
-      state: await buildPendingState(identity, undefined, true),
+      state: await buildPendingExternalAuthState(identity, { inviteCodeRequired: true }),
     }
   }
 
-  const usernameCandidate = normalizeExternalUsernameCandidate(resolveUsernameBase(identity))
+  const usernameCandidate = normalizeExternalUsernameCandidate(resolveExternalUsernameBase(identity))
   if (usernameCandidate && await isUsernameAvailable(usernameCandidate)) {
     const user = await createUserFromIdentity({
       identity,
@@ -534,7 +403,7 @@ export async function resolveExternalAuth(identity: ExternalAuthIdentity, siteSe
 
   return {
     kind: "pending",
-    state: await buildPendingState(identity),
+    state: await buildPendingExternalAuthState(identity),
   }
 }
 
@@ -572,29 +441,17 @@ export async function completePendingExternalAuthBind(input: {
     apiError(400, "请输入用户名/邮箱和密码")
   }
 
-  const matchedUser = await prisma.user.findFirst({
-    where: {
-      OR: [{ username: login }, { email: login }],
-    },
-    select: {
-      id: true,
-      username: true,
-      passwordHash: true,
-      status: true,
-    },
-  })
+  const matchedUser = await findExternalAuthLoginCandidate(login)
 
   if (!matchedUser || matchedUser.id !== input.state.conflictUserId) {
     apiError(409, `该 ${input.state.providerLabel} 邮箱已对应其它站内账户，请绑定正确的已有账户`)
   }
 
-  if (!compareSync(input.password, matchedUser.passwordHash)) {
+  if (!await compare(input.password, matchedUser.passwordHash)) {
     apiError(401, "用户名/邮箱或密码错误")
   }
 
-  if (matchedUser.status === "BANNED") {
-    apiError(403, "该账号已被拉黑，无法绑定第三方登录")
-  }
+  assertUserCanUseAuth(matchedUser.status, "绑定第三方登录")
 
   await linkIdentityToUser({
     identity: input.state,
@@ -609,43 +466,12 @@ export async function completePendingExternalAuthBind(input: {
 
 export async function recordSuccessfulExternalLogin(request: Request, user: AuthenticatedUserSummary) {
   const loginIp = getRequestIp(request)
-
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: user.id },
-      data: {
-        lastLoginAt: new Date(),
-        lastLoginIp: loginIp,
-      },
-    })
-
-    await tx.userLoginLog.create({
-      data: {
-        userId: user.id,
-        ip: loginIp,
-        userAgent: request.headers.get("user-agent"),
-      },
-    })
-  })
+  await recordSuccessfulExternalLoginByUserId(user.id, loginIp, request.headers.get("user-agent"))
 }
 
 export async function attachAuthenticatedSession(response: NextResponse, request: Request, user: AuthenticatedUserSummary) {
   const sessionToken = await createSessionToken(user.username, getRequestIp(request))
   response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
-}
-
-export function createOAuthIdentity(profile: ExternalOAuthProfile): ExternalAuthIdentity {
-  return {
-    method: "oauth",
-    provider: profile.provider,
-    providerLabel: getExternalAuthProviderLabel(profile.provider),
-    providerAccountId: profile.providerAccountId,
-    providerUsername: profile.providerUsername ?? null,
-    providerEmail: trimNormalizedEmail(profile.providerEmail),
-    emailVerified: profile.emailVerified,
-    displayName: profile.displayName ?? null,
-    avatarUrl: profile.avatarUrl ?? null,
-  }
 }
 
 export async function findPasskeyLinkedUserByCredentialId(credentialId: string): Promise<{ credential: StoredPasskeyCredential; user: AuthenticatedUserSummary } | null> {
@@ -655,37 +481,16 @@ export async function findPasskeyLinkedUserByCredentialId(credentialId: string):
     return null
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: credential.userId },
-    select: {
-      id: true,
-      username: true,
-    },
-  })
+  const user = await findAuthenticatedUserSummaryById(credential.userId)
 
   if (!user) {
     apiError(404, "Passkey 绑定的站内账户不存在")
   }
 
+  assertUserCanUseAuth(user.status, "使用 Passkey 登录")
+
   return {
     credential,
     user,
-  }
-}
-
-export function createPasskeyIdentity(input: {
-  email?: string | null
-  displayName?: string | null
-  usernameCandidate: string
-  credential: ExternalAuthIdentity["passkeyCredential"]
-}): ExternalAuthIdentity {
-  return {
-    method: "passkey",
-    providerLabel: "Passkey",
-    providerEmail: trimNormalizedEmail(input.email),
-    emailVerified: false,
-    displayName: input.displayName ?? null,
-    providerUsername: input.usernameCandidate,
-    passkeyCredential: input.credential ?? undefined,
   }
 }

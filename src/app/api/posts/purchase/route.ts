@@ -47,5 +47,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "购买失败",
   logPrefix: "[api/posts/purchase] unexpected error",
   unauthorizedMessage: "请先登录后再购买",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

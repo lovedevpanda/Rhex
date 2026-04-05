@@ -3,9 +3,8 @@ import { NextResponse } from "next/server"
 import { UserRole } from "@/db/types"
 
 import { getCurrentSessionActor } from "@/lib/auth"
-
-import { requireAdminUser } from "@/lib/admin"
 import { ContentSafetyError } from "@/lib/content-safety"
+import { requireAdminActor, requireSiteAdminActor } from "@/lib/moderator-permissions"
 import { PublicRouteError, isPublicRouteError } from "@/lib/public-route-error"
 
 export interface ApiSuccessPayload<T = unknown> {
@@ -36,7 +35,7 @@ export interface CustomApiRouteContext<TContext> extends ApiRouteContext {
 }
 
 export interface AdminApiRouteContext extends ApiRouteContext {
-  adminUser: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
+  adminUser: NonNullable<Awaited<ReturnType<typeof requireAdminActor>>>
 }
 
 export type ApiRouteHandler<T = unknown, C extends ApiRouteContext = ApiRouteContext> = (context: C) => Promise<ApiRouteResult<T>>
@@ -189,6 +188,7 @@ export function createUserRouteHandler<T = unknown>(
     unauthorizedMessage?: string
     forbiddenMessages?: Partial<Record<"MUTED" | "BANNED" | "INACTIVE", string>>
     allowStatuses?: Array<"ACTIVE" | "MUTED" | "BANNED" | "INACTIVE">
+    allowRestrictedStatuses?: Array<"BANNED" | "INACTIVE">
   },
 ) {
   return createRouteHandler(handler, {
@@ -203,6 +203,15 @@ export function createUserRouteHandler<T = unknown>(
       }
 
       const allowStatuses = options?.allowStatuses ?? ["ACTIVE"]
+      const allowedRestrictedStatuses = new Set(options?.allowRestrictedStatuses ?? [])
+      if (currentUser.status === "BANNED" && !allowedRestrictedStatuses.has("BANNED")) {
+        apiError(403, options?.forbiddenMessages?.BANNED ?? "当前账号状态不可执行该操作")
+      }
+
+      if (currentUser.status === "INACTIVE" && !allowedRestrictedStatuses.has("INACTIVE")) {
+        apiError(403, options?.forbiddenMessages?.INACTIVE ?? "当前账号状态不可执行该操作")
+      }
+
       if (!allowStatuses.includes(currentUser.status)) {
         if (currentUser.status === "MUTED") {
           apiError(403, options?.forbiddenMessages?.MUTED ?? "当前账号状态不可执行该操作")
@@ -226,15 +235,17 @@ export function createUserRouteHandler<T = unknown>(
 
 export function createAdminRouteHandler<T = unknown>(
   handler: ApiRouteHandler<T, AdminApiRouteContext>,
-  options?: { errorMessage?: string; logPrefix?: string; unauthorizedMessage?: string },
+  options?: { errorMessage?: string; logPrefix?: string; unauthorizedMessage?: string; allowModerator?: boolean },
 ) {
   return createRouteHandler(handler, {
     errorMessage: options?.errorMessage,
     logPrefix: options?.logPrefix,
     buildContext: async (request) => {
-      const adminUser = await requireAdminUser()
+      const adminUser = options?.allowModerator
+        ? await requireAdminActor()
+        : await requireSiteAdminActor()
 
-      if (!adminUser || (adminUser.role !== UserRole.ADMIN && adminUser.role !== UserRole.MODERATOR)) {
+      if (!adminUser || (adminUser.role !== UserRole.ADMIN && (!options?.allowModerator || adminUser.role !== UserRole.MODERATOR))) {
         apiError(403, options?.unauthorizedMessage ?? "无权操作")
       }
 

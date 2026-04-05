@@ -2,8 +2,10 @@ import { revalidatePath } from "next/cache"
 
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
 import { writeAdminLog } from "@/lib/admin"
+import type { AdminActor } from "@/lib/moderator-permissions"
 
 export interface AdminActionContext {
+  actor: AdminActor
   adminUserId: number
   action: string
   targetId: string

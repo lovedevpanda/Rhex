@@ -1,15 +1,11 @@
-import type { Prisma, RelatedType } from "@/db/types"
-
-import { prisma } from "@/db/client"
+import type {  RelatedType } from "@/db/types"
 
 export type PointLogChangeType = "INCREASE" | "DECREASE"
 
 const POINT_LOG_AUDIT_SUFFIX_PATTERN = /\s*\[a:(-?\d+)\|b:(-?\d+)\]\s*$/
 const POINT_LOG_EFFECT_SUFFIX_PATTERN = /\s*\[(?:勋章特效|积分特效):([^:\]]+):([^:\]]*):([^\]]+)\]\s*$/
 
-type PointLogClient = Prisma.TransactionClient | typeof prisma
-
-interface PointLogAuditEntry {
+export interface PointLogAuditEntry {
   userId: number
   changeType: PointLogChangeType
   changeValue: number
@@ -53,7 +49,7 @@ export function appendPointLogAuditTrail(reason: string, beforeBalance: number, 
   return `${stripPointLogAuditTrail(reason)} [a:${beforeBalance}|b:${afterBalance}]`
 }
 
-function normalizeAuditedPointLogEntry(entry: PointLogAuditEntry) {
+export function normalizeAuditedPointLogEntry(entry: PointLogAuditEntry) {
   const afterBalance = typeof entry.afterBalance === "number"
     ? entry.afterBalance
     : resolvePointLogAfterBalance(entry.beforeBalance, entry.changeType, entry.changeValue)
@@ -66,20 +62,4 @@ function normalizeAuditedPointLogEntry(entry: PointLogAuditEntry) {
     relatedType: entry.relatedType ?? null,
     relatedId: entry.relatedId ?? null,
   }
-}
-
-export function createPointLogWithAudit(client: PointLogClient, entry: PointLogAuditEntry) {
-  return client.pointLog.create({
-    data: normalizeAuditedPointLogEntry(entry),
-  })
-}
-
-export function createPointLogsWithAudit(client: PointLogClient, entries: PointLogAuditEntry[]) {
-  if (entries.length === 0) {
-    return Promise.resolve({ count: 0 })
-  }
-
-  return client.pointLog.createMany({
-    data: entries.map(normalizeAuditedPointLogEntry),
-  })
 }

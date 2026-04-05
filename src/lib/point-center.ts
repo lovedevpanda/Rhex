@@ -1,11 +1,12 @@
-import { prisma } from "@/db/client"
+import { createPointLogWithAudit } from "@/db/point-log-audit-queries"
+import { listAllPointEffectRuleRows, listGlobalActivePointEffectRuleRows } from "@/db/point-effect-rule-queries"
 import { ChangeType, PointEffectDirection, PointEffectRuleKind, PointEffectTargetType, Prisma, type RelatedType } from "@/db/types"
 import { apiError } from "@/lib/api-route"
 import { findDisplayedBadgeEffectRules } from "@/db/badge-queries"
+import { getBusinessMinuteOfDay } from "@/lib/formatters"
 import { getPointEffectAllScopeKeyByTargetType, isPointEffectScopeMatchableForBadgeEffects, type PointEffectScopeKey } from "@/lib/point-effect-definitions"
-import { createPointLogWithAudit } from "@/lib/point-log-audit"
 
-type PointEffectClient = Prisma.TransactionClient | typeof prisma
+type PointEffectClient = Prisma.TransactionClient
 const POINT_EFFECT_RULE_CACHE_TTL_MS = 5_000
 
 let activePointEffectRulesCache: {
@@ -67,7 +68,7 @@ export interface PreparedProbabilityValue {
 const POINT_EFFECT_TRAIL_PATTERN = /\s*\[(?:勋章特效|积分特效):[^\]]+\]\s*$/
 
 function getCurrentMinuteOfDay(date = new Date()) {
-  return date.getHours() * 60 + date.getMinutes()
+  return getBusinessMinuteOfDay(date)
 }
 
 function formatSignedNumber(value: number) {
@@ -273,51 +274,7 @@ function mapPointEffectRule(rule: {
 }
 
 export async function getAllPointEffectRules(): Promise<PointEffectRuleItem[]> {
-  const rules = await prisma.$queryRaw<Array<{
-    id: string
-    badgeId: string | null
-    badgeName: string | null
-    badgeIconText: string | null
-    badgeColor: string | null
-    name: string
-    description: string | null
-    targetType: PointEffectTargetType
-    scopeKeys: string[]
-    ruleKind: PointEffectRuleKind
-    direction: PointEffectDirection
-    value: number
-    extraValue: number | null
-    startMinuteOfDay: number | null
-    endMinuteOfDay: number | null
-    sortOrder: number
-    status: boolean
-    createdAt: Date
-    updatedAt: Date
-  }>>(Prisma.sql`
-    SELECT
-      effect."id",
-      effect."badgeId",
-      badge."name" AS "badgeName",
-      badge."iconText" AS "badgeIconText",
-      badge."color" AS "badgeColor",
-      effect."name",
-      effect."description",
-      effect."targetType",
-      effect."scopeKeys",
-      effect."ruleKind",
-      effect."direction",
-      effect."value",
-      effect."extraValue",
-      effect."startMinuteOfDay",
-      effect."endMinuteOfDay",
-      effect."sortOrder",
-      effect."status",
-      effect."createdAt",
-      effect."updatedAt"
-    FROM "PointEffectRule" effect
-    LEFT JOIN "Badge" badge ON badge."id" = effect."badgeId"
-    ORDER BY effect."sortOrder" ASC, effect."createdAt" ASC
-  `)
+  const rules = await listAllPointEffectRuleRows()
 
   return rules.map((rule) => mapPointEffectRule(rule))
 }
@@ -332,51 +289,7 @@ async function getGlobalActivePointEffectRules() {
     return activePointEffectRulesPromise
   }
 
-  activePointEffectRulesPromise = prisma.$queryRaw<Array<{
-    id: string
-    badgeId: string | null
-    badgeName: string | null
-    badgeIconText: string | null
-    badgeColor: string | null
-    name: string
-    description: string | null
-    targetType: PointEffectTargetType
-    scopeKeys: string[]
-    ruleKind: PointEffectRuleKind
-    direction: PointEffectDirection
-    value: number
-    extraValue: number | null
-    startMinuteOfDay: number | null
-    endMinuteOfDay: number | null
-    sortOrder: number
-    status: boolean
-    createdAt: Date
-    updatedAt: Date
-  }>>(Prisma.sql`
-    SELECT
-      effect."id",
-      effect."badgeId",
-      NULL::TEXT AS "badgeName",
-      NULL::TEXT AS "badgeIconText",
-      NULL::TEXT AS "badgeColor",
-      effect."name",
-      effect."description",
-      effect."targetType",
-      effect."scopeKeys",
-      effect."ruleKind",
-      effect."direction",
-      effect."value",
-      effect."extraValue",
-      effect."startMinuteOfDay",
-      effect."endMinuteOfDay",
-      effect."sortOrder",
-      effect."status",
-      effect."createdAt",
-      effect."updatedAt"
-    FROM "PointEffectRule" effect
-    WHERE effect."status" = true AND effect."badgeId" IS NULL
-    ORDER BY effect."sortOrder" ASC, effect."createdAt" ASC
-  `).then((rules) => {
+  activePointEffectRulesPromise = listGlobalActivePointEffectRuleRows().then((rules) => {
     const mappedRules = rules.map((rule) => mapPointEffectRule(rule))
 
     activePointEffectRulesCache = {

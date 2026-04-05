@@ -1,6 +1,7 @@
 import { NotificationType, RelatedType } from "@/db/types"
 
-import { countNotificationsByUserId, countUnreadNotifications, findCommentsWithPostByIds, findNotificationsByUserId, findPostsByIds, findUsersByIds } from "@/db/notification-read-queries"
+import { countUnreadNotifications, findCommentsWithPostByIds, findNotificationsByUserIdCursor, findPostsByIds, findUsersByIds } from "@/db/notification-read-queries"
+import { decodeTimestampCursor, encodeTimestampCursor } from "@/lib/cursor-pagination"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { getPostCommentPath, getPostPath } from "@/lib/post-links"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -33,7 +34,10 @@ export interface SiteNotificationItem {
 
 export interface UserNotificationsResult {
   items: SiteNotificationItem[]
-  totalCount: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+  prevCursor: string | null
+  nextCursor: string | null
 }
 
 export async function getUserUnreadNotificationCount(userId: number) {
@@ -49,8 +53,9 @@ export async function getUserUnreadNotificationCount(userId: number) {
 type NotificationPostTarget = Awaited<ReturnType<typeof findPostsByIds>>[number]
 type NotificationCommentTarget = Awaited<ReturnType<typeof findCommentsWithPostByIds>>[number]
 type NotificationUserTarget = Awaited<ReturnType<typeof findUsersByIds>>[number]
+type NotificationCursorRows = Awaited<ReturnType<typeof findNotificationsByUserIdCursor>>["items"]
 
-async function preloadNotificationTargets(notifications: Awaited<ReturnType<typeof findNotificationsByUserId>>) {
+async function preloadNotificationTargets(notifications: NotificationCursorRows) {
   const postIds = notifications.filter((item) => item.relatedType === RelatedType.POST).map((item) => item.relatedId)
   const commentIds = notifications.filter((item) => item.relatedType === RelatedType.COMMENT).map((item) => item.relatedId)
   const userIds = notifications.filter((item) => item.relatedType === RelatedType.USER).map((item) => item.relatedId)
@@ -98,14 +103,26 @@ function resolveNotificationUrl(
 
 
 
-export async function getUserNotifications(userId: number, page: number, pageSize: number): Promise<UserNotificationsResult> {
+export async function getUserNotifications(
+  userId: number,
+  options: {
+    pageSize: number
+    after?: string | null
+    before?: string | null
+  },
+): Promise<UserNotificationsResult> {
   try {
-    const normalizedPageSize = Math.min(50, Math.max(1, pageSize))
-    const skip = (page - 1) * normalizedPageSize
+    const normalizedPageSize = Math.min(50, Math.max(1, options.pageSize))
+    const afterCursor = decodeTimestampCursor(options.after)
+    const beforeCursor = decodeTimestampCursor(options.before)
 
-    const [notifications, totalCount, settings] = await Promise.all([
-      findNotificationsByUserId(userId, skip, normalizedPageSize),
-      countNotificationsByUserId(userId),
+    const [{ items: notifications, hasPrevPage, hasNextPage }, settings] = await Promise.all([
+      findNotificationsByUserIdCursor({
+        userId,
+        take: normalizedPageSize,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
+      }),
       getSiteSettings(),
     ])
 
@@ -124,13 +141,19 @@ export async function getUserNotifications(userId: number, page: number, pageSiz
         senderName: getUserDisplayName(notification.sender, "系统"),
         relatedUrl: relatedUrls[index],
       })),
-      totalCount,
+      hasPrevPage,
+      hasNextPage,
+      prevCursor: notifications.length > 0 ? encodeTimestampCursor({ id: notifications[0].id, createdAt: notifications[0].createdAt.toISOString() }) : null,
+      nextCursor: notifications.length > 0 ? encodeTimestampCursor({ id: notifications[notifications.length - 1].id, createdAt: notifications[notifications.length - 1].createdAt.toISOString() }) : null,
     }
   } catch (error) {
     console.error(error)
     return {
       items: [],
-      totalCount: 0,
+      hasPrevPage: false,
+      hasNextPage: false,
+      prevCursor: null,
+      nextCursor: null,
     }
   }
 }

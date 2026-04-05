@@ -4,6 +4,7 @@ import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { clearPasskeyCeremonyState, setPasskeyCeremonyState } from "@/lib/auth-flow-state"
 import { createPasskeyRegistrationOptions } from "@/lib/passkey-auth"
 import { getServerSiteSettings } from "@/lib/site-settings"
+import { getUserDisplayName } from "@/lib/user-display"
 
 export const POST = createUserRouteHandler(async ({ currentUser }) => {
   const settings = await getServerSiteSettings()
@@ -14,7 +15,7 @@ export const POST = createUserRouteHandler(async ({ currentUser }) => {
 
   const options = await createPasskeyRegistrationOptions(settings, {
     username: currentUser.username,
-    displayName: currentUser.nickname?.trim() || currentUser.username,
+    displayName: getUserDisplayName(currentUser),
   })
   const response = NextResponse.json(apiSuccess({ options }, "success"))
 
@@ -23,7 +24,7 @@ export const POST = createUserRouteHandler(async ({ currentUser }) => {
     flow: "connect",
     challenge: options.challenge,
     connectUserId: currentUser.id,
-    displayName: currentUser.nickname?.trim() || currentUser.username,
+    displayName: getUserDisplayName(currentUser),
   })
 
   return response
@@ -31,5 +32,5 @@ export const POST = createUserRouteHandler(async ({ currentUser }) => {
   errorMessage: "获取 Passkey 绑定选项失败",
   logPrefix: "[api/profile/account-bindings/passkey/options] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

@@ -1,4 +1,12 @@
+import { type Prisma, type PrismaClient } from "@prisma/client"
+
 import { prisma } from "@/db/client"
+
+type GobangQueryClient = Prisma.TransactionClient | PrismaClient
+
+function resolveClient(client?: GobangQueryClient) {
+  return client ?? prisma
+}
 
 export type GobangStatus = "ONGOING" | "FINISHED"
 
@@ -74,10 +82,11 @@ export async function createGobangMatchRecord(params: {
   ticketCost: number
   winReward: number
   createdAt?: Date
+  client?: GobangQueryClient
 }) {
   const createdAt = params.createdAt ?? new Date()
 
-  await prisma.gobangMatch.create({
+  await resolveClient(params.client).gobangMatch.create({
     data: {
       id: params.id,
       creatorId: params.creatorId,
@@ -101,8 +110,9 @@ export async function insertGobangMove(params: {
   x: number
   y: number
   createdAt: Date
+  client?: GobangQueryClient
 }) {
-  await prisma.gobangMove.create({
+  await resolveClient(params.client).gobangMove.create({
     data: {
       id: params.id,
       matchId: params.matchId,
@@ -123,6 +133,7 @@ export async function insertGobangMoveNow(params: {
   x: number
   y: number
   createdAt?: Date
+  client?: GobangQueryClient
 }) {
   await insertGobangMove({
     ...params,
@@ -184,8 +195,8 @@ export async function updateGobangMatchTimestamp(matchId: string, updatedAt: Dat
   })
 }
 
-export async function finishGobangMatch(params: { matchId: string; winnerId: number; updatedAt: Date }) {
-  await prisma.gobangMatch.update({
+export async function finishGobangMatch(params: { matchId: string; winnerId: number; updatedAt: Date; client?: GobangQueryClient }) {
+  await resolveClient(params.client).gobangMatch.update({
     where: { id: params.matchId },
     data: {
       status: "FINISHED",
@@ -195,11 +206,27 @@ export async function finishGobangMatch(params: { matchId: string; winnerId: num
   })
 }
 
-export async function finishGobangMatchNow(params: { matchId: string; winnerId: number; updatedAt?: Date }) {
+export async function finishGobangMatchNow(params: { matchId: string; winnerId: number; updatedAt?: Date; client?: GobangQueryClient }) {
   await finishGobangMatch({
     ...params,
     updatedAt: params.updatedAt ?? new Date(),
   })
+}
+
+export function findGobangUserPoints(userId: number, client?: GobangQueryClient) {
+  return resolveClient(client).user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      points: true,
+    },
+  })
+}
+
+export function runGobangTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  return prisma.$transaction(callback)
 }
 
 

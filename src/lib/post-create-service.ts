@@ -1,7 +1,13 @@
 import { getCurrentUserRecord } from "@/db/current-user"
+import {
+  createPostRecord,
+  incrementBoardPostCount,
+  runPostCreateTransaction,
+  updateAuthorAfterPostCreated,
+  updatePostContentAndSummary,
+} from "@/db/post-create-queries"
 import { type Prisma } from "@/db/types"
 
-import { prisma } from "@/db/client"
 import { apiError } from "@/lib/api-route"
 import { checkBoardPermission, getBoardAccessContextBySlug } from "@/lib/board-access"
 import { extractSummaryFromContent } from "@/lib/content"
@@ -145,7 +151,7 @@ export async function createPostFlow(body: unknown) {
 
   const shouldPending = Boolean(boardContext.settings.requirePostReview || titleSafety.shouldReview || contentSafety.shouldReview || replyUnlockSafety?.shouldReview || purchaseUnlockSafety?.shouldReview || tagsSafety?.shouldReview)
 
-  const post = await prisma.$transaction(async (tx) => {
+  const post = await runPostCreateTransaction(async (tx) => {
     const lotteryData = normalizedLottery?.data
     const postCreateData: Prisma.PostUncheckedCreateInput = {
       title: titleSafety.sanitizedText,
@@ -177,17 +183,8 @@ export async function createPostFlow(body: unknown) {
       lotteryConditions: postType === "LOTTERY" ? { create: (lotteryData?.conditions ?? []).map((condition, index) => ({ type: condition.type, operator: condition.operator ?? "GTE", value: condition.value, description: condition.description, groupKey: condition.groupKey ?? "default", sortOrder: index })) } : undefined,
     }
 
-    const createdPost = await tx.post.create({ data: { ...postCreateData, activityAt: new Date() } })
-
-    const userUpdateData: {
-      postCount: { increment: number }
-      lastPostAt: Date
-    } = {
-      postCount: { increment: 1 },
-      lastPostAt: new Date(),
-    }
-
-    await tx.user.update({ where: { id: author.id }, data: userUpdateData })
+    const createdPost = await createPostRecord(tx, postCreateData)
+    await updateAuthorAfterPostCreated(tx, author.id, new Date())
 
     let authorPointBalanceCursor = author.points
 
@@ -228,12 +225,7 @@ export async function createPostFlow(body: unknown) {
       pointName: settings.pointName,
     })
 
-    await tx.board.update({
-      where: { id: boardContext.board.id },
-      data: {
-        postCount: { increment: 1 },
-      },
-    })
+    await incrementBoardPostCount(tx, boardContext.board.id)
 
     if (!shouldPending) {
       const mentionResult = await createPostMentionNotifications({
@@ -245,13 +237,12 @@ export async function createPostFlow(body: unknown) {
       })
 
       if (mentionResult.content !== serializedContent) {
-        await tx.post.update({
-          where: { id: createdPost.id },
-          data: {
-            content: mentionResult.content,
-            summary: extractSummaryFromContent(getAllPostContentText(stripPostContentUserLinks(mentionResult.content))) || titleSafety.sanitizedText,
-          },
-        })
+        await updatePostContentAndSummary(
+          tx,
+          createdPost.id,
+          mentionResult.content,
+          extractSummaryFromContent(getAllPostContentText(stripPostContentUserLinks(mentionResult.content))) || titleSafety.sanitizedText,
+        )
       }
     }
 

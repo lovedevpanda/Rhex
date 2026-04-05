@@ -58,7 +58,10 @@ interface RawSettingsSearchParams {
   profileTab?: string | string[]
   postTab?: string | string[]
   followTab?: string | string[]
-  page?: string | string[]
+  listAfter?: string | string[]
+  listBefore?: string | string[]
+  pointsAfter?: string | string[]
+  pointsBefore?: string | string[]
 }
 
 export interface ResolvedSettingsRoute {
@@ -66,7 +69,10 @@ export interface ResolvedSettingsRoute {
   currentProfileTab: ProfileTabKey
   currentPostTab: PostManagementTabKey
   currentFollowTab: FollowTabKey
-  currentPage: number
+  listAfter: string | null
+  listBefore: string | null
+  pointsAfter: string | null
+  pointsBefore: string | null
 }
 
 export interface SettingsPageData {
@@ -132,14 +138,20 @@ export function resolveSettingsRoute(searchParams?: RawSettingsSearchParams): Re
   const currentProfileTab = resolveTabKey(readSearchParam(searchParams?.profileTab), profileTabs.map((tab) => tab.key), "basic")
   const currentPostTab = resolveTabKey(readSearchParam(searchParams?.postTab), postManagementTabs.map((tab) => tab.key), "posts")
   const currentFollowTab = resolveTabKey(readSearchParam(searchParams?.followTab), followTabs.map((tab) => tab.key), "boards")
-  const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
+  const listAfter = readSearchParam(searchParams?.listAfter) ?? null
+  const listBefore = readSearchParam(searchParams?.listBefore) ?? null
+  const pointsAfter = readSearchParam(searchParams?.pointsAfter) ?? null
+  const pointsBefore = readSearchParam(searchParams?.pointsBefore) ?? null
 
   return {
     currentTab,
     currentProfileTab,
     currentPostTab,
     currentFollowTab,
-    currentPage,
+    listAfter,
+    listBefore,
+    pointsAfter,
+    pointsBefore,
   }
 }
 
@@ -148,7 +160,7 @@ async function loadSettingsTabData(
   route: ResolvedSettingsRoute,
   settings: Awaited<ReturnType<typeof getSiteSettings>>,
 ) {
-  const { currentFollowTab, currentPage, currentPostTab, currentTab } = route
+  const { currentFollowTab, currentPostTab, currentTab, listAfter, listBefore } = route
 
   const [
     userPosts,
@@ -168,39 +180,39 @@ async function loadSettingsTabData(
     accountBindings,
   ] = await Promise.all([
     currentTab === "post-management" && currentPostTab === "posts"
-      ? getUserPosts(userId, { page: currentPage, pageSize: 10 })
+      ? getUserPosts(userId, { pageSize: 10, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserPosts>> | null>(null),
     currentTab === "post-management" && currentPostTab === "replies"
-      ? getUserReplies(userId, { page: currentPage, pageSize: 10 })
+      ? getUserReplies(userId, { pageSize: 10, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserReplies>> | null>(null),
     currentTab === "post-management" && currentPostTab === "favorites"
-      ? getUserFavoritePosts(userId, { page: currentPage, pageSize: 10 })
+      ? getUserFavoritePosts(userId, { pageSize: 10, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserFavoritePosts>> | null>(null),
     currentTab === "post-management" && currentPostTab === "likes"
-      ? getUserLikedPosts(userId, { page: currentPage, pageSize: 10 })
+      ? getUserLikedPosts(userId, { pageSize: 10, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserLikedPosts>> | null>(null),
     currentTab === "follows" && currentFollowTab === "boards"
-      ? getUserBoardFollows(userId, { page: currentPage, pageSize: 12 })
+      ? getUserBoardFollows(userId, { pageSize: 12, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserBoardFollows>> | null>(null),
     currentTab === "follows" && currentFollowTab === "users"
-      ? getUserUserFollows(userId, { page: currentPage, pageSize: 12 })
+      ? getUserUserFollows(userId, { pageSize: 12, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserUserFollows>> | null>(null),
     currentTab === "follows" && currentFollowTab === "followers"
-      ? getUserFollowers(userId, { page: currentPage, pageSize: 12 })
+      ? getUserFollowers(userId, { pageSize: 12, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserFollowers>> | null>(null),
     currentTab === "follows" && currentFollowTab === "tags"
-      ? getUserTagFollows(userId, { page: currentPage, pageSize: 18 })
+      ? getUserTagFollows(userId, { pageSize: 18, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserTagFollows>> | null>(null),
     currentTab === "follows" && currentFollowTab === "posts"
-      ? getUserPostFollows(userId, { page: currentPage, pageSize: 10 })
+      ? getUserPostFollows(userId, { pageSize: 10, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserPostFollows>> | null>(null),
     currentTab === "follows" && currentFollowTab === "blocks"
-      ? getUserBlocks(userId, { page: currentPage, pageSize: 12 })
+      ? getUserBlocks(userId, { pageSize: 12, after: listAfter, before: listBefore })
       : Promise.resolve<Awaited<ReturnType<typeof getUserBlocks>> | null>(null),
     currentTab === "level" ? getCurrentUserLevelProgressView() : Promise.resolve(null),
     currentTab === "badges" ? getBadgeCenterData(userId) : Promise.resolve([]),
     currentTab === "verifications" ? getCurrentUserVerificationData() : Promise.resolve({ currentUserId: userId, types: [], approvedVerification: null }),
-    currentTab === "points" ? getUserPointLogs(userId, { page: currentPage, pageSize: 10 }) : Promise.resolve(null),
+    currentTab === "points" ? getUserPointLogs(userId, { pageSize: 10, after: route.pointsAfter, before: route.pointsBefore }) : Promise.resolve(null),
     currentTab === "profile" && route.currentProfileTab === "accounts"
       ? getUserAccountBindingView(userId, {
           authGithubEnabled: settings.authGithubEnabled,

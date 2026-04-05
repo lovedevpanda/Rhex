@@ -23,6 +23,11 @@ import { DEFAULT_ALLOWED_POST_TYPES, normalizePostTypes } from "@/lib/post-types
 interface StructureManagerProps {
   zones: ZoneItem[]
   boards: BoardItem[]
+  permissions: {
+    canCreateZone: boolean
+    canCreateBoard: boolean
+    canDeleteBoard: boolean
+  }
   initialFilters: {
     keyword: string
     zoneId: string
@@ -86,7 +91,7 @@ const postingOptions = [
   { value: "off", label: "暂停发帖" },
 ]
 
-export function StructureManager({ zones, boards, initialFilters }: StructureManagerProps) {
+export function StructureManager({ zones, boards, permissions, initialFilters }: StructureManagerProps) {
   const [modal, setModal] = useState<ModalMode>(null)
   const [selectedZoneId, setSelectedZoneId] = useState(initialFilters.zoneId || zones[0]?.id || "")
 
@@ -177,9 +182,11 @@ export function StructureManager({ zones, boards, initialFilters }: StructureMan
               <h3 className="text-sm font-semibold">分区总览</h3>
               <p className="mt-1 text-xs text-muted-foreground">先选中一个分区，再集中管理它下面的节点。</p>
             </div>
-            <Button type="button" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "create-zone" })}>
-              <Plus className="mr-1 h-3.5 w-3.5" />新建分区
-            </Button>
+            {permissions.canCreateZone ? (
+              <Button type="button" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "create-zone" })}>
+                <Plus className="mr-1 h-3.5 w-3.5" />新建分区
+              </Button>
+            ) : null}
           </div>
           <div className="mt-3 space-y-2">
             {zoneCards.map((zone) => {
@@ -215,10 +222,12 @@ export function StructureManager({ zones, boards, initialFilters }: StructureMan
               <p className="mt-1 text-xs text-muted-foreground">围绕当前分区集中查看节点状态、发帖权限、审核策略和流量表现。</p>
             </div>
             <div className="flex items-center gap-2">
-              {visibleZoneId ? <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "edit-zone", item: zones.find((zone) => zone.id === visibleZoneId)! })}>编辑分区</Button> : null}
-              <Button type="button" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "create-board", zoneId: visibleZoneId })}>
-                <Plus className="mr-1 h-3.5 w-3.5" />新建节点
-              </Button>
+              {visibleZoneId && zones.find((zone) => zone.id === visibleZoneId)?.canEditSettings ? <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "edit-zone", item: zones.find((zone) => zone.id === visibleZoneId)! })}>编辑分区</Button> : null}
+              {permissions.canCreateBoard ? (
+                <Button type="button" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "create-board", zoneId: visibleZoneId })}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />新建节点
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -233,7 +242,7 @@ export function StructureManager({ zones, boards, initialFilters }: StructureMan
           <div>
             {filteredBoards.length === 0 ? <div className="px-6 py-12 text-center text-sm text-muted-foreground">当前筛选条件下没有节点。</div> : null}
             {filteredBoards.map((board) => (
-              <BoardRow key={board.id} board={board} onEdit={() => setModal({ kind: "edit-board", item: board })} />
+              <BoardRow key={board.id} board={board} canDelete={permissions.canDeleteBoard} onEdit={() => setModal({ kind: "edit-board", item: board })} />
             ))}
           </div>
         </section>
@@ -244,7 +253,7 @@ export function StructureManager({ zones, boards, initialFilters }: StructureMan
   )
 }
 
-function BoardRow({ board, onEdit }: { board: BoardItem; onEdit: () => void }) {
+function BoardRow({ board, canDelete, onEdit }: { board: BoardItem; canDelete: boolean; onEdit: () => void }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -320,16 +329,22 @@ function BoardRow({ board, onEdit }: { board: BoardItem; onEdit: () => void }) {
       </div>
 
       <div className="flex flex-wrap justify-end gap-1.5">
-        <Button type="button" variant="outline" className="h-7 rounded-full px-2.5 text-xs" onClick={onEdit}>编辑</Button>
-        <Button type="button" variant="outline" disabled={isPending} className="h-7 rounded-full px-2.5 text-xs" onClick={() => runAction("PUT", { type: "board", id: board.id, name: board.name, slug: board.slug, description: board.description, sortOrder: board.sortOrder, zoneId: board.zoneId, allowPost: !board.allowPost, status: board.status, icon: board.icon }, board.allowPost ? "节点已暂停发帖" : "节点已开放发帖")}>
-          {board.allowPost ? "暂停发帖" : "开放发帖"}
-        </Button>
-        <Button type="button" variant="outline" disabled={isPending} className="h-7 rounded-full px-2.5 text-xs" onClick={() => runAction("PUT", { type: "board", id: board.id, name: board.name, slug: board.slug, description: board.description, sortOrder: board.sortOrder, zoneId: board.zoneId, allowPost: board.allowPost, status: board.status === "HIDDEN" ? "ACTIVE" : "HIDDEN", icon: board.icon }, board.status === "HIDDEN" ? "节点已恢复显示" : "节点已隐藏")}>
-          {board.status === "HIDDEN" ? "恢复显示" : "隐藏"}
-        </Button>
-        <Button type="button" disabled={isPending} className="h-7 rounded-full bg-red-600 px-2.5 text-xs text-white hover:bg-red-500" onClick={() => runAction("DELETE", { type: "board", id: board.id }, "节点已删除")}>
-          <Trash2 className="mr-1 h-3.5 w-3.5" />删除
-        </Button>
+        {board.canEditSettings ? <Button type="button" variant="outline" className="h-7 rounded-full px-2.5 text-xs" onClick={onEdit}>编辑</Button> : null}
+        {board.canEditSettings ? (
+          <Button type="button" variant="outline" disabled={isPending} className="h-7 rounded-full px-2.5 text-xs" onClick={() => runAction("PUT", { type: "board", id: board.id, name: board.name, slug: board.slug, description: board.description, sortOrder: board.sortOrder, zoneId: board.zoneId, allowPost: !board.allowPost, status: board.status, icon: board.icon }, board.allowPost ? "节点已暂停发帖" : "节点已开放发帖")}>
+            {board.allowPost ? "暂停发帖" : "开放发帖"}
+          </Button>
+        ) : null}
+        {board.canEditSettings ? (
+          <Button type="button" variant="outline" disabled={isPending} className="h-7 rounded-full px-2.5 text-xs" onClick={() => runAction("PUT", { type: "board", id: board.id, name: board.name, slug: board.slug, description: board.description, sortOrder: board.sortOrder, zoneId: board.zoneId, allowPost: board.allowPost, status: board.status === "HIDDEN" ? "ACTIVE" : "HIDDEN", icon: board.icon }, board.status === "HIDDEN" ? "节点已恢复显示" : "节点已隐藏")}>
+            {board.status === "HIDDEN" ? "恢复显示" : "隐藏"}
+          </Button>
+        ) : null}
+        {canDelete ? (
+          <Button type="button" disabled={isPending} className="h-7 rounded-full bg-red-600 px-2.5 text-xs text-white hover:bg-red-500" onClick={() => runAction("DELETE", { type: "board", id: board.id }, "节点已删除")}>
+            <Trash2 className="mr-1 h-3.5 w-3.5" />删除
+          </Button>
+        ) : null}
 
       </div>
     </div>

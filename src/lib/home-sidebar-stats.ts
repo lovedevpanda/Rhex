@@ -1,6 +1,4 @@
-import { CommentStatus, PostStatus } from "@prisma/client"
-
-import { prisma } from "@/db/client"
+import { findHomeSidebarStats } from "@/db/home-sidebar-queries"
 
 export interface HomeSidebarStatsData {
   postCount: number
@@ -13,32 +11,6 @@ const HOME_SIDEBAR_STATS_CACHE_TTL_MS = 60_000
 let cachedHomeSidebarStats: HomeSidebarStatsData | null = null
 let homeSidebarStatsCacheExpiry = 0
 let homeSidebarStatsCachePromise: Promise<HomeSidebarStatsData> | null = null
-
-async function readHomeSidebarStatsFromDB(): Promise<HomeSidebarStatsData> {
-  const [postCount, replyCount, userCount] = await Promise.all([
-    prisma.post.count({
-      where: {
-        status: {
-          notIn: [PostStatus.PENDING, PostStatus.DELETED],
-        },
-      },
-    }),
-    prisma.comment.count({
-      where: {
-        status: {
-          notIn: [CommentStatus.PENDING, CommentStatus.DELETED],
-        },
-      },
-    }),
-    prisma.user.count(),
-  ])
-
-  return {
-    postCount,
-    replyCount,
-    userCount,
-  }
-}
 
 function setHomeSidebarStatsCache(stats: HomeSidebarStatsData) {
   cachedHomeSidebarStats = stats
@@ -57,7 +29,7 @@ async function getMemoryCachedHomeSidebarStats(): Promise<HomeSidebarStatsData> 
   }
 
   if (!homeSidebarStatsCachePromise) {
-    homeSidebarStatsCachePromise = readHomeSidebarStatsFromDB()
+    homeSidebarStatsCachePromise = findHomeSidebarStats()
       .then((stats) => {
         setHomeSidebarStatsCache(stats)
         return stats

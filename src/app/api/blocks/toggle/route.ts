@@ -35,5 +35,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "拉黑操作失败",
   logPrefix: "[api/blocks/toggle] unexpected error",
   unauthorizedMessage: "请先登录后再拉黑用户",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

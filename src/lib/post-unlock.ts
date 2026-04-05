@@ -1,4 +1,4 @@
-import { prisma } from "@/db/client"
+import { findPostUnlockUserPoints, findPurchasedPostBlockLog, listPurchasedPostBlockLogReasons, runPostUnlockTransaction } from "@/db/post-unlock-queries"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -15,30 +15,21 @@ function buildReason(postId: string, blockId: string, pointName: string, price: 
 export async function purchasePostBlock(options: { userId: number; postId: string; blockId: string; price: number; sellerId: number }) {
   const settings = await getSiteSettings()
 
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.pointLog.findFirst({
-      where: {
-        userId: options.userId,
-        reason: {
-          startsWith: buildReasonPrefix(options.postId, options.blockId),
-        },
-      },
-      select: { id: true },
-    })
+  return runPostUnlockTransaction(async (tx) => {
+    const existing = await findPurchasedPostBlockLog({
+      userId: options.userId,
+      postId: options.postId,
+      reasonPrefix: buildReasonPrefix(options.postId, options.blockId),
+    }, tx)
 
     if (existing) {
       return { alreadyOwned: true }
     }
 
-    const user = await tx.user.findUnique({
-      where: { id: options.userId },
-      select: { id: true, points: true },
-    })
-
-    const seller = await tx.user.findUnique({
-      where: { id: options.sellerId },
-      select: { id: true, points: true },
-    })
+    const [user, seller] = await Promise.all([
+      findPostUnlockUserPoints(options.userId, tx),
+      findPostUnlockUserPoints(options.sellerId, tx),
+    ])
 
     const buyerPreparedDelta = await prepareScopedPointDelta({
       scopeKey: "POST_UNLOCK_OUTGOING",
@@ -87,19 +78,7 @@ export async function getPurchasedPostBlockIds(postId: string, userId?: number) 
     return new Set<string>()
   }
 
-  const rows = await prisma.pointLog.findMany({
-    where: {
-      userId,
-      relatedType: "POST",
-      relatedId: postId,
-      reason: {
-        startsWith: PURCHASE_REASON_PREFIX,
-      },
-    },
-    select: {
-      reason: true,
-    },
-  })
+  const rows = await listPurchasedPostBlockLogReasons(postId, userId)
 
   return new Set<string>(
     rows

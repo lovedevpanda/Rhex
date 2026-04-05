@@ -127,6 +127,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "采纳答案失败",
   logPrefix: "[api/posts/accept-answer] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

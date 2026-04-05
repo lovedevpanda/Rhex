@@ -1,4 +1,7 @@
+import type { Prisma } from "@/db/types"
+
 import { prisma } from "@/db/client"
+import type { TimestampCursorPayload } from "@/lib/cursor-pagination"
 
 export function countUnreadNotifications(userId: number) {
   return prisma.notification.count({
@@ -9,9 +12,34 @@ export function countUnreadNotifications(userId: number) {
   })
 }
 
-export function findNotificationsByUserId(userId: number, skip: number, take: number) {
-  return prisma.notification.findMany({
-    where: { userId },
+function buildNotificationCursorWhere(userId: number, cursor: TimestampCursorPayload, direction: "after" | "before"): Prisma.NotificationWhereInput {
+  const createdAt = new Date(cursor.createdAt)
+
+  return {
+    userId,
+    OR: direction === "after"
+      ? [
+          { createdAt: { lt: createdAt } },
+          { createdAt, id: { lt: cursor.id } },
+        ]
+      : [
+          { createdAt: { gt: createdAt } },
+          { createdAt, id: { gt: cursor.id } },
+        ],
+  }
+}
+
+export async function findNotificationsByUserIdCursor(params: {
+  userId: number
+  take: number
+  after?: TimestampCursorPayload | null
+  before?: TimestampCursorPayload | null
+}) {
+  const normalizedTake = Math.min(Math.max(1, params.take), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
+  const rows = await prisma.notification.findMany({
+    where: cursor ? buildNotificationCursorWhere(params.userId, cursor, pagingDirection) : { userId: params.userId },
     include: {
       sender: {
         select: {
@@ -20,12 +48,21 @@ export function findNotificationsByUserId(userId: number, skip: number, take: nu
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip,
-    take,
+    orderBy: pagingDirection === "before"
+      ? [{ createdAt: "asc" }, { id: "asc" }]
+      : [{ createdAt: "desc" }, { id: "desc" }],
+    take: normalizedTake + 1,
   })
+
+  const hasExtra = rows.length > normalizedTake
+  const slicedRows = hasExtra ? rows.slice(0, normalizedTake) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }
 
 export function countNotificationsByUserId(userId: number) {

@@ -8,6 +8,6 @@ export const POST = createUserRouteHandler(async ({ currentUser }) => {
   errorMessage: "邀请码购买失败",
   logPrefix: "[api/invite-codes/purchase] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

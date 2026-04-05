@@ -128,6 +128,23 @@ a {
   @apply mb-3;
 }
 
+.markdown-body ruby {
+  ruby-align: center;
+  ruby-position: over;
+}
+
+.markdown-body rt {
+  font-size: 0.72em;
+  line-height: 1;
+}
+
+.markdown-body .md-wavy {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+
 .markdown-body .md-callout-info {
   @apply border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-900/80 dark:bg-sky-950/30 dark:text-sky-100;
 }

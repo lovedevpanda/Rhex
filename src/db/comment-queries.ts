@@ -1,5 +1,5 @@
 import type { Prisma } from "@/db/types"
-import { NotificationType } from "@/db/types"
+import { CommentStatus, NotificationType } from "@/db/types"
 import { prisma } from "@/db/client"
 import { applyPointDelta, type PreparedPointDelta } from "@/lib/point-center"
 import { createNotifications } from "@/lib/notification-writes"
@@ -117,6 +117,10 @@ export function buildCommentReplyInclude(viewerUserId?: number) {
   }
 }
 
+function buildVisibleCommentStatuses(includeHidden = false) {
+  return includeHidden ? [CommentStatus.NORMAL, CommentStatus.HIDDEN] : [CommentStatus.NORMAL]
+}
+
 function buildCommentBlockVisibilityWhere(viewerUserId?: number): Prisma.CommentWhereInput {
   if (!viewerUserId) {
     return {}
@@ -138,11 +142,13 @@ function buildCommentBlockVisibilityWhere(viewerUserId?: number): Prisma.Comment
   }
 }
 
-export function countRootCommentsByPostId(postId: string, viewerUserId?: number) {
+export function countRootCommentsByPostId(postId: string, viewerUserId?: number, includeHidden = false) {
   return prisma.comment.count({
     where: {
       postId,
-      status: "NORMAL",
+      status: {
+        in: buildVisibleCommentStatuses(includeHidden),
+      },
       parentId: null,
       ...buildCommentBlockVisibilityWhere(viewerUserId),
     },
@@ -161,7 +167,7 @@ export async function findRootCommentPageById(params: {
     where: {
       id: params.rootCommentId,
       postId: params.postId,
-      status: "NORMAL",
+      status: CommentStatus.NORMAL,
       parentId: null,
     },
     select: {
@@ -178,7 +184,7 @@ export async function findRootCommentPageById(params: {
   const precedingCount = await prisma.comment.count({
     where: {
       postId: params.postId,
-      status: "NORMAL",
+      status: CommentStatus.NORMAL,
       parentId: null,
       OR: rootComment.isPinnedByAuthor
         ? [
@@ -211,13 +217,16 @@ export function findRootCommentsByPostId(params: {
   page: number
   pageSize: number
   viewerUserId?: number
+  includeHidden?: boolean
 }) {
   const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
 
   return prisma.comment.findMany({
     where: {
       postId: params.postId,
-      status: "NORMAL",
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
       parentId: null,
       ...buildCommentBlockVisibilityWhere(params.viewerUserId),
     },
@@ -236,6 +245,7 @@ export function findRepliesByParentIds(params: {
   parentIds: string[]
   sort: "oldest" | "newest"
   viewerUserId?: number
+  includeHidden?: boolean
 }) {
   if (params.parentIds.length === 0) {
     return Promise.resolve([])
@@ -244,7 +254,9 @@ export function findRepliesByParentIds(params: {
   return prisma.comment.findMany({
     where: {
       postId: params.postId,
-      status: "NORMAL",
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
       parentId: { in: params.parentIds },
       ...buildCommentBlockVisibilityWhere(params.viewerUserId),
     },

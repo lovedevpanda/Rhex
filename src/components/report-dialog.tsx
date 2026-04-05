@@ -15,9 +15,10 @@ interface ReportDialogProps {
   buttonText?: string
   buttonClassName?: string
   icon?: ReactNode
+  showLabelWithIcon?: boolean
 }
 
-export function ReportDialog({ targetType, targetId, targetLabel, buttonText = "举报", buttonClassName, icon }: ReportDialogProps) {
+export function ReportDialog({ targetType, targetId, targetLabel, buttonText = "举报", buttonClassName, icon, showLabelWithIcon = false }: ReportDialogProps) {
   const [open, setOpen] = useState(false)
   const [reasonType, setReasonType] = useState<string>(REPORT_REASON_OPTIONS[0])
   const [reasonDetail, setReasonDetail] = useState("")
@@ -67,8 +68,12 @@ export function ReportDialog({ targetType, targetId, targetLabel, buttonText = "
   return (
     <>
       <Button type="button" variant="ghost" title={buttonText} aria-label={buttonText} className={buttonClassName ?? "h-8 px-2 text-xs text-muted-foreground hover:text-foreground"} onClick={() => setOpen(true)}>
-        {icon ?? buttonText}
-        {icon ? <span className="sr-only">{buttonText}</span> : null}
+        {icon ? (
+          <>
+            {icon}
+            {showLabelWithIcon ? <span>{buttonText}</span> : <span className="sr-only">{buttonText}</span>}
+          </>
+        ) : buttonText}
       </Button>
       <DialogPortal open={open} onClose={isPending ? undefined : handleClose} closeOnEscape={!isPending}>
         <div className="fixed inset-0 z-[140]">

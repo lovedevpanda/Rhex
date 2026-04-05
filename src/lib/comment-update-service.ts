@@ -39,7 +39,7 @@ export async function updateCommentFlow(input: {
     apiError(404, "评论不存在或不可编辑")
   }
 
-  const isAdmin = input.currentUser.role === "ADMIN" || input.currentUser.role === "MODERATOR"
+  const isAdmin = input.currentUser.role === "ADMIN"
   const isOwner = comment.userId === input.currentUser.id
 
   if (!isAdmin && !isOwner) {

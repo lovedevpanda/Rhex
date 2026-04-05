@@ -1,29 +1,12 @@
-import { prisma } from "@/db/client"
-import { NotificationType, type Prisma, type RelatedType } from "@/db/types"
+import { NotificationType,  type RelatedType } from "@/db/types"
+import {
+  createNotification as createNotificationEntry,
+  createNotifications as createNotificationsEntry,
+  findNotificationWebhookRecipientSignature,
+  type NotificationDraft,
+  type NotificationWriteClient,
+} from "@/db/notification-write-queries"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
-
-type NotificationWriteClient = Prisma.TransactionClient | typeof prisma
-
-export interface NotificationDraft {
-  userId: number
-  type: NotificationType
-  senderId?: number | null
-  relatedType: RelatedType
-  relatedId: string
-  title: string
-  content: string
-}
-
-function resolveNotificationClient(client?: NotificationWriteClient) {
-  return client ?? prisma
-}
-
-function normalizeNotificationDraft(draft: NotificationDraft) {
-  return {
-    ...draft,
-    senderId: draft.senderId ?? null,
-  }
-}
 
 interface SystemNotificationWebhookPayload {
   event: "system.notification.created"
@@ -101,12 +84,7 @@ async function dispatchSystemNotificationWebhook(input: {
   createdAt: Date
 }) {
   try {
-    const recipient = await prisma.user.findUnique({
-      where: { id: input.userId },
-      select: {
-        signature: true,
-      },
-    })
+    const recipient = await findNotificationWebhookRecipientSignature(input.userId)
 
     if (!recipient) {
       return
@@ -129,8 +107,8 @@ export async function sendSystemNotificationWebhookTest(params: {
   userId: number
   webhookUrl: string
 }) {
-  await postSystemNotificationWebhook(params.webhookUrl, buildSystemNotificationWebhookPayload({
-    id: `test-${Date.now()}`,
+    await postSystemNotificationWebhook(params.webhookUrl, buildSystemNotificationWebhookPayload({
+      id: `test-${Date.now()}`,
     userId: params.userId,
     title: "系统通知 Webhook 测试",
     content: "这是一条测试通知，说明你的站外通知 Webhook 已经可以正常接收系统消息。",
@@ -140,25 +118,17 @@ export async function sendSystemNotificationWebhookTest(params: {
   }))
 }
 
-export function createNotification(params: NotificationDraft & { client?: NotificationWriteClient }) {
-  const { client, ...draft } = params
+export type { NotificationDraft, NotificationWriteClient }
 
-  return resolveNotificationClient(client).notification.create({
-    data: normalizeNotificationDraft(draft),
-  })
+export function createNotification(params: NotificationDraft & { client?: NotificationWriteClient }) {
+  return createNotificationEntry(params)
 }
 
 export function createNotifications(params: {
   notifications: NotificationDraft[]
   client?: NotificationWriteClient
 }) {
-  if (params.notifications.length === 0) {
-    return Promise.resolve({ count: 0 })
-  }
-
-  return resolveNotificationClient(params.client).notification.createMany({
-    data: params.notifications.map(normalizeNotificationDraft),
-  })
+  return createNotificationsEntry(params)
 }
 
 export async function createSystemNotification(params: {

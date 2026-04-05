@@ -24,10 +24,24 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const settings = await getSiteSettings()
   const searchParams = await props.searchParams;
   const keyword = readSearchParam(searchParams?.q)?.trim() ?? ""
-  const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
-  const results = settings.search.enabled ? await searchPosts(keyword, currentPage, 10) : null
-  const hasPrevPage = currentPage > 1
-  const hasNextPage = results ? currentPage * 10 < results.total : false
+  const after = readSearchParam(searchParams?.after) ?? null
+  const before = readSearchParam(searchParams?.before) ?? null
+  const results = settings.search.enabled ? await searchPosts(keyword, { pageSize: 10, after, before }) : null
+
+  function buildSearchHref(params: { before?: string | null; after?: string | null }) {
+    const query = new URLSearchParams()
+    query.set("q", keyword)
+
+    if (params.before) {
+      query.set("before", params.before)
+    }
+
+    if (params.after) {
+      query.set("after", params.after)
+    }
+
+    return `/search?${query.toString()}`
+  }
 
   return (
     <div className="min-h-screen ">
@@ -62,11 +76,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
                   <p className="text-sm text-muted-foreground">共找到 {results!.total} 条结果</p>
                   <ForumPostStream posts={results!.items} />
                   <div className="flex items-center justify-between pt-2">
-                    <a href={`/search?q=${encodeURIComponent(results!.keyword)}&page=${Math.max(1, currentPage - 1)}`} className={hasPrevPage ? "" : "pointer-events-none opacity-50"}>
+                    <a href={results!.hasPrevPage && results!.prevCursor ? buildSearchHref({ before: results!.prevCursor }) : "#"} className={results!.hasPrevPage ? "" : "pointer-events-none opacity-50"}>
                       <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
                     </a>
-                    <span className="text-sm text-muted-foreground">第 {currentPage} 页</span>
-                    <a href={`/search?q=${encodeURIComponent(results!.keyword)}&page=${currentPage + 1}`} className={hasNextPage ? "" : "pointer-events-none opacity-50"}>
+                    <span className="text-sm text-muted-foreground">按游标分页浏览搜索结果</span>
+                    <a href={results!.hasNextPage && results!.nextCursor ? buildSearchHref({ after: results!.nextCursor }) : "#"} className={results!.hasNextPage ? "" : "pointer-events-none opacity-50"}>
                       <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
                     </a>
                   </div>

@@ -1,5 +1,4 @@
-import { prisma } from "@/db/client"
-import { countUserCommentLikes, countUserPostLikes, syncUserReceivedLikesInTransaction } from "@/db/level-system-queries"
+import { countLevelDefinitions, countUserCommentLikes, countUserPostLikes, createManyLevelDefinitions, findAllLevelDefinitions, findAllUserIdsForLevelRefresh, findLevelDefinitionByLevel, findUserLevelGrowthUser, findUserLevelProgressByUserId, saveLevelDefinitionsInTransaction, syncUserReceivedLikesInTransaction, updateUserLevel, upsertUserCheckInGrowth } from "@/db/level-system-queries"
 
 
 type LevelDefinitionRecord = {
@@ -16,38 +15,7 @@ type LevelDefinitionRecord = {
   updatedAt: Date
 }
 
-type UserLevelProgressRecord = {
-  id: string
-  userId: number
-  checkInDays: number
-  receivedPostLikes: number
-  receivedCommentLikes: number
-  receivedLikeCount: number
-  createdAt: Date
-  updatedAt: Date
-}
 
-type ExtendedPrismaClient = typeof prisma & {
-  levelDefinition: {
-    count: () => Promise<number>
-    createMany: (args: { data: Array<Omit<LevelDefinitionRecord, "id" | "createdAt" | "updatedAt">> }) => Promise<unknown>
-    findMany: (args?: { orderBy?: { level: "asc" | "desc" }; select?: { id: true } }) => Promise<Array<LevelDefinitionRecord | { id: string }>>
-    findUnique: (args: { where: { level?: number; id?: string } }) => Promise<LevelDefinitionRecord | null>
-    deleteMany: (args: { where: { id: { in: string[] } } }) => Promise<unknown>
-    update: (args: { where: { id: string }; data: Partial<Omit<LevelDefinitionRecord, "id" | "createdAt" | "updatedAt">> }) => Promise<LevelDefinitionRecord>
-    create: (args: { data: Omit<LevelDefinitionRecord, "id" | "createdAt" | "updatedAt"> }) => Promise<LevelDefinitionRecord>
-  }
-  userLevelProgress: {
-    findUnique: (args: { where: { userId: number }; select?: { checkInDays: true } }) => Promise<Pick<UserLevelProgressRecord, "checkInDays"> | UserLevelProgressRecord | null>
-    upsert: (args: {
-      where: { userId: number }
-      update: Partial<{ checkInDays: { increment: number }; receivedPostLikes: number; receivedCommentLikes: number; receivedLikeCount: number }>
-      create: { userId: number; checkInDays?: number; receivedPostLikes?: number; receivedCommentLikes?: number; receivedLikeCount?: number }
-    }) => Promise<UserLevelProgressRecord>
-  }
-}
-
-const extendedPrisma = prisma as ExtendedPrismaClient
 
 const DEFAULT_LEVEL_DEFINITIONS = [
   {
@@ -166,23 +134,19 @@ export interface UserLevelGrowthSnapshot {
 }
 
 export async function ensureLevelDefinitions() {
-  const count = await extendedPrisma.levelDefinition.count()
+  const count = await countLevelDefinitions()
 
   if (count > 0) {
     return
   }
 
-  await extendedPrisma.levelDefinition.createMany({
-    data: DEFAULT_LEVEL_DEFINITIONS,
-  })
+  await createManyLevelDefinitions(DEFAULT_LEVEL_DEFINITIONS)
 }
 
 export async function getLevelDefinitions(): Promise<LevelDefinitionItem[]> {
   await ensureLevelDefinitions()
 
-  const levels = await extendedPrisma.levelDefinition.findMany({
-    orderBy: { level: "asc" },
-  }) as LevelDefinitionRecord[]
+  const levels = await findAllLevelDefinitions()
 
   return levels.map((item: LevelDefinitionRecord) => ({
     id: item.id,
@@ -201,27 +165,13 @@ export async function getLevelDefinitions(): Promise<LevelDefinitionItem[]> {
 
 export async function getLevelDefinitionByLevel(level: number) {
   await ensureLevelDefinitions()
-  return extendedPrisma.levelDefinition.findUnique({ where: { level } })
+  return findLevelDefinitionByLevel(level)
 }
 
 export async function getLevelGrowthSnapshot(userId: number): Promise<UserLevelGrowthSnapshot | null> {
   const [user, progress] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        level: true,
-        postCount: true,
-        commentCount: true,
-        likeReceivedCount: true,
-      },
-    }),
-    extendedPrisma.userLevelProgress.findUnique({
-      where: { userId },
-      select: {
-        checkInDays: true,
-      },
-    }),
+    findUserLevelGrowthUser(userId),
+    findUserLevelProgressByUserId(userId),
   ])
 
   if (!user) {
@@ -264,10 +214,7 @@ export async function evaluateUserLevelProgress(userId: number) {
   }
 
   if (nextLevel !== snapshot.level) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { level: nextLevel },
-    })
+    await updateUserLevel(userId, nextLevel)
   }
 
   const currentDefinition = levels.find((item) => item.level === nextLevel) ?? levels[0] ?? null
@@ -285,18 +232,7 @@ export async function evaluateUserLevelProgress(userId: number) {
 }
 
 export async function recordUserCheckInGrowth(userId: number) {
-  await extendedPrisma.userLevelProgress.upsert({
-    where: { userId },
-    update: {
-      checkInDays: {
-        increment: 1,
-      },
-    },
-    create: {
-      userId,
-      checkInDays: 1,
-    },
-  })
+  await upsertUserCheckInGrowth(userId)
 
   return evaluateUserLevelProgress(userId)
 }
@@ -351,55 +287,9 @@ export async function saveLevelDefinitions(input: Array<{
     requireLikeCount: 0,
   }
 
-  await prisma.$transaction(async () => {
-    const existing = await extendedPrisma.levelDefinition.findMany({ select: { id: true } }) as Array<{ id: string }>
-    const keepIds = normalized.map((item) => item.id).filter(Boolean) as string[]
-    const deleteIds = existing.map((item: { id: string }) => item.id).filter((id: string) => !keepIds.includes(id))
+  await saveLevelDefinitionsInTransaction(normalized)
 
-    if (deleteIds.length > 0) {
-      await extendedPrisma.levelDefinition.deleteMany({
-        where: {
-          id: {
-            in: deleteIds,
-          },
-        },
-      })
-    }
-
-    for (const item of normalized) {
-      if (item.id) {
-        await extendedPrisma.levelDefinition.update({
-          where: { id: item.id },
-          data: {
-            level: item.level,
-            name: item.name,
-            color: item.color,
-            icon: item.icon,
-            requireCheckInDays: item.requireCheckInDays,
-            requirePostCount: item.requirePostCount,
-            requireCommentCount: item.requireCommentCount,
-            requireLikeCount: item.requireLikeCount,
-          },
-        })
-        continue
-      }
-
-      await extendedPrisma.levelDefinition.create({
-        data: {
-          level: item.level,
-          name: item.name,
-          color: item.color,
-          icon: item.icon,
-          requireCheckInDays: item.requireCheckInDays,
-          requirePostCount: item.requirePostCount,
-          requireCommentCount: item.requireCommentCount,
-          requireLikeCount: item.requireLikeCount,
-        },
-      })
-    }
-  })
-
-  const users = await prisma.user.findMany({ select: { id: true } })
+  const users = await findAllUserIdsForLevelRefresh()
   await Promise.all(users.map((user) => evaluateUserLevelProgress(user.id)))
 
   return getLevelDefinitions()

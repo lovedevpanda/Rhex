@@ -126,3 +126,23 @@ export function findVipOrders() {
     },
   })
 }
+
+export function createAdminLogEntry(data: {
+  adminId: number
+  action: string
+  targetType: string
+  targetId: string
+  detail?: string
+  ip?: string | null
+}) {
+  return prisma.adminLog.create({
+    data: {
+      adminId: data.adminId,
+      action: data.action,
+      targetType: data.targetType,
+      targetId: data.targetId,
+      detail: data.detail,
+      ip: data.ip?.trim() || null,
+    },
+  })
+}

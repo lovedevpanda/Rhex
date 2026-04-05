@@ -443,6 +443,164 @@ export async function claimPostRedPacketInTransaction(input: {
   })
 }
 
+export function findPostRewardPoolContentByPostId(postId: string) {
+  return prisma.post.findUnique({
+    where: { id: postId },
+    select: {
+      content: true,
+    },
+  })
+}
+
+export function createPostRewardPoolRecord(
+  tx: Prisma.TransactionClient,
+  data: Prisma.PostRedPacketUncheckedCreateInput,
+) {
+  return tx.postRedPacket.create({ data })
+}
+
+export function runSerializablePostRewardPoolTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  return prisma.$transaction(callback, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  })
+}
+
+export function findJackpotClaimContext(tx: Prisma.TransactionClient, postId: string, userId: number) {
+  return Promise.all([
+    tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true, points: true, status: true },
+    }),
+    tx.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        status: true,
+        authorId: true,
+        content: true,
+        redPacket: true,
+      },
+    }),
+  ])
+}
+
+export async function findJackpotParticipantStats(
+  tx: Prisma.TransactionClient,
+  postId: string,
+  userId: number,
+  redPacketId: string,
+) {
+  const [replyCount, priorWinSummary] = await Promise.all([
+    tx.comment.count({
+      where: {
+        postId,
+        userId,
+      },
+    }),
+    tx.postRedPacketClaim.aggregate({
+      where: {
+        redPacketId,
+        userId,
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+  ])
+
+  return {
+    replyCount,
+    priorWinCount: priorWinSummary._count._all,
+  }
+}
+
+export function updateJackpotStatus(tx: Prisma.TransactionClient, redPacketId: string, status: PostRedPacketStatus) {
+  return tx.postRedPacket.update({
+    where: { id: redPacketId },
+    data: { status },
+  })
+}
+
+export function depositJackpotPool(
+  tx: Prisma.TransactionClient,
+  redPacketId: string,
+  expectedRemainingPoints: number,
+  nextRemainingPoints: number,
+) {
+  return tx.postRedPacket.updateMany({
+    where: {
+      id: redPacketId,
+      status: "ACTIVE",
+      remainingPoints: expectedRemainingPoints,
+    },
+    data: {
+      remainingPoints: nextRemainingPoints,
+    },
+  })
+}
+
+export function settleJackpotClaim(
+  tx: Prisma.TransactionClient,
+  redPacketId: string,
+  expectedRemainingPoints: number,
+  nextRemainingPoints: number,
+  amount: number,
+  status: PostRedPacketStatus,
+) {
+  return tx.postRedPacket.updateMany({
+    where: {
+      id: redPacketId,
+      status: "ACTIVE",
+      remainingPoints: expectedRemainingPoints,
+    },
+    data: {
+      remainingPoints: nextRemainingPoints,
+      claimedCount: { increment: 1 },
+      claimedPoints: { increment: amount },
+      status,
+    },
+  })
+}
+
+export function createJackpotRewardClaim(tx: Prisma.TransactionClient, input: {
+  redPacketId: string
+  postId: string
+  userId: number
+  triggerCommentId?: string
+  amount: number
+}) {
+  return tx.postRedPacketClaim.create({
+    data: {
+      redPacketId: input.redPacketId,
+      postId: input.postId,
+      userId: input.userId,
+      triggerType: "REPLY",
+      triggerCommentId: input.triggerCommentId,
+      amount: input.amount,
+    },
+  })
+}
+
+export function rollbackJackpotClaimSettlement(
+  tx: Prisma.TransactionClient,
+  redPacketId: string,
+  restoredRemainingPoints: number,
+  amount: number,
+  restoredStatus: PostRedPacketStatus,
+) {
+  return tx.postRedPacket.update({
+    where: { id: redPacketId },
+    data: {
+      remainingPoints: restoredRemainingPoints,
+      claimedCount: { decrement: 1 },
+      claimedPoints: { decrement: amount },
+      status: restoredStatus,
+    },
+  })
+}
+
 
 export function findPostRedPacketSummaryData(postId: string, currentUserId?: number) {
   return Promise.all([

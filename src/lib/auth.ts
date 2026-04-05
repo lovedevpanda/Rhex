@@ -1,24 +1,10 @@
 import { cache } from "react"
 
-import { prisma } from "@/db/client"
-import type { Prisma } from "@/db/types"
+import { findSessionActorByUsername, type SessionActor } from "@/db/session-actor-queries"
 import { getRequestIpFromHeaders } from "@/lib/request-ip"
 import { getSessionCookieName, parseSessionToken } from "@/lib/session"
 
-export const sessionActorSelect = {
-  id: true,
-  username: true,
-  nickname: true,
-  avatarPath: true,
-  role: true,
-  status: true,
-  level: true,
-  points: true,
-  vipLevel: true,
-  vipExpiresAt: true,
-} satisfies Prisma.UserSelect
-
-export type SessionActor = Prisma.UserGetPayload<{ select: typeof sessionActorSelect }>
+export type { SessionActor } from "@/db/session-actor-queries"
 
 export const getCurrentSessionActor = cache(async (): Promise<SessionActor | null> => {
   const { cookies, headers } = await import("next/headers")
@@ -33,10 +19,21 @@ export const getCurrentSessionActor = cache(async (): Promise<SessionActor | nul
   }
 
   try {
-    return await prisma.user.findUnique({
-      where: { username: session.username },
-      select: sessionActorSelect,
-    })
+    const actor = await findSessionActorByUsername(session.username)
+
+    if (!actor) {
+      return null
+    }
+
+    const invalidBeforeSeconds = actor.sessionInvalidBefore
+      ? Math.floor(actor.sessionInvalidBefore.getTime() / 1000)
+      : 0
+
+    if (invalidBeforeSeconds > 0 && session.issuedAt <= invalidBeforeSeconds) {
+      return null
+    }
+
+    return actor
   } catch (error) {
     console.error(error)
     return null

@@ -19,7 +19,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     apiError(404, "帖子不存在")
   }
 
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"
+  const isAdmin = currentUser.role === "ADMIN"
   const isOwner = currentUser.id === post.authorId
 
   if (!isOwner && !isAdmin) {
@@ -76,6 +76,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "评论置顶操作失败",
   logPrefix: "[api/posts/pin-comment] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

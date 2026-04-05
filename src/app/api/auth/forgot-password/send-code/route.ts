@@ -37,6 +37,10 @@ export const POST = createRouteHandler(async ({ request }) => {
     apiError(403, "该账号已被禁用，无法找回密码")
   }
 
+  if (user.status === "INACTIVE") {
+    apiError(403, "该账号未激活，无法找回密码")
+  }
+
   return withRequestWriteGuard({
     request,
     scope: "auth-forgot-password-send-code",

@@ -32,6 +32,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "帖子收藏失败",
   logPrefix: "[api/posts/favorite] unexpected error",
   unauthorizedMessage: "请先登录后再收藏",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

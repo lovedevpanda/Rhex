@@ -1,7 +1,21 @@
 import { type Prisma } from "@prisma/client"
 
-import { prisma } from "@/db/client"
 import { countPostGiftEventsBySender, createPostGiftEvent, listPostGiftStats, listPostGiftSupportAggregates, listRecentPostGiftEvents, type PostGiftRecentEventItem, type PostGiftStatItem } from "@/db/post-gift-queries"
+import {
+  countPostTipEventsBySender,
+  createPostTipRecord,
+  findPostTipRecipient,
+  findPostTipSender,
+  findPostTipSummarySnapshot,
+  findPostTipSupportPost,
+  findPostTipSupportersByIds,
+  findPostTipUserPoints,
+  incrementPostTipTotals,
+  listPostTipSupportAggregates,
+  type PostTipSupportPostRecord,
+  type PostTipSupportSenderRecord,
+  runPostTipTransaction,
+} from "@/db/post-tip-queries"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { getBusinessDayRange } from "@/lib/formatters"
 import { createSystemNotification } from "@/lib/notification-writes"
@@ -31,20 +45,6 @@ export interface PostTipSummary {
   tipCount: number
   tipTotalPoints: number
   topSupporters: PostTipLeaderboardItem[]
-}
-
-interface PostSupportPostRecord {
-  id: string
-  status: string
-  authorId: number
-  title: string
-}
-
-interface PostSupportSenderRecord {
-  id: number
-  points: number
-  status: string
-  username: string
 }
 
 interface PostSupportUsageCounts {
@@ -78,20 +78,16 @@ async function getSupportUsageCounts(params: {
   end: Date
 }): Promise<PostSupportUsageCounts> {
   const [rawDailyCount, rawPostCount, giftDailyCount, giftPostCount] = await Promise.all([
-    params.tx.postTip.count({
-      where: {
-        senderId: params.senderId,
-        createdAt: {
-          gte: params.start,
-          lt: params.end,
-        },
-      },
+    countPostTipEventsBySender({
+      client: params.tx,
+      senderId: params.senderId,
+      start: params.start,
+      end: params.end,
     }),
-    params.tx.postTip.count({
-      where: {
-        senderId: params.senderId,
-        postId: params.postId,
-      },
+    countPostTipEventsBySender({
+      client: params.tx,
+      senderId: params.senderId,
+      postId: params.postId,
     }),
     countPostGiftEventsBySender({
       client: params.tx,
@@ -113,8 +109,8 @@ async function getSupportUsageCounts(params: {
 }
 
 function validateSupportContext(params: {
-  post: PostSupportPostRecord | null
-  sender: PostSupportSenderRecord | null
+  post: PostTipSupportPostRecord | null
+  sender: PostTipSupportSenderRecord | null
   senderId: number
   amount: number
   pointName: string
@@ -152,8 +148,8 @@ async function createPostSupportBaseTransaction(params: {
   gift?: SiteTippingGiftItem | null
   onPersist: (context: {
     tx: PostSupportTx
-    post: PostSupportPostRecord
-    sender: PostSupportSenderRecord
+    post: PostTipSupportPostRecord
+    sender: PostTipSupportSenderRecord
   }) => Promise<void>
 }) {
   const { start, end } = getTodayRange()
@@ -163,16 +159,10 @@ async function createPostSupportBaseTransaction(params: {
     userId: params.senderId,
   })
 
-  return prisma.$transaction(async (tx) => {
+  return runPostTipTransaction(async (tx) => {
     const [postRecord, senderRecord] = await Promise.all([
-      tx.post.findUnique({
-        where: { id: params.postId },
-        select: { id: true, status: true, authorId: true, title: true },
-      }),
-      tx.user.findUnique({
-        where: { id: params.senderId },
-        select: { id: true, points: true, status: true, username: true },
-      }),
+      findPostTipSupportPost(params.postId, tx),
+      findPostTipSender(params.senderId, tx),
     ])
 
     validateSupportContext({
@@ -183,8 +173,8 @@ async function createPostSupportBaseTransaction(params: {
       pointName: params.pointName,
     })
 
-    const post = postRecord as PostSupportPostRecord
-    const sender = senderRecord as PostSupportSenderRecord
+    const post = postRecord as PostTipSupportPostRecord
+    const sender = senderRecord as PostTipSupportSenderRecord
     const usageCounts = await getSupportUsageCounts({
       tx,
       senderId: sender.id,
@@ -201,10 +191,7 @@ async function createPostSupportBaseTransaction(params: {
       postTipError(400, `该帖子打赏次数已达上限（${params.perPostLimit} 次）`)
     }
 
-    const recipient = await tx.user.findUnique({
-      where: { id: post.authorId },
-      select: { id: true, points: true },
-    })
+    const recipient = await findPostTipRecipient(post.authorId, tx)
 
     if (!recipient) {
       postTipError(404, "帖子作者不存在")
@@ -216,16 +203,9 @@ async function createPostSupportBaseTransaction(params: {
       userId: post.authorId,
     })
 
-    await tx.post.update({
-      where: { id: post.id },
-      data: {
-        tipCount: {
-          increment: 1,
-        },
-        tipTotalPoints: {
-          increment: params.amount,
-        },
-      },
+    await incrementPostTipTotals(tx, {
+      postId: post.id,
+      amount: params.amount,
     })
 
     await params.onPersist({
@@ -284,48 +264,23 @@ export async function getPostTipSummary(postId: string, currentUserId?: number):
   const { start, end } = getTodayRange()
 
   const [postTotals, rawLeaderboardRows, giftLeaderboardRows, currentUser, rawDailyCount, rawPostCount, giftDailyCount, giftPostCount, giftStats, recentGiftEvents] = await Promise.all([
-    prisma.post.findUnique({
-      where: { id: postId },
-      select: {
-        tipCount: true,
-        tipTotalPoints: true,
-      },
-    }),
-    prisma.postTip.groupBy({
-      by: ["senderId"],
-      where: { postId },
-      _sum: { amount: true },
-      orderBy: {
-        _sum: {
-          amount: "desc",
-        },
-      },
-      take: 20,
-    }),
+    findPostTipSummarySnapshot(postId),
+    listPostTipSupportAggregates(postId, 20),
     listPostGiftSupportAggregates(postId, 20),
     currentUserId
-      ? prisma.user.findUnique({
-          where: { id: currentUserId },
-          select: { id: true, points: true },
-        })
+      ? findPostTipUserPoints(currentUserId)
       : Promise.resolve(null),
     currentUserId
-      ? prisma.postTip.count({
-          where: {
-            senderId: currentUserId,
-            createdAt: {
-              gte: start,
-              lt: end,
-            },
-          },
+      ? countPostTipEventsBySender({
+          senderId: currentUserId,
+          start,
+          end,
         })
       : Promise.resolve(0),
     currentUserId
-      ? prisma.postTip.count({
-          where: {
-            senderId: currentUserId,
-            postId,
-          },
+      ? countPostTipEventsBySender({
+          senderId: currentUserId,
+          postId,
         })
       : Promise.resolve(0),
     currentUserId
@@ -348,7 +303,7 @@ export async function getPostTipSummary(postId: string, currentUserId?: number):
   const supporterTotals = new Map<number, number>()
 
   for (const row of rawLeaderboardRows) {
-    supporterTotals.set(row.senderId, (supporterTotals.get(row.senderId) ?? 0) + (row._sum.amount ?? 0))
+    supporterTotals.set(row.senderId, (supporterTotals.get(row.senderId) ?? 0) + row.totalAmount)
   }
 
   for (const row of giftLeaderboardRows) {
@@ -364,17 +319,7 @@ export async function getPostTipSummary(postId: string, currentUserId?: number):
     .slice(0, 10)
 
   const supporterIds = mergedSupporterRows.map((item) => item.senderId)
-  const supporters = supporterIds.length > 0
-    ? await prisma.user.findMany({
-        where: { id: { in: supporterIds } },
-        select: {
-          id: true,
-          username: true,
-          nickname: true,
-          avatarPath: true,
-        },
-      })
-    : []
+  const supporters = await findPostTipSupportersByIds(supporterIds)
 
   const supporterMap = new Map(supporters.map((item) => [item.id, item]))
   const topSupporters: PostTipLeaderboardItem[] = mergedSupporterRows.flatMap((item) => {
@@ -462,13 +407,11 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
     dailyLimit: settings.tippingDailyLimit,
     perPostLimit: settings.tippingPerPostLimit,
     onPersist: async ({ tx, post }) => {
-      await tx.postTip.create({
-        data: {
-          postId: post.id,
-          senderId: input.senderId,
-          receiverId: post.authorId,
-          amount: input.amount,
-        },
+      await createPostTipRecord(tx, {
+        postId: post.id,
+        senderId: input.senderId,
+        receiverId: post.authorId,
+        amount: input.amount,
       })
     },
   })

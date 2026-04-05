@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { AlertTriangle, CheckCircle2, FileText, Info, Megaphone, Settings2, Shield, TrendingUp, Users } from "lucide-react"
+import { AlertTriangle, Ban, Bookmark, CheckCircle2, Eye, FileText, Heart, Info, LayoutGrid, Megaphone, MessageSquare, Settings2, Shield, TrendingUp, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -24,12 +24,13 @@ import { AdminSensitiveWordManager } from "@/components/admin-sensitive-word-man
 import { AdminSettingsTabs } from "@/components/admin-settings-tabs"
 import { AdminUploadSettingsForm } from "@/components/admin-upload-settings-form"
 import { StructureManager } from "@/components/admin-structure-forms"
-import { AdminShell } from "@/components/admin-shell"
+import { AdminShell, adminNavigation } from "@/components/admin-shell"
 import { AdminUserList } from "@/components/admin-user-list"
 import { AdminVipSettingsForm } from "@/components/admin-vip-settings-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getAdminDashboardData, getAdminPosts, getAdminStructureData, requireAdminUser } from "@/lib/admin"
+import { getAdminDashboardData, getAdminPosts, getAdminStructureData } from "@/lib/admin"
 import { getAdminAnnouncementList } from "@/lib/admin-announcements"
+import { getVerificationAdminData } from "@/lib/admin-verification-service"
 import { isLocalPostType } from "@/lib/post-types"
 
 import { getAdminLogCenter } from "@/lib/admin-logs"
@@ -44,7 +45,7 @@ import { getAdminReports } from "@/lib/reports"
 import { getAdminFriendLinkPageData } from "@/lib/friend-links"
 import { readSearchParam } from "@/lib/search-params"
 import { getSensitiveWordPage, getServerSiteSettings } from "@/lib/site-settings"
-import { prisma } from "@/db/client"
+import { requireAdminActor } from "@/lib/moderator-permissions"
 
 type AdminTabKey = "overview" | "users" | "posts" | "structure" | "levels" | "badges" | "verifications" | "announcements" | "reports" | "logs" | "security" | "settings"
 type AdminSettingsSectionKey = "profile" | "markdown-emoji" | "footer-links" | "apps" | "registration" | "interaction" | "friend-links" | "invite-codes" | "redeem-codes" | "vip" | "upload"
@@ -68,6 +69,12 @@ const tabLabels: Record<AdminTabKey, string> = {
   settings: "站点设置",
 }
 
+function getAllowedAdminTabs(role: "ADMIN" | "MODERATOR") {
+  return role === "ADMIN"
+    ? adminTabs
+    : (["posts", "structure"] satisfies AdminTabKey[])
+}
+
 export async function generateMetadata(props: PageProps<"/admin">): Promise<Metadata> {
   const searchParams = await props.searchParams
   const currentTabValue = readSearchParam(searchParams?.tab)
@@ -81,55 +88,24 @@ export async function generateMetadata(props: PageProps<"/admin">): Promise<Meta
   }
 }
 
-function getAdminVerificationTypes() {
-  return prisma.verificationType.findMany({
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    include: {
-      _count: {
-        select: {
-          applications: true,
-        },
-      },
-    },
-  })
-}
-
-function getAdminVerificationApplications() {
-  return prisma.userVerification.findMany({
-    orderBy: [{ submittedAt: "desc" }],
-    take: 200,
-    include: {
-      type: true,
-      user: {
-        select: {
-          id: true,
-          username: true,
-          nickname: true,
-        },
-      },
-      reviewer: {
-        select: {
-          id: true,
-          username: true,
-          nickname: true,
-        },
-      },
-    },
-  })
-}
-
 export default async function AdminPage(props: PageProps<"/admin">) {
   const searchParams = await props.searchParams;
-  const admin = await requireAdminUser()
+  const admin = await requireAdminActor()
 
   if (!admin) {
     redirect("/login?redirect=/admin")
   }
 
+  const allowedTabs = getAllowedAdminTabs(admin.role)
   const currentTabValue = readSearchParam(searchParams?.tab)
-  const tab: AdminTabKey = adminTabs.includes((currentTabValue as AdminTabKey) ?? "overview")
+  const requestedTab: AdminTabKey = adminTabs.includes((currentTabValue as AdminTabKey) ?? "overview")
     ? ((currentTabValue as AdminTabKey) ?? "overview")
     : "overview"
+  const tab = allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0]
+
+  if (tab !== requestedTab) {
+    redirect(`/admin?tab=${tab}`)
+  }
   const currentSettingsSectionValue = readSearchParam(searchParams?.section)
   const currentSettingsSection: AdminSettingsSectionKey = adminSettingsSections.includes((currentSettingsSectionValue as AdminSettingsSectionKey) ?? "profile")
     ? ((currentSettingsSectionValue as AdminSettingsSectionKey) ?? "profile")
@@ -170,18 +146,25 @@ export default async function AdminPage(props: PageProps<"/admin">) {
   const currentLogBucketType = readSearchParam(searchParams?.logBucketType) ?? "ALL"
   const currentLogPage = readSearchParam(searchParams?.logPage) ?? "1"
   const currentLogPageSize = readSearchParam(searchParams?.logPageSize) ?? "20"
+  const navigationItems = adminNavigation.filter((item) => {
+    if (admin.role === "ADMIN") {
+      return true
+    }
 
-  const [dashboardData, structureData, siteSettings, adminUsers, filteredPosts, levelDefinitions, badges, announcements, inviteCodes, redeemCodes, reports, sensitiveWordResult, logCenter, friendLinks, verificationTypes, verificationApplications] = await Promise.all([
-    tab === "overview"
+    return item.href === "/admin?tab=posts" || item.href === "/admin?tab=structure"
+  })
+
+  const [dashboardData, structureData, siteSettings, adminUsers, filteredPosts, levelDefinitions, badges, announcements, inviteCodes, redeemCodes, reports, sensitiveWordResult, logCenter, friendLinks, verificationAdminData] = await Promise.all([
+    admin.role === "ADMIN" && tab === "overview"
       ? getAdminDashboardData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminDashboardData>> | null>(null),
     tab === "structure"
       ? getAdminStructureData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminStructureData>> | null>(null),
-    tab === "settings" && sectionsRequiringSiteSettings.has(currentSettingsSection)
+    admin.role === "ADMIN" && tab === "settings" && sectionsRequiringSiteSettings.has(currentSettingsSection)
       ? getServerSiteSettings()
       : Promise.resolve<Awaited<ReturnType<typeof getServerSiteSettings>> | null>(null),
-    tab === "users"
+    admin.role === "ADMIN" && tab === "users"
       ? getAdminUsers({
         keyword: currentUserKeyword || undefined,
         role: currentUserRole,
@@ -207,22 +190,22 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         pageSize: Number(currentPostPageSize),
       })
       : Promise.resolve<Awaited<ReturnType<typeof getAdminPosts>> | null>(null),
-    tab === "levels" ? getLevelDefinitions() : Promise.resolve<Awaited<ReturnType<typeof getLevelDefinitions>>>([]),
-    tab === "badges" ? getAllBadges() : Promise.resolve<Awaited<ReturnType<typeof getAllBadges>>>([]),
-    tab === "announcements" ? getAdminAnnouncementList() : Promise.resolve<Awaited<ReturnType<typeof getAdminAnnouncementList>>>([]),
-    tab === "settings" && currentSettingsSection === "invite-codes"
+    admin.role === "ADMIN" && tab === "levels" ? getLevelDefinitions() : Promise.resolve<Awaited<ReturnType<typeof getLevelDefinitions>>>([]),
+    admin.role === "ADMIN" && tab === "badges" ? getAllBadges() : Promise.resolve<Awaited<ReturnType<typeof getAllBadges>>>([]),
+    admin.role === "ADMIN" && tab === "announcements" ? getAdminAnnouncementList() : Promise.resolve<Awaited<ReturnType<typeof getAdminAnnouncementList>>>([]),
+    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "invite-codes"
       ? getInviteCodeList()
       : Promise.resolve<Awaited<ReturnType<typeof getInviteCodeList>>>([]),
-    tab === "settings" && currentSettingsSection === "redeem-codes"
+    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "redeem-codes"
       ? getRedeemCodeList()
       : Promise.resolve<Awaited<ReturnType<typeof getRedeemCodeList>>>([]),
-    tab === "reports"
+    admin.role === "ADMIN" && tab === "reports"
       ? getAdminReports({ page: Number(currentReportPage), pageSize: Number(currentReportPageSize) })
       : Promise.resolve<Awaited<ReturnType<typeof getAdminReports>> | null>(null),
-    tab === "security"
+    admin.role === "ADMIN" && tab === "security"
       ? getSensitiveWordPage({ page: Number(currentSecurityPage), pageSize: Number(currentSecurityPageSize) })
       : Promise.resolve<Awaited<ReturnType<typeof getSensitiveWordPage>> | null>(null),
-    tab === "logs"
+    admin.role === "ADMIN" && tab === "logs"
       ? getAdminLogCenter({
         activeTab: currentLogSubTab,
         keyword: currentLogKeyword,
@@ -233,19 +216,16 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         pageSize: Number(currentLogPageSize),
       })
       : Promise.resolve<Awaited<ReturnType<typeof getAdminLogCenter>> | null>(null),
-    tab === "settings" && currentSettingsSection === "friend-links"
+    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "friend-links"
       ? getAdminFriendLinkPageData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminFriendLinkPageData>> | null>(null),
-    tab === "verifications"
-      ? getAdminVerificationTypes()
-      : Promise.resolve<Awaited<ReturnType<typeof getAdminVerificationTypes>> | null>(null),
-    tab === "verifications"
-      ? getAdminVerificationApplications()
-      : Promise.resolve<Awaited<ReturnType<typeof getAdminVerificationApplications>> | null>(null),
+    admin.role === "ADMIN" && tab === "verifications"
+      ? getVerificationAdminData()
+      : Promise.resolve<Awaited<ReturnType<typeof getVerificationAdminData>> | null>(null),
   ])
 
   return (
-    <AdminShell currentTab={tab} adminName={admin.nickname ?? admin.username}>
+    <AdminShell currentTab={tab} adminName={admin.nickname ?? admin.username} navigationItems={navigationItems}>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 rounded-[24px] border border-border bg-card px-5 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -262,42 +242,81 @@ export default async function AdminPage(props: PageProps<"/admin">) {
 
         {tab === "overview" ? (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <StatCard title="注册用户" value={dashboardData!.overview.userCount} icon={<Users className="h-5 w-5" />} hint={`近 7 天新增 ${formatNumber(dashboardData!.overview.newUserCount7d)} 人`} />
-              <StatCard title="帖子总数" value={dashboardData!.overview.postCount} icon={<FileText className="h-5 w-5" />} hint={`近 7 天新增 ${formatNumber(dashboardData!.overview.newPostCount7d)} 篇`} />
-              <StatCard title="活跃用户" value={dashboardData!.overview.activeUserCount7d} icon={<TrendingUp className="h-5 w-5" />} hint="按最近登录、发帖、评论综合统计近 7 天活跃" />
-              <StatCard title="待处理举报" value={dashboardData!.overview.pendingReportCount} icon={<AlertTriangle className="h-5 w-5" />} hint={`累计举报 ${formatNumber(dashboardData!.overview.reportCount)} 条，优先处理风险内容`} />
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+              <CompactStatCard title="注册用户" value={dashboardData!.overview.userCount} icon={<Users className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newUserCount7d)}`} />
+              <CompactStatCard title="帖子总数" value={dashboardData!.overview.postCount} icon={<FileText className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newPostCount7d)}`} tone="emerald" />
+              <CompactStatCard title="评论总数" value={dashboardData!.overview.commentCount} icon={<MessageSquare className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newCommentCount7d)}`} tone="violet" />
+              <CompactStatCard title="活跃用户" value={dashboardData!.overview.activeUserCount7d} icon={<TrendingUp className="h-4 w-4" />} hint="近 7 天登录/发帖/评论活跃" tone="sky" />
+              <CompactStatCard title="待处理举报" value={dashboardData!.overview.pendingReportCount} icon={<AlertTriangle className="h-4 w-4" />} hint={`累计 ${formatNumber(dashboardData!.overview.reportCount)} 条`} tone="rose" />
+              <CompactStatCard title="待审核帖子" value={dashboardData!.overview.pendingPostCount} icon={<FileText className="h-4 w-4" />} hint={`已下线 ${formatNumber(dashboardData!.overview.offlinePostCount)} 篇`} tone="amber" />
+              <CompactStatCard title="节点数量" value={dashboardData!.overview.boardCount} icon={<LayoutGrid className="h-4 w-4" />} hint={`分区 ${formatNumber(dashboardData!.overview.zoneCount)} 个`} />
+              <CompactStatCard title="风控用户" value={dashboardData!.overview.mutedUserCount + dashboardData!.overview.bannedUserCount} icon={<Ban className="h-4 w-4" />} hint={`禁言 ${formatNumber(dashboardData!.overview.mutedUserCount)} / 封禁 ${formatNumber(dashboardData!.overview.bannedUserCount)}`} tone="slate" />
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard title="总浏览量" value={dashboardData!.overview.totalViewCount} description="帖子累计浏览规模" />
-              <MetricCard title="总点赞量" value={dashboardData!.overview.totalLikeCount} description="社区内容互动热度" />
-              <MetricCard title="总收藏量" value={dashboardData!.overview.totalFavoriteCount} description="用户内容沉淀意愿" />
-              <MetricCard title="节点关注量" value={dashboardData!.overview.totalFollowerCount} description="版块关注总规模" />
+            <section className="grid gap-3 xl:grid-cols-4">
+              <OverviewMetricPanel
+                title="内容脉冲"
+                description="看新增和产出节奏"
+                items={[
+                  { label: "今日发帖", value: dashboardData!.overview.todayPostCount, hint: `近 7 天 +${formatNumber(dashboardData!.overview.newPostCount7d)}` },
+                  { label: "今日评论", value: dashboardData!.overview.todayCommentCount, hint: `近 7 天 +${formatNumber(dashboardData!.overview.newCommentCount7d)}` },
+                  { label: "今日签到", value: dashboardData!.overview.todayCheckInUserCount, hint: "按业务日统计" },
+                ]}
+              />
+              <OverviewMetricPanel
+                title="互动规模"
+                description="看社区热度和沉淀"
+                items={[
+                  { label: "总浏览量", value: dashboardData!.overview.totalViewCount, icon: <Eye className="h-3.5 w-3.5" /> },
+                  { label: "总点赞量", value: dashboardData!.overview.totalLikeCount, icon: <Heart className="h-3.5 w-3.5" /> },
+                  { label: "总收藏量", value: dashboardData!.overview.totalFavoriteCount, icon: <Bookmark className="h-3.5 w-3.5" /> },
+                  { label: "节点关注量", value: dashboardData!.overview.totalFollowerCount, icon: <Users className="h-3.5 w-3.5" /> },
+                ]}
+              />
+              <OverviewMetricPanel
+                title="风险处置"
+                description="看举报流转和内容状态"
+                items={[
+                  { label: "待处理", value: dashboardData!.overview.pendingReportCount, tone: "rose" },
+                  { label: "处理中", value: dashboardData!.overview.processingReportCount, tone: "amber" },
+                  { label: "已解决", value: dashboardData!.overview.resolvedReportCount, tone: "emerald" },
+                  { label: "下线帖子", value: dashboardData!.overview.offlinePostCount, tone: "slate" },
+                ]}
+              />
+              <OverviewMetricPanel
+                title="用户状态"
+                description="看可运营用户质量"
+                items={[
+                  { label: "活跃用户", value: dashboardData!.overview.activeUserCount7d, hint: "近 7 天活跃" },
+                  { label: "禁言用户", value: dashboardData!.overview.mutedUserCount, tone: "amber" },
+                  { label: "封禁用户", value: dashboardData!.overview.bannedUserCount, tone: "rose" },
+                  { label: "今日举报", value: dashboardData!.overview.todayReportCount, tone: "slate" },
+                ]}
+              />
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
               <Card>
-                <CardHeader>
+                <CardHeader className="pb-3">
                   <CardTitle>近 7 天增长趋势</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 pb-4">
+                <CardContent className="space-y-3 pb-4">
                   <TrendLegend />
                   <DashboardTrendChart data={dashboardData!.trends} />
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
                     <TrendSummaryItem label="新增用户峰值" value={getTrendPeak(dashboardData!.trends, "userCount")} colorClassName="bg-sky-500" />
                     <TrendSummaryItem label="新增帖子峰值" value={getTrendPeak(dashboardData!.trends, "postCount")} colorClassName="bg-emerald-500" />
                     <TrendSummaryItem label="新增评论峰值" value={getTrendPeak(dashboardData!.trends, "commentCount")} colorClassName="bg-violet-500" />
-                    <MetricHighlightCard title="今日签到人数" value={dashboardData!.overview.todayCheckInUserCount} description="按业务日统计当日完成签到的独立用户数" compact />
+                    <MetricHighlightCard title="今日签到人数" value={dashboardData!.overview.todayCheckInUserCount} description="按业务日统计的签到独立用户" compact />
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">待审核事项</CardTitle>
+                  <CardTitle className="text-base">运营待办</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-2.5 pt-0 sm:grid-cols-2">
+                <CardContent className="grid gap-2 pt-0 sm:grid-cols-2">
                   <PendingReviewCard href="/admin?tab=verifications" title="待认证审核" value={dashboardData!.overview.pendingVerificationCount} description="处理用户身份与资质认证申请" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
                   <PendingReviewCard href="/admin?tab=settings&section=friend-links" title="友情链接审核" value={dashboardData!.overview.pendingFriendLinkCount} description="审核站点互链申请与展示资料" icon={<Shield className="h-3.5 w-3.5" />} />
                   <PendingReviewCard href="/admin/apps/self-serve-ads" title="广告审核" value={dashboardData!.overview.pendingAdOrderCount} description="审核自助推广广告位申请内容" icon={<Megaphone className="h-3.5 w-3.5" />} />
@@ -307,46 +326,55 @@ export default async function AdminPage(props: PageProps<"/admin">) {
               </Card>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <Card>
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <CardTitle>最近帖子</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="pt-0">
                   {dashboardData!.recentPosts.map((post) => (
-                    <div key={post.id} className="rounded-[24px] border border-border px-4 py-4">
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <div key={post.id} className="border-b border-border/70 py-3 last:border-b-0 last:pb-0 first:pt-0">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{post.boardName}</span>
                         <span>·</span>
                         <span>{post.authorName}</span>
                         <span>·</span>
                         <span>{post.createdAt ? formatMonthDayTime(post.createdAt) : "-"}</span>
                       </div>
-                      <h3 className="mt-2 text-base font-semibold">{post.title}</h3>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-accent px-3 py-1">{post.status}</span>
-                        {post.isPinned ? <span className="rounded-full bg-orange-100 px-3 py-1 text-orange-700">已置顶</span> : null}
-                        {post.isFeatured ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">已推荐</span> : null}
+                      <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold">{post.title}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className={getPostStatusBadgeClassName(post.status)}>{post.statusLabel}</span>
+                        <span className="rounded-full bg-accent px-2 py-0.5">{post.typeLabel}</span>
+                        <span className="text-muted-foreground">评论 {formatNumber(post.commentCount)}</span>
+                        <span className="text-muted-foreground">点赞 {formatNumber(post.likeCount)}</span>
+                        {post.isPinned ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-700 dark:bg-orange-500/15 dark:text-orange-200">置顶</span> : null}
+                        {post.isFeatured ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">推荐</span> : null}
                       </div>
+                      {post.reviewNote ? <p className="mt-1.5 line-clamp-1 text-[11px] text-muted-foreground">审核备注：{post.reviewNote}</p> : null}
                     </div>
                   ))}
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle>最近举报</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle>最近评论</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {dashboardData!.recentReports.map((report) => (
-                    <div key={report.id} className="rounded-[24px] border border-border px-4 py-4">
+                <CardContent className="pt-0">
+                  {dashboardData!.recentComments.map((comment) => (
+                    <div key={comment.id} className="border-b border-border/70 py-3 last:border-b-0 last:pb-0 first:pt-0">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">{report.reasonType}</p>
-                        <span className="rounded-full bg-accent px-3 py-1 text-xs">{report.status}</span>
+                        <p className="line-clamp-1 text-sm font-medium">{comment.postTitle}</p>
+                        <span className={getCommentStatusBadgeClassName(comment.status)}>{comment.status}</span>
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">举报人：{report.reporterName}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">时间：{report.createdAt ? formatMonthDayTime(report.createdAt) : "-"}</p>
-                      {report.reasonDetail ? <p className="mt-2 line-clamp-2 text-sm text-foreground/80">{report.reasonDetail}</p> : null}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>评论人：{comment.authorName}</span>
+                        <span>·</span>
+                        <span>{comment.createdAt ? formatMonthDayTime(comment.createdAt) : "-"}</span>
+                        <span>·</span>
+                        <span>/posts/{comment.postSlug}</span>
+                      </div>
+                      <p className="mt-1.5 line-clamp-2 text-[13px] text-foreground/80">{comment.content || "无评论内容"}</p>
                     </div>
                   ))}
                 </CardContent>
@@ -355,11 +383,11 @@ export default async function AdminPage(props: PageProps<"/admin">) {
           </>
         ) : null}
 
-        {tab === "settings" ? <AdminSettingsTabs currentSection={currentSettingsSection} /> : null}
+        {admin.role === "ADMIN" && tab === "settings" ? <AdminSettingsTabs currentSection={currentSettingsSection} /> : null}
 
         {tab === "users" ? <AdminUserList data={adminUsers!} /> : null}
         {tab === "posts" ? <AdminPostList data={filteredPosts!} /> : null}
-        {tab === "structure" ? <StructureManager zones={structureData!.zones} boards={structureData!.boardStatus} initialFilters={{ keyword: currentStructureKeyword, zoneId: currentStructureZoneId, boardStatus: currentStructureBoardStatus, posting: currentStructurePosting }} /> : null}
+        {tab === "structure" ? <StructureManager zones={structureData!.zones} boards={structureData!.boardStatus} permissions={structureData!.permissions} initialFilters={{ keyword: currentStructureKeyword, zoneId: currentStructureZoneId, boardStatus: currentStructureBoardStatus, posting: currentStructurePosting }} /> : null}
         {tab === "levels" ? <AdminLevelSettingsForm initialLevels={levelDefinitions} /> : null}
         {tab === "badges" ? <AdminBadgeManager initialBadges={badges.map((badge: BadgeItem) => ({
           id: badge.id,
@@ -399,66 +427,12 @@ export default async function AdminPage(props: PageProps<"/admin">) {
             status: effect.status,
           })),
         }))} /> : null}
-        {tab === "verifications" ? <AdminVerificationManager initialTypes={verificationTypes!.map((item) => ({
-          id: item.id,
-          name: item.name,
-          slug: item.slug,
-          description: item.description ?? "",
-          iconText: item.iconText ?? "✔️",
-          color: item.color,
-          formFields: (() => {
-            if (!item.formSchemaJson?.trim()) {
-              return []
-            }
-            try {
-              const parsed = JSON.parse(item.formSchemaJson) as Array<Record<string, unknown>>
-              if (!Array.isArray(parsed)) {
-                return []
-              }
-              return parsed.map((field, fieldIndex) => ({
-                id: String(field.id ?? `field_${fieldIndex + 1}`),
-                label: String(field.label ?? "字段"),
-                type: (["text", "textarea", "number", "url"].includes(String(field.type ?? "text")) ? String(field.type ?? "text") : "text") as "text" | "textarea" | "number" | "url",
-                placeholder: String(field.placeholder ?? "") || undefined,
-                required: field.required === true,
-                helpText: String(field.helpText ?? "") || undefined,
-                sortOrder: Number.isFinite(Number(field.sortOrder)) ? Number(field.sortOrder) : fieldIndex,
-              }))
-            } catch {
-              return []
-            }
-          })(),
-          sortOrder: item.sortOrder,
-          status: item.status,
-          needRemark: item.needRemark,
-          userLimit: item.userLimit,
-          allowResubmitAfterReject: item.allowResubmitAfterReject,
-          applicationCount: item._count.applications,
-        }))} initialApplications={verificationApplications!.map((item) => ({
-          id: item.id,
-          status: item.status,
-          content: item.content,
-          formResponseJson: item.formResponseJson,
-          note: item.note,
-          rejectReason: item.rejectReason,
-          submittedAt: item.submittedAt.toISOString(),
-          reviewedAt: item.reviewedAt?.toISOString() ?? null,
-          user: {
-            id: item.user.id,
-            username: item.user.username,
-            displayName: item.user.nickname?.trim() || item.user.username,
-          },
+        {tab === "verifications" ? <AdminVerificationManager initialTypes={verificationAdminData!.types} initialApplications={verificationAdminData!.applications.map((item) => ({
+          ...item,
           type: {
-            id: item.type.id,
-            name: item.type.name,
+            ...item.type,
             iconText: item.type.iconText ?? "✔️",
-            color: item.type.color,
           },
-          reviewer: item.reviewer ? {
-            id: item.reviewer.id,
-            username: item.reviewer.username,
-            displayName: item.reviewer.nickname?.trim() || item.reviewer.username,
-          } : null,
         }))} /> : null}
         {tab === "announcements" ? <AdminAnnouncementManager initialItems={announcements} /> : null}
         {tab === "settings" && currentSettingsSection === "profile" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="profile" initialSubTab={currentSettingsSubTab} /> : null}
@@ -481,28 +455,77 @@ export default async function AdminPage(props: PageProps<"/admin">) {
   )
 }
 
-function StatCard({ title, value, icon, hint }: { title: string; value: number; icon: React.ReactNode; hint: string }) {
+function CompactStatCard({
+  title,
+  value,
+  icon,
+  hint,
+  tone = "default",
+}: {
+  title: string
+  value: number
+  icon: React.ReactNode
+  hint: string
+  tone?: "default" | "sky" | "emerald" | "violet" | "rose" | "amber" | "slate"
+}) {
+  const toneClassName = {
+    default: "bg-accent text-foreground",
+    sky: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200",
+    emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
+    violet: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200",
+    rose: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200",
+    amber: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+    slate: "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-200",
+  }[tone]
+
   return (
     <Card>
-      <CardContent className="flex items-center justify-between p-5">
-        <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="mt-2 text-3xl font-semibold">{formatNumber(value)}</p>
-          <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+      <CardContent className="flex items-start justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-[12px] text-muted-foreground">{title}</p>
+          <p className="mt-1.5 text-2xl font-semibold leading-none">{formatNumber(value)}</p>
+          <p className="mt-2 line-clamp-1 text-[11px] text-muted-foreground">{hint}</p>
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-foreground">{icon}</div>
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", toneClassName)}>{icon}</div>
       </CardContent>
     </Card>
   )
 }
 
-function MetricCard({ title, value, description }: { title: string; value: number; description: string }) {
+function OverviewMetricPanel({
+  title,
+  description,
+  items,
+}: {
+  title: string
+  description: string
+  items: Array<{
+    label: string
+    value: number
+    hint?: string
+    icon?: React.ReactNode
+    tone?: "default" | "rose" | "amber" | "emerald" | "slate"
+  }>
+}) {
   return (
     <Card>
-      <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="mt-2 text-3xl font-semibold">{formatNumber(value)}</p>
-        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+      <CardHeader className="space-y-1 pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </CardHeader>
+      <CardContent className="grid gap-2 pt-0">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-[16px] border border-border/70 bg-accent/20 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium">{item.label}</p>
+              {item.hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{item.hint}</p> : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {item.icon ? <span className="text-muted-foreground">{item.icon}</span> : null}
+              <span className={getOverviewMetricValueClassName(item.tone)}>{formatNumber(item.value)}</span>
+            </div>
+          </div>
+        ))}
       </CardContent>
     </Card>
   )
@@ -510,7 +533,7 @@ function MetricCard({ title, value, description }: { title: string; value: numbe
 
 function PendingReviewCard({ href, title, value, description, icon }: { href: string; title: string; value: number; description: string; icon: React.ReactNode }) {
   return (
-    <Link href={href} title={description} className="rounded-[16px] border border-border px-3 py-3 transition-colors hover:bg-accent/70">
+    <Link href={href} title={description} className="rounded-[16px] border border-border px-3 py-2.5 transition-colors hover:bg-accent/70">
       <div className="flex items-start justify-between gap-2.5">
         <div>
           <div className="flex items-center gap-1.5">
@@ -529,7 +552,7 @@ function PendingReviewCard({ href, title, value, description, icon }: { href: st
 
 function MetricHighlightCard({ title, value, description, compact = false }: { title: string; value: number; description: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-[24px] border border-dashed border-border bg-accent/40", compact ? "px-4 py-4" : "px-4 py-4")}>
+    <div className={cn("rounded-[20px] border border-dashed border-border bg-accent/40", compact ? "px-3.5 py-3.5" : "px-4 py-4")}>
       <p className="text-sm font-medium">{title}</p>
       <p className={cn("mt-2 font-semibold", compact ? "text-2xl" : "text-3xl")}>{formatNumber(value)}</p>
       <p className={cn("text-xs leading-6 text-muted-foreground", compact ? "mt-2" : "mt-3")}>{description}</p>
@@ -559,7 +582,7 @@ function TrendLegend() {
 
 function TrendSummaryItem({ label, value, colorClassName }: { label: string; value: { count: number; dateLabel: string }; colorClassName: string }) {
   return (
-    <div className="rounded-[20px] border border-border px-4 py-4">
+    <div className="rounded-[18px] border border-border px-3.5 py-3.5">
       <div className="flex items-center gap-2">
         <span className={cn("h-2.5 w-2.5 rounded-full", colorClassName)} />
         <p className="text-sm font-medium">{label}</p>
@@ -629,6 +652,41 @@ function getTrendPeak(data: Array<{ date: string; userCount: number; postCount: 
 
 function formatChartDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(new Date(value))
+}
+
+function getOverviewMetricValueClassName(tone: "default" | "rose" | "amber" | "emerald" | "slate" = "default") {
+  return {
+    default: "text-sm font-semibold text-foreground",
+    rose: "text-sm font-semibold text-rose-700 dark:text-rose-200",
+    amber: "text-sm font-semibold text-amber-700 dark:text-amber-200",
+    emerald: "text-sm font-semibold text-emerald-700 dark:text-emerald-200",
+    slate: "text-sm font-semibold text-slate-700 dark:text-slate-200",
+  }[tone]
+}
+
+function getPostStatusBadgeClassName(status: string) {
+  if (status === "PENDING") {
+    return "rounded-full bg-amber-100 px-2 py-0.5 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+  }
+  if (status === "OFFLINE") {
+    return "rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-500/15 dark:text-slate-200"
+  }
+  return "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+}
+
+
+
+function getCommentStatusBadgeClassName(status: string) {
+  if (status === "NORMAL") {
+    return "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+  }
+  if (status === "PENDING") {
+    return "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+  }
+  if (status === "HIDDEN") {
+    return "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 dark:bg-slate-500/15 dark:text-slate-200"
+  }
+  return "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] text-rose-700 dark:bg-rose-500/15 dark:text-rose-200"
 }
 
 function formatNumber(value: number) {

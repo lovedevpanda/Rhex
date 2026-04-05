@@ -256,89 +256,92 @@ enum YinYangOption {
 }
 
 model User {
-  id                Int            @id @default(autoincrement())
-  username          String         @unique
-  email             String?        @unique
-  phone             String?        @unique
-  emailVerifiedAt   DateTime?   @db.Timestamptz(3)    
-  phoneVerifiedAt   DateTime?   @db.Timestamptz(3)    
-  passwordHash      String
-  nickname          String?        @unique
-  avatarPath        String?
-  bio               String?
-  signature         String?
-  gender            String?
-  role              UserRole       @default(USER)
-  status            UserStatus     @default(ACTIVE)
-  points            Int            @default(0)
-  level             Int            @default(1)
-  vipLevel          Int            @default(0)
-  vipExpiresAt      DateTime?   @db.Timestamptz(3)    
-  postCount         Int            @default(0)
-  commentCount      Int            @default(0)
-  likeReceivedCount Int            @default(0)
-  inviteCount       Int            @default(0)
-  acceptedAnswerCount Int          @default(0)
-  inviterId         Int?
-  lastPostAt        DateTime?   @db.Timestamptz(3)    
-  lastCommentAt     DateTime?   @db.Timestamptz(3)    
-  lastLoginAt       DateTime?   @db.Timestamptz(3)    
-  lastLoginIp       String?
-  createdAt         DateTime   @db.Timestamptz(3)          @default(now())
-  updatedAt         DateTime   @db.Timestamptz(3)          @updatedAt
-  inviter           User?          @relation("UserInvites", fields: [inviterId], references: [id], onDelete: SetNull)
-  invitedUsers      User[]         @relation("UserInvites")
-  posts             Post[]
-  comments              Comment[]             @relation("commentAuthor")
-  repliesReceived       Comment[]             @relation("replyToUser")
-  lotteryParticipations LotteryParticipant[]
-  lotteryWins           LotteryWinner[]
-  notifications         Notification[]        @relation("notificationUser")
-  sentNotifications Notification[] @relation("notificationSender")
-  boardFollows      BoardFollow[]
-  followingUsers    UserFollow[]             @relation("UserFollowSource")
-  followedByUsers   UserFollow[]             @relation("UserFollowTarget")
-  blocksInitiated   UserBlock[]              @relation("UserBlockSource")
-  blocksReceived    UserBlock[]              @relation("UserBlockTarget")
-  tagFollows        TagFollow[]
-  postFollows       PostFollow[]
-  favorites         Favorite[]
-  likes             Like[]
-  reports           Report[]       @relation("reporter")
-  handledReports    Report[]       @relation("handler")
-  pointLogs         PointLog[]
-  vipOrders         VipOrder[]
-  postTipsSent      PostTip[]      @relation("PostTipSender")
-  postTipsReceived  PostTip[]      @relation("PostTipReceiver")
-  postGiftEventsSent     PostGiftEvent[] @relation("PostGiftSender")
-  postGiftEventsReceived PostGiftEvent[] @relation("PostGiftReceiver")
-  postGiftStatsReceived  PostGiftStats[] @relation("PostGiftStatsReceiver")
-  redPacketsSent    PostRedPacket[]
-  redPacketClaims   PostRedPacketClaim[] @relation("PostRedPacketClaimUser")
-  commentEffectFeedbacks CommentEffectFeedback[]
-  checkInLogs       UserCheckInLog[]
-  pollVotes         PollVote[]
-  uploads           Upload[]
-  authAccounts      AuthAccount[]
-  authPasskeys      AuthPasskey[]
-  userBadges        UserBadge[]
-  adminLogs         AdminLog[]
-  announcements     Announcement[] @relation("announcementCreator")
-  loginLogs         UserLoginLog[]
-  messageParticipants ConversationParticipant[]
-  sentDirectMessages DirectMessage[]
-  levelProgress     UserLevelProgress?
-  generatedInviteCodes InviteCode[] @relation("InviteCodeCreator")
-  usedInviteCodes      InviteCode[] @relation("InviteCodeConsumer")
-  generatedRedeemCodes RedeemCode[] @relation("RedeemCodeCreator")
-  redeemedCodes        RedeemCode[] @relation("RedeemCodeConsumer")
-  verificationCodes       VerificationCode[]
-  verificationApplications UserVerification[] @relation("userVerificationApplicant")
-  reviewedVerifications    UserVerification[] @relation("userVerificationReviewer")
-  yinYangChallengesCreated YinYangChallenge[] @relation("YinYangChallengeCreator")
-  yinYangChallengesJoined  YinYangChallenge[] @relation("YinYangChallengeChallenger")
-  yinYangChallengeAttempts YinYangChallengeAttempt[]
+  id                         Int                         @id @default(autoincrement())
+  username                   String                      @unique
+  email                      String?                     @unique
+  phone                      String?                     @unique
+  emailVerifiedAt            DateTime?                   @db.Timestamptz(3)
+  phoneVerifiedAt            DateTime?                   @db.Timestamptz(3)
+  passwordHash               String
+  nickname                   String?                     @unique
+  avatarPath                 String?
+  bio                        String?
+  signature                  String?
+  gender                     String?
+  role                       UserRole                    @default(USER)
+  status                     UserStatus                  @default(ACTIVE)
+  points                     Int                         @default(0)
+  level                      Int                         @default(1)
+  vipLevel                   Int                         @default(0)
+  vipExpiresAt               DateTime?                   @db.Timestamptz(3)
+  postCount                  Int                         @default(0)
+  commentCount               Int                         @default(0)
+  likeReceivedCount          Int                         @default(0)
+  inviteCount                Int                         @default(0)
+  acceptedAnswerCount        Int                         @default(0)
+  inviterId                  Int?
+  lastPostAt                 DateTime?                   @db.Timestamptz(3)
+  lastCommentAt              DateTime?                   @db.Timestamptz(3)
+  lastLoginAt                DateTime?                   @db.Timestamptz(3)
+  lastLoginIp                String?
+  sessionInvalidBefore       DateTime?                   @db.Timestamptz(3)
+  createdAt                  DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                    @updatedAt @db.Timestamptz(3)
+  inviter                    User?                       @relation("UserInvites", fields: [inviterId], references: [id], onDelete: SetNull)
+  invitedUsers               User[]                      @relation("UserInvites")
+  posts                      Post[]
+  comments                   Comment[]                   @relation("commentAuthor")
+  repliesReceived            Comment[]                   @relation("replyToUser")
+  lotteryParticipations      LotteryParticipant[]
+  lotteryWins                LotteryWinner[]
+  notifications              Notification[]              @relation("notificationUser")
+  sentNotifications          Notification[]              @relation("notificationSender")
+  boardFollows               BoardFollow[]
+  followingUsers             UserFollow[]                @relation("UserFollowSource")
+  followedByUsers            UserFollow[]                @relation("UserFollowTarget")
+  blocksInitiated            UserBlock[]                 @relation("UserBlockSource")
+  blocksReceived             UserBlock[]                 @relation("UserBlockTarget")
+  tagFollows                 TagFollow[]
+  postFollows                PostFollow[]
+  favorites                  Favorite[]
+  likes                      Like[]
+  reports                    Report[]                    @relation("reporter")
+  handledReports             Report[]                    @relation("handler")
+  pointLogs                  PointLog[]
+  vipOrders                  VipOrder[]
+  postTipsSent               PostTip[]                   @relation("PostTipSender")
+  postTipsReceived           PostTip[]                   @relation("PostTipReceiver")
+  postGiftEventsSent         PostGiftEvent[]             @relation("PostGiftSender")
+  postGiftEventsReceived     PostGiftEvent[]             @relation("PostGiftReceiver")
+  postGiftStatsReceived      PostGiftStats[]             @relation("PostGiftStatsReceiver")
+  redPacketsSent             PostRedPacket[]
+  redPacketClaims            PostRedPacketClaim[]        @relation("PostRedPacketClaimUser")
+  commentEffectFeedbacks     CommentEffectFeedback[]
+  checkInLogs                UserCheckInLog[]
+  pollVotes                  PollVote[]
+  uploads                    Upload[]
+  authAccounts               AuthAccount[]
+  authPasskeys               AuthPasskey[]
+  userBadges                 UserBadge[]
+  adminLogs                  AdminLog[]
+  announcements              Announcement[]              @relation("announcementCreator")
+  loginLogs                  UserLoginLog[]
+  messageParticipants        ConversationParticipant[]
+  sentDirectMessages         DirectMessage[]
+  levelProgress              UserLevelProgress?
+  generatedInviteCodes       InviteCode[]                @relation("InviteCodeCreator")
+  usedInviteCodes            InviteCode[]                @relation("InviteCodeConsumer")
+  generatedRedeemCodes       RedeemCode[]                @relation("RedeemCodeCreator")
+  redeemedCodes              RedeemCode[]                @relation("RedeemCodeConsumer")
+  verificationCodes          VerificationCode[]
+  verificationApplications   UserVerification[]          @relation("userVerificationApplicant")
+  reviewedVerifications      UserVerification[]          @relation("userVerificationReviewer")
+  yinYangChallengesCreated   YinYangChallenge[]          @relation("YinYangChallengeCreator")
+  yinYangChallengesJoined    YinYangChallenge[]          @relation("YinYangChallengeChallenger")
+  yinYangChallengeAttempts   YinYangChallengeAttempt[]
   yinYangChallengeDailyStats YinYangChallengeDailyStat[]
+  moderatedZoneScopes        ModeratorZoneScope[]
+  moderatedBoardScopes       ModeratorBoardScope[]
 
   @@index([role])
   @@index([status])
@@ -354,8 +357,8 @@ model AuthAccount {
   providerUsername  String?
   providerEmail     String?
   metadataJson      String?
-  createdAt         DateTime @db.Timestamptz(3) @default(now())
-  updatedAt         DateTime @db.Timestamptz(3) @updatedAt
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
@@ -363,46 +366,46 @@ model AuthAccount {
 }
 
 model AuthPasskey {
-  id                  String   @id
+  id                  String    @id
   userId              Int
-  credentialId        String   @unique
+  credentialId        String    @unique
   credentialPublicKey String
-  counter             BigInt   @default(0)
+  counter             BigInt    @default(0)
   deviceType          String?
-  backedUp            Boolean  @default(false)
+  backedUp            Boolean   @default(false)
   transports          String?
   name                String?
   lastUsedAt          DateTime? @db.Timestamptz(3)
-  createdAt           DateTime @db.Timestamptz(3) @default(now())
-  updatedAt           DateTime @db.Timestamptz(3) @updatedAt
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([lastUsedAt])
 }
 
 model UserLevelProgress {
-  id                  String   @id @default(cuid())
-  userId              Int      @unique
-  checkInDays         Int      @default(0)
-  receivedPostLikes   Int      @default(0)
-  receivedCommentLikes Int     @default(0)
-  receivedLikeCount   Int      @default(0)
-  updatedAt           DateTime   @db.Timestamptz(3)    @updatedAt
-  createdAt           DateTime   @db.Timestamptz(3)    @default(now())
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  userId               Int      @unique
+  checkInDays          Int      @default(0)
+  receivedPostLikes    Int      @default(0)
+  receivedCommentLikes Int      @default(0)
+  receivedLikeCount    Int      @default(0)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model GobangMatch {
-  id          String            @id
-  creatorId   Int
+  id           String            @id
+  creatorId    Int
   challengerId Int?
-  status      GobangMatchStatus
-  winnerId    Int?
-  ticketCost  Int
-  winReward   Int
-  createdAt   DateTime   @db.Timestamptz(3)             @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)             @updatedAt
+  status       GobangMatchStatus
+  winnerId     Int?
+  ticketCost   Int
+  winReward    Int
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(3)
 
   @@index([creatorId])
   @@index([challengerId])
@@ -411,19 +414,19 @@ model GobangMatch {
 
 model GobangMove {
   id        String   @id
-  matchId    String
-  playerId   Int
-  step       Int
-  x          Int
-  y          Int
-  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
+  matchId   String
+  playerId  Int
+  step      Int
+  x         Int
+  y         Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([matchId, step])
 }
 
 model SelfServeAdOrder {
-  id              String                @id
-  appCode         String                @default("self-serve-ads")
+  id              String                 @id
+  appCode         String                 @default("self-serve-ads")
   userId          Int
   slotType        SelfServeAdSlotType
   slotIndex       Int
@@ -436,18 +439,18 @@ model SelfServeAdOrder {
   pricePoints     Int
   status          SelfServeAdOrderStatus
   reviewNote      String?
-  startsAt        DateTime?   @db.Timestamptz(3)
-  endsAt          DateTime?   @db.Timestamptz(3)
-  createdAt       DateTime   @db.Timestamptz(3) @default(now())
-  updatedAt       DateTime   @db.Timestamptz(3) @updatedAt
+  startsAt        DateTime?              @db.Timestamptz(3)
+  endsAt          DateTime?              @db.Timestamptz(3)
+  createdAt       DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime               @updatedAt @db.Timestamptz(3)
 
-  @@map("SelfServeAdOrder")
   @@index([status, slotType, slotIndex])
   @@index([userId, createdAt])
+  @@map("SelfServeAdOrder")
 }
 
 model YinYangChallenge {
-  id            String                 @id
+  id            String                   @id
   creatorId     Int
   challengerId  Int?
   status        YinYangChallengeStatus
@@ -461,12 +464,12 @@ model YinYangChallenge {
   taxPoints     Int
   winnerId      Int?
   loserId       Int?
-  expiresAt     DateTime?   @db.Timestamptz(3)
-  settledAt     DateTime?   @db.Timestamptz(3)
-  createdAt     DateTime   @db.Timestamptz(3) @default(now())
-  updatedAt     DateTime   @db.Timestamptz(3) @updatedAt
-  creator       User       @relation("YinYangChallengeCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  challenger    User?      @relation("YinYangChallengeChallenger", fields: [challengerId], references: [id], onDelete: SetNull)
+  expiresAt     DateTime?                @db.Timestamptz(3)
+  settledAt     DateTime?                @db.Timestamptz(3)
+  createdAt     DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                 @updatedAt @db.Timestamptz(3)
+  creator       User                     @relation("YinYangChallengeCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  challenger    User?                    @relation("YinYangChallengeChallenger", fields: [challengerId], references: [id], onDelete: SetNull)
   attempt       YinYangChallengeAttempt?
 
   @@index([creatorId, createdAt])
@@ -477,18 +480,18 @@ model YinYangChallenge {
 }
 
 model YinYangChallengeAttempt {
-  id             String         @id
-  challengeId    String         @unique
+  id             String           @id
+  challengeId    String           @unique
   challengerId   Int
   selectedOption YinYangOption
   isCorrect      Boolean
   stakePoints    Int
   rewardPoints   Int
   taxPoints      Int
-  createdAt      DateTime   @db.Timestamptz(3) @default(now())
-  settledAt      DateTime   @db.Timestamptz(3) @default(now())
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  settledAt      DateTime         @default(now()) @db.Timestamptz(3)
   challenge      YinYangChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  challenger     User            @relation(fields: [challengerId], references: [id], onDelete: Cascade)
+  challenger     User             @relation(fields: [challengerId], references: [id], onDelete: Cascade)
 
   @@index([challengerId, createdAt])
 }
@@ -501,8 +504,8 @@ model YinYangChallengeDailyStat {
   loseCount         Int      @default(0)
   todayProfitPoints Int      @default(0)
   todayLossPoints   Int      @default(0)
-  createdAt         DateTime   @db.Timestamptz(3) @default(now())
-  updatedAt         DateTime   @db.Timestamptz(3) @updatedAt
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, dateKey])
@@ -511,63 +514,63 @@ model YinYangChallengeDailyStat {
 }
 
 model LevelDefinition {
-  id                String   @id @default(cuid())
-  level             Int      @unique
-  name              String
-  color             String   @default("#64748b")
-  icon              String   @default("⭐")
-  requireCheckInDays Int     @default(0)
-  requirePostCount  Int      @default(0)
-  requireCommentCount Int    @default(0)
-  requireLikeCount  Int      @default(0)
-  createdAt         DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt         DateTime   @db.Timestamptz(3)    @updatedAt
+  id                  String   @id @default(cuid())
+  level               Int      @unique
+  name                String
+  color               String   @default("#64748b")
+  icon                String   @default("⭐")
+  requireCheckInDays  Int      @default(0)
+  requirePostCount    Int      @default(0)
+  requireCommentCount Int      @default(0)
+  requireLikeCount    Int      @default(0)
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([level])
 }
 
 model Zone {
-  id                   String   @id @default(cuid())
-  name                 String   @unique
-  slug                 String   @unique
+  id                   String               @id @default(cuid())
+  name                 String               @unique
+  slug                 String               @unique
   description          String?
   icon                 String?
-  sortOrder            Int      @default(0)
-  requirePostReview    Boolean  @default(false)
-  postPointDelta       Int      @default(0)
-  replyPointDelta      Int      @default(0)
-  postIntervalSeconds  Int      @default(120)
-  replyIntervalSeconds Int      @default(3)
-  allowedPostTypes     String?  @default("NORMAL,BOUNTY,POLL,LOTTERY")
-  minViewPoints        Int      @default(0)
-  minViewLevel         Int      @default(0)
-  minPostPoints        Int      @default(0)
-  minPostLevel         Int      @default(0)
-  minReplyPoints       Int      @default(0)
-  minReplyLevel        Int      @default(0)
-  minViewVipLevel      Int      @default(0)
-  minPostVipLevel      Int      @default(0)
-  minReplyVipLevel     Int      @default(0)
+  sortOrder            Int                  @default(0)
+  requirePostReview    Boolean              @default(false)
+  postPointDelta       Int                  @default(0)
+  replyPointDelta      Int                  @default(0)
+  postIntervalSeconds  Int                  @default(120)
+  replyIntervalSeconds Int                  @default(3)
+  allowedPostTypes     String?              @default("NORMAL,BOUNTY,POLL,LOTTERY")
+  minViewPoints        Int                  @default(0)
+  minViewLevel         Int                  @default(0)
+  minPostPoints        Int                  @default(0)
+  minPostLevel         Int                  @default(0)
+  minReplyPoints       Int                  @default(0)
+  minReplyLevel        Int                  @default(0)
+  minViewVipLevel      Int                  @default(0)
+  minPostVipLevel      Int                  @default(0)
+  minReplyVipLevel     Int                  @default(0)
   postListDisplayMode  String?
-  createdAt            DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt            DateTime   @db.Timestamptz(3)    @updatedAt
+  createdAt            DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @db.Timestamptz(3)
   boards               Board[]
+  moderatorScopes      ModeratorZoneScope[]
 
   @@index([sortOrder])
 }
 
-
 model Board {
-  id                   String        @id @default(cuid())
+  id                   String                @id @default(cuid())
   zoneId               String?
-  name                 String        @unique
-  slug                 String        @unique
+  name                 String                @unique
+  slug                 String                @unique
   description          String?
   iconPath             String?
   coverPath            String?
-  sortOrder            Int           @default(0)
-  status               BoardStatus   @default(ACTIVE)
-  allowPost            Boolean       @default(true)
+  sortOrder            Int                   @default(0)
+  status               BoardStatus           @default(ACTIVE)
+  allowPost            Boolean               @default(true)
   requirePostReview    Boolean?
   postPointDelta       Int?
   replyPointDelta      Int?
@@ -584,24 +587,55 @@ model Board {
   minPostVipLevel      Int?
   minReplyVipLevel     Int?
   postListDisplayMode  String?
-  postCount            Int           @default(0)
-  followerCount        Int           @default(0)
-  createdAt            DateTime   @db.Timestamptz(3)         @default(now())
-  updatedAt            DateTime   @db.Timestamptz(3)         @updatedAt
-  zone                 Zone?         @relation(fields: [zoneId], references: [id])
+  postCount            Int                   @default(0)
+  followerCount        Int                   @default(0)
+  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(3)
+  zone                 Zone?                 @relation(fields: [zoneId], references: [id])
   posts                Post[]
   followers            BoardFollow[]
+  moderatorScopes      ModeratorBoardScope[]
 
   @@index([zoneId])
   @@index([status])
   @@index([sortOrder])
 }
 
+model ModeratorZoneScope {
+  id              String   @id @default(cuid())
+  moderatorId     Int
+  zoneId          String
+  canEditSettings Boolean  @default(false)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  moderator       User     @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
+  zone            Zone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([moderatorId, zoneId])
+  @@index([zoneId])
+  @@index([moderatorId, createdAt])
+}
+
+model ModeratorBoardScope {
+  id              String   @id @default(cuid())
+  moderatorId     Int
+  boardId         String
+  canEditSettings Boolean  @default(false)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  moderator       User     @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
+  board           Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([moderatorId, boardId])
+  @@index([boardId])
+  @@index([moderatorId, createdAt])
+}
+
 model BoardFollow {
   id        String   @id @default(cuid())
   userId    Int
   boardId   String
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
 
@@ -614,7 +648,7 @@ model UserFollow {
   id          String   @id @default(cuid())
   followerId  Int
   followingId Int
-  createdAt   DateTime   @db.Timestamptz(3)  @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
   follower    User     @relation("UserFollowSource", fields: [followerId], references: [id], onDelete: Cascade)
   following   User     @relation("UserFollowTarget", fields: [followingId], references: [id], onDelete: Cascade)
 
@@ -627,7 +661,7 @@ model UserBlock {
   id        String   @id @default(cuid())
   blockerId Int
   blockedId Int
-  createdAt DateTime @db.Timestamptz(3) @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   blocker   User     @relation("UserBlockSource", fields: [blockerId], references: [id], onDelete: Cascade)
   blocked   User     @relation("UserBlockTarget", fields: [blockedId], references: [id], onDelete: Cascade)
 
@@ -644,72 +678,72 @@ enum PinScope {
 }
 
 model Post {
-  id                     String       @id @default(cuid())
-  boardId                String
-  authorId               Int
-  title                  String
-  slug                   String       @unique
-  summary                String?
-  content                String
-  coverPath              String?
-  type                   PostType     @default(NORMAL)
-  status                 PostStatus   @default(NORMAL)
-  reviewNote             String?
-  isPinned               Boolean      @default(false)
-  pinScope               PinScope     @default(NONE)
-  isFeatured             Boolean      @default(false)
-  isAnnouncement         Boolean      @default(false)
-  commentsVisibleToAuthorOnly Boolean @default(false)
-  minViewLevel           Int          @default(0)
-  minViewVipLevel        Int          @default(0)
-  viewCount              Int          @default(0)
-  commentCount           Int          @default(0)
-  likeCount              Int          @default(0)
-  favoriteCount          Int          @default(0)
-  score                  Float        @default(0)
-  tipCount               Int          @default(0)
-  tipTotalPoints         Int          @default(0)
-  bountyPoints           Int?
-  bountyAwardedAt        DateTime?   @db.Timestamptz(3)    
-  acceptedCommentId      String?      @unique
-  pollExpiresAt          DateTime?   @db.Timestamptz(3)    
-  lotteryStatus          LotteryStatus?
-  lotteryTriggerMode     LotteryTriggerMode?
-  lotteryStartsAt        DateTime?   @db.Timestamptz(3)    
-  lotteryEndsAt          DateTime?   @db.Timestamptz(3)    
-  lotteryParticipantGoal Int?
-  lotteryLockedAt        DateTime?   @db.Timestamptz(3)    
-  lotteryDrawnAt         DateTime?   @db.Timestamptz(3)    
-  lotteryAnnouncement    String?
-  editableUntil          DateTime?   @db.Timestamptz(3)    
-  appendedContent        String?
-  lastAppendedAt         DateTime?   @db.Timestamptz(3)    
-  lastCommentedAt        DateTime?   @db.Timestamptz(3)    
-  activityAt             DateTime   @db.Timestamptz(3)        @default(now())
-  publishedAt            DateTime?   @db.Timestamptz(3)    
-  createdAt              DateTime   @db.Timestamptz(3)        @default(now())
-  updatedAt              DateTime   @db.Timestamptz(3)        @updatedAt
-  board                  Board        @relation(fields: [boardId], references: [id])
-  author                 User         @relation(fields: [authorId], references: [id])
-  acceptedComment        Comment?     @relation("AcceptedBountyComment", fields: [acceptedCommentId], references: [id])
-  comments               Comment[]
-  favorites              Favorite[]
-  likes                  Like[]
-  tags                   PostTag[]
-  pollOptions            PollOption[]
-  pollVotes              PollVote[]
-  lotteryPrizes          LotteryPrize[]
-  lotteryConditions      LotteryCondition[]
-  lotteryParticipants    LotteryParticipant[]
-  lotteryWinners         LotteryWinner[]
-  appendices             PostAppendix[]
-  tips                   PostTip[]
-  giftEvents             PostGiftEvent[]
-  giftStats              PostGiftStats[]
-  redPacket              PostRedPacket?
-  redPacketClaims        PostRedPacketClaim[]
-  commentEffectFeedbacks CommentEffectFeedback[]
-  followers              PostFollow[]
+  id                          String                  @id @default(cuid())
+  boardId                     String
+  authorId                    Int
+  title                       String
+  slug                        String                  @unique
+  summary                     String?
+  content                     String
+  coverPath                   String?
+  type                        PostType                @default(NORMAL)
+  status                      PostStatus              @default(NORMAL)
+  reviewNote                  String?
+  isPinned                    Boolean                 @default(false)
+  pinScope                    PinScope                @default(NONE)
+  isFeatured                  Boolean                 @default(false)
+  isAnnouncement              Boolean                 @default(false)
+  commentsVisibleToAuthorOnly Boolean                 @default(false)
+  minViewLevel                Int                     @default(0)
+  minViewVipLevel             Int                     @default(0)
+  viewCount                   Int                     @default(0)
+  commentCount                Int                     @default(0)
+  likeCount                   Int                     @default(0)
+  favoriteCount               Int                     @default(0)
+  score                       Float                   @default(0)
+  tipCount                    Int                     @default(0)
+  tipTotalPoints              Int                     @default(0)
+  bountyPoints                Int?
+  bountyAwardedAt             DateTime?               @db.Timestamptz(3)
+  acceptedCommentId           String?                 @unique
+  pollExpiresAt               DateTime?               @db.Timestamptz(3)
+  lotteryStatus               LotteryStatus?
+  lotteryTriggerMode          LotteryTriggerMode?
+  lotteryStartsAt             DateTime?               @db.Timestamptz(3)
+  lotteryEndsAt               DateTime?               @db.Timestamptz(3)
+  lotteryParticipantGoal      Int?
+  lotteryLockedAt             DateTime?               @db.Timestamptz(3)
+  lotteryDrawnAt              DateTime?               @db.Timestamptz(3)
+  lotteryAnnouncement         String?
+  editableUntil               DateTime?               @db.Timestamptz(3)
+  appendedContent             String?
+  lastAppendedAt              DateTime?               @db.Timestamptz(3)
+  lastCommentedAt             DateTime?               @db.Timestamptz(3)
+  activityAt                  DateTime                @default(now()) @db.Timestamptz(3)
+  publishedAt                 DateTime?               @db.Timestamptz(3)
+  createdAt                   DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                   DateTime                @updatedAt @db.Timestamptz(3)
+  board                       Board                   @relation(fields: [boardId], references: [id])
+  author                      User                    @relation(fields: [authorId], references: [id])
+  acceptedComment             Comment?                @relation("AcceptedBountyComment", fields: [acceptedCommentId], references: [id])
+  comments                    Comment[]
+  favorites                   Favorite[]
+  likes                       Like[]
+  tags                        PostTag[]
+  pollOptions                 PollOption[]
+  pollVotes                   PollVote[]
+  lotteryPrizes               LotteryPrize[]
+  lotteryConditions           LotteryCondition[]
+  lotteryParticipants         LotteryParticipant[]
+  lotteryWinners              LotteryWinner[]
+  appendices                  PostAppendix[]
+  tips                        PostTip[]
+  giftEvents                  PostGiftEvent[]
+  giftStats                   PostGiftStats[]
+  redPacket                   PostRedPacket?
+  redPacketClaims             PostRedPacketClaim[]
+  commentEffectFeedbacks      CommentEffectFeedback[]
+  followers                   PostFollow[]
 
   @@index([boardId])
   @@index([authorId])
@@ -717,6 +751,7 @@ model Post {
   @@index([type])
   @@index([score])
   @@index([pinScope, createdAt])
+  @@index([authorId, status, createdAt])
   @@index([boardId, status, createdAt])
   @@index([boardId, status, lastCommentedAt])
   @@index([boardId, status, activityAt])
@@ -728,19 +763,23 @@ model Post {
 }
 
 model Tag {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  slug      String    @unique
-  createdAt DateTime   @db.Timestamptz(3)     @default(now())
+  id        String      @id @default(cuid())
+  name      String      @unique
+  slug      String      @unique
+  postCount Int         @default(0)
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
   posts     PostTag[]
   followers TagFollow[]
+
+  @@index([createdAt])
+  @@index([postCount, createdAt])
 }
 
 model TagFollow {
   id        String   @id @default(cuid())
   userId    Int
   tagId     String
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
@@ -753,7 +792,7 @@ model PostFollow {
   id        String   @id @default(cuid())
   userId    Int
   postId    String
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -770,6 +809,7 @@ model PostTag {
   tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([postId, tagId])
+  @@index([tagId, postId])
 }
 
 model PostAppendix {
@@ -777,33 +817,33 @@ model PostAppendix {
   postId    String
   content   String
   sortOrder Int      @default(0)
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt DateTime   @db.Timestamptz(3)    @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId, sortOrder])
 }
 
 model Comment {
-  id                    String        @id @default(cuid())
+  id                    String                 @id @default(cuid())
   postId                String
   userId                Int
   parentId              String?
   replyToUserId         Int?
   content               String
-  status                CommentStatus @default(NORMAL)
-  likeCount             Int           @default(0)
-  isAcceptedAnswer      Boolean       @default(false)
-  isPinnedByAuthor      Boolean       @default(false)
-  acceptedAt            DateTime?   @db.Timestamptz(3)    
-  bountyAcceptedForPost Post?         @relation("AcceptedBountyComment")
-  createdAt             DateTime   @db.Timestamptz(3)         @default(now())
-  updatedAt             DateTime   @db.Timestamptz(3)         @updatedAt
-  post                  Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user                  User          @relation("commentAuthor", fields: [userId], references: [id], onDelete: Cascade)
-  parent                Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies               Comment[]     @relation("CommentReplies")
-  replyToUser           User?         @relation("replyToUser", fields: [replyToUserId], references: [id])
+  status                CommentStatus          @default(NORMAL)
+  likeCount             Int                    @default(0)
+  isAcceptedAnswer      Boolean                @default(false)
+  isPinnedByAuthor      Boolean                @default(false)
+  acceptedAt            DateTime?              @db.Timestamptz(3)
+  bountyAcceptedForPost Post?                  @relation("AcceptedBountyComment")
+  createdAt             DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime               @updatedAt @db.Timestamptz(3)
+  post                  Post                   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user                  User                   @relation("commentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  parent                Comment?               @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies               Comment[]              @relation("CommentReplies")
+  replyToUser           User?                  @relation("replyToUser", fields: [replyToUserId], references: [id])
   likes                 Like[]
   pollVotes             PollVote[]
   lotteryParticipants   LotteryParticipant[]
@@ -824,24 +864,29 @@ model Like {
   targetId   String
   postId     String?
   commentId  String?
-  createdAt  DateTime   @db.Timestamptz(3)      @default(now())
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   post       Post?      @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment    Comment?   @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, targetType, targetId])
+  @@index([userId, targetType, createdAt])
   @@index([targetType, targetId])
+  @@index([postId])
+  @@index([commentId])
 }
 
 model Favorite {
   id        String   @id @default(cuid())
   userId    Int
   postId    String
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
+  @@index([userId, createdAt])
+  @@index([postId, createdAt])
 }
 
 model PollOption {
@@ -850,7 +895,7 @@ model PollOption {
   content   String
   sortOrder Int        @default(0)
   voteCount Int        @default(0)
-  createdAt DateTime   @db.Timestamptz(3)      @default(now())
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
   post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
   votes     PollVote[]
 
@@ -863,7 +908,7 @@ model PollVote {
   optionId  String
   userId    Int
   commentId String?
-  createdAt DateTime   @db.Timestamptz(3)      @default(now())
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
   post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
   option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -882,8 +927,8 @@ model LotteryPrize {
   description String
   quantity    Int
   sortOrder   Int             @default(0)
-  createdAt   DateTime   @db.Timestamptz(3)           @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)           @updatedAt
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
   post        Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
   winners     LotteryWinner[]
 
@@ -899,8 +944,8 @@ model LotteryCondition {
   description String?
   groupKey    String                   @default("default")
   sortOrder   Int                      @default(0)
-  createdAt   DateTime   @db.Timestamptz(3)                    @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)                    @updatedAt
+  createdAt   DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                 @updatedAt @db.Timestamptz(3)
   post        Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId, sortOrder])
@@ -908,20 +953,20 @@ model LotteryCondition {
 }
 
 model LotteryParticipant {
-  id               String   @id @default(cuid())
+  id               String          @id @default(cuid())
   postId           String
   userId           Int
   sourceCommentId  String?
-  joinedAt         DateTime   @db.Timestamptz(3)    @default(now())
-  lockedAt         DateTime?   @db.Timestamptz(3)    
-  lockVersion      Int      @default(0)
-  isEligible       Boolean  @default(true)
+  joinedAt         DateTime        @default(now()) @db.Timestamptz(3)
+  lockedAt         DateTime?       @db.Timestamptz(3)
+  lockVersion      Int             @default(0)
+  isEligible       Boolean         @default(true)
   ineligibleReason String?
-  createdAt        DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt        DateTime   @db.Timestamptz(3)    @updatedAt
-  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceComment    Comment? @relation(fields: [sourceCommentId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
+  post             Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceComment    Comment?        @relation(fields: [sourceCommentId], references: [id], onDelete: SetNull)
   winnings         LotteryWinner[]
 
   @@unique([postId, userId])
@@ -935,8 +980,8 @@ model LotteryWinner {
   prizeId       String
   participantId String
   userId        Int
-  drawnAt       DateTime   @db.Timestamptz(3)              @default(now())
-  createdAt     DateTime   @db.Timestamptz(3)              @default(now())
+  drawnAt       DateTime           @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
   post          Post               @relation(fields: [postId], references: [id], onDelete: Cascade)
   prize         LotteryPrize       @relation(fields: [prizeId], references: [id], onDelete: Cascade)
   participant   LotteryParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -957,36 +1002,37 @@ model Notification {
   title       String
   content     String
   isRead      Boolean          @default(false)
-  readAt      DateTime?   @db.Timestamptz(3)    
-  createdAt   DateTime   @db.Timestamptz(3)            @default(now())
+  readAt      DateTime?        @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
   user        User             @relation("notificationUser", fields: [userId], references: [id], onDelete: Cascade)
   sender      User?            @relation("notificationSender", fields: [senderId], references: [id])
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([userId, isRead, createdAt])
 }
 
 model Conversation {
-  id             String                    @id @default(cuid())
-  lastMessageAt  DateTime   @db.Timestamptz(3)                     @default(now())
-  createdAt      DateTime   @db.Timestamptz(3)                     @default(now())
-  updatedAt      DateTime   @db.Timestamptz(3)                     @updatedAt
-  participants   ConversationParticipant[]
-  messages       DirectMessage[]
+  id            String                    @id @default(cuid())
+  lastMessageAt DateTime                  @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                  @updatedAt @db.Timestamptz(3)
+  participants  ConversationParticipant[]
+  messages      DirectMessage[]
 
   @@index([lastMessageAt])
 }
 
 model ConversationParticipant {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   conversationId    String
   userId            Int
-  unreadCount       Int           @default(0)
+  unreadCount       Int            @default(0)
   lastReadMessageId String?
-  joinedAt          DateTime   @db.Timestamptz(3)         @default(now())
-  updatedAt         DateTime   @db.Timestamptz(3)         @updatedAt
-  conversation      Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt          DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
+  conversation      Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadMessage   DirectMessage? @relation("LastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
 
   @@unique([conversationId, userId])
@@ -995,13 +1041,13 @@ model ConversationParticipant {
 }
 
 model DirectMessage {
-  id             String                     @id @default(cuid())
-  conversationId String
-  senderId       Int
-  body           String
-  createdAt      DateTime   @db.Timestamptz(3)                      @default(now())
-  conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User                       @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  id                 String                    @id @default(cuid())
+  conversationId     String
+  senderId           Int
+  body               String
+  createdAt          DateTime                  @default(now()) @db.Timestamptz(3)
+  conversation       Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender             User                      @relation(fields: [senderId], references: [id], onDelete: Cascade)
   readByParticipants ConversationParticipant[] @relation("LastReadMessage")
 
   @@index([conversationId, createdAt])
@@ -1018,32 +1064,34 @@ model Report {
   status       ReportStatus @default(PENDING)
   handledBy    Int?
   handledNote  String?
-  handledAt    DateTime?   @db.Timestamptz(3)    
-  createdAt    DateTime   @db.Timestamptz(3)        @default(now())
+  handledAt    DateTime?    @db.Timestamptz(3)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
   reporter     User         @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   handler      User?        @relation("handler", fields: [handledBy], references: [id])
 
   @@index([reporterId])
+  @@index([reporterId, targetType, targetId, status])
   @@index([status])
+  @@index([status, createdAt])
   @@index([targetType, targetId])
 }
 
 model Badge {
-  id          String      @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
-  code        String      @unique
+  code        String            @unique
   description String?
   iconPath    String?
-  iconText    String?     @default("🏅")
-  color       String      @default("#f59e0b")
+  iconText    String?           @default("🏅")
+  color       String            @default("#f59e0b")
   imageUrl    String?
-  category    String?     @default("社区成就")
-  sortOrder   Int         @default(0)
-  pointsCost  Int         @default(0)
-  status      Boolean     @default(true)
-  isHidden    Boolean     @default(false)
-  createdAt   DateTime   @db.Timestamptz(3)       @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)       @updatedAt
+  category    String?           @default("社区成就")
+  sortOrder   Int               @default(0)
+  pointsCost  Int               @default(0)
+  status      Boolean           @default(true)
+  isHidden    Boolean           @default(false)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
   users       UserBadge[]
   rules       BadgeRule[]
   effects     PointEffectRule[]
@@ -1059,25 +1107,25 @@ model BadgeRule {
   value      String
   extraValue String?
   sortOrder  Int               @default(0)
-  createdAt  DateTime   @db.Timestamptz(3)             @default(now())
-  updatedAt  DateTime   @db.Timestamptz(3)             @updatedAt
+  createdAt  DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime          @updatedAt @db.Timestamptz(3)
   badge      Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@index([badgeId, sortOrder])
 }
 
 model UserBadge {
-  id             String            @id @default(cuid())
-  userId         Int
-  badgeId        String
-  grantedAt      DateTime   @db.Timestamptz(3)             @default(now())
-  grantedBy      Int?
-  grantSource    BadgeGrantSource  @default(SELF_CLAIM)
-  grantSnapshot  String?
-  isDisplayed    Boolean           @default(false)
-  displayOrder   Int               @default(0)
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  badge          Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  id            String           @id @default(cuid())
+  userId        Int
+  badgeId       String
+  grantedAt     DateTime         @default(now()) @db.Timestamptz(3)
+  grantedBy     Int?
+  grantSource   BadgeGrantSource @default(SELF_CLAIM)
+  grantSnapshot String?
+  isDisplayed   Boolean          @default(false)
+  displayOrder  Int              @default(0)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge         Badge            @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, badgeId])
   @@index([userId, grantedAt])
@@ -1098,30 +1146,30 @@ model VerificationType {
   needRemark               Boolean            @default(true)
   userLimit                Int                @default(1)
   allowResubmitAfterReject Boolean            @default(true)
-  createdAt                DateTime   @db.Timestamptz(3)              @default(now())
-  updatedAt                DateTime   @db.Timestamptz(3)              @updatedAt
+  createdAt                DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(3)
   applications             UserVerification[]
 
   @@index([status, sortOrder])
 }
 
 model UserVerification {
-  id              String                 @id @default(cuid())
-  userId          Int
-  typeId          String
-  status          UserVerificationStatus @default(PENDING)
-  content         String
+  id               String                 @id @default(cuid())
+  userId           Int
+  typeId           String
+  status           UserVerificationStatus @default(PENDING)
+  content          String
   formResponseJson String?
-  note            String?
-  rejectReason    String?
-  reviewerId      Int?
-  submittedAt     DateTime   @db.Timestamptz(3)                  @default(now())
-  reviewedAt      DateTime?   @db.Timestamptz(3)    
-  createdAt       DateTime   @db.Timestamptz(3)                  @default(now())
-  updatedAt       DateTime   @db.Timestamptz(3)                  @updatedAt
-  user            User                   @relation("userVerificationApplicant", fields: [userId], references: [id], onDelete: Cascade)
-  type            VerificationType       @relation(fields: [typeId], references: [id], onDelete: Cascade)
-  reviewer        User?                  @relation("userVerificationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  note             String?
+  rejectReason     String?
+  reviewerId       Int?
+  submittedAt      DateTime               @default(now()) @db.Timestamptz(3)
+  reviewedAt       DateTime?              @db.Timestamptz(3)
+  createdAt        DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
+  user             User                   @relation("userVerificationApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  type             VerificationType       @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  reviewer         User?                  @relation("userVerificationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
 
   @@index([userId, status, submittedAt])
   @@index([typeId, status, submittedAt])
@@ -1136,50 +1184,52 @@ model PointLog {
   reason      String
   relatedType RelatedType?
   relatedId   String?
-  createdAt   DateTime   @db.Timestamptz(3)        @default(now())
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
 
 model PointEffectRule {
-  id               String                  @id @default(cuid())
+  id               String                @id @default(cuid())
   badgeId          String?
   name             String
   description      String?
   targetType       PointEffectTargetType
   scopeKeys        String[]
   ruleKind         PointEffectRuleKind
-  direction        PointEffectDirection    @default(BUFF)
+  direction        PointEffectDirection  @default(BUFF)
   value            Float
   extraValue       Float?
   startMinuteOfDay Int?
   endMinuteOfDay   Int?
-  sortOrder        Int                     @default(0)
-  status           Boolean                 @default(true)
-  createdAt        DateTime   @db.Timestamptz(3)   @default(now())
-  updatedAt        DateTime   @db.Timestamptz(3)   @updatedAt
-  badge            Badge?                  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  sortOrder        Int                   @default(0)
+  status           Boolean               @default(true)
+  createdAt        DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @db.Timestamptz(3)
+  badge            Badge?                @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@index([status, targetType, sortOrder])
   @@index([badgeId, status, targetType, sortOrder])
 }
 
 model VipOrder {
-  id         String   @id @default(cuid())
-  userId      Int
-  orderType   String
-  amount      Int?
-  pointsCost  Int?
-  days        Int
-  vipLevel    Int     @default(1)
-  expiresAt   DateTime?   @db.Timestamptz(3)    
-  remark      String?
-  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  userId     Int
+  orderType  String
+  amount     Int?
+  pointsCost Int?
+  days       Int
+  vipLevel   Int       @default(1)
+  expiresAt  DateTime? @db.Timestamptz(3)
+  remark     String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
 
@@ -1195,53 +1245,54 @@ model Upload {
   fileHash     String?
   storagePath  String
   urlPath      String
-  createdAt    DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bucketType, fileHash])
   @@index([fileHash])
+  @@index([userId, createdAt])
 }
 
 model FriendLink {
-  id            String           @id @default(cuid())
-  name          String
-  url           String           @unique
-  logoPath      String?
-  description   String?
-  contact       String?
-  sortOrder     Int              @default(0)
-  clickCount    Int              @default(0)
-  status        FriendLinkStatus @default(PENDING)
-  reviewNote    String?
-  reviewedAt    DateTime?   @db.Timestamptz(3)    
-  createdAt     DateTime   @db.Timestamptz(3)            @default(now())
-  updatedAt     DateTime   @db.Timestamptz(3)            @updatedAt
+  id          String           @id @default(cuid())
+  name        String
+  url         String           @unique
+  logoPath    String?
+  description String?
+  contact     String?
+  sortOrder   Int              @default(0)
+  clickCount  Int              @default(0)
+  status      FriendLinkStatus @default(PENDING)
+  reviewNote  String?
+  reviewedAt  DateTime?        @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
 
   @@index([status, sortOrder, createdAt])
   @@index([createdAt])
 }
 
 model Announcement {
-  id          String             @id @default(cuid())
+  id          String                 @id @default(cuid())
   title       String
   content     String
-  status      AnnouncementStatus @default(DRAFT)
-  isPinned    Boolean            @default(false)
-  type        SiteDocumentType   @default(ANNOUNCEMENT)
+  status      AnnouncementStatus     @default(DRAFT)
+  isPinned    Boolean                @default(false)
+  type        SiteDocumentType       @default(ANNOUNCEMENT)
   sourceType  SiteDocumentSourceType @default(DOCUMENT)
   slug        String?
   linkUrl     String?
   titleColor  String?
-  titleBold   Boolean            @default(false)
-  publishedAt DateTime?   @db.Timestamptz(3)    
+  titleBold   Boolean                @default(false)
+  publishedAt DateTime?              @db.Timestamptz(3)
   createdBy   Int
-  createdAt   DateTime   @db.Timestamptz(3)              @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)              @updatedAt
-  creator     User               @relation("announcementCreator", fields: [createdBy], references: [id])
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
+  creator     User                   @relation("announcementCreator", fields: [createdBy], references: [id])
 
+  @@unique([type, slug])
   @@index([type, status])
   @@index([type, publishedAt])
-  @@unique([type, slug])
 }
 
 model SensitiveWord {
@@ -1250,8 +1301,11 @@ model SensitiveWord {
   matchType  String
   actionType String
   status     Boolean  @default(true)
-  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt  DateTime   @db.Timestamptz(3)    @updatedAt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([actionType, status])
 }
 
 model AdminLog {
@@ -1262,11 +1316,13 @@ model AdminLog {
   targetId   String?
   detail     String?
   ip         String?
-  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
   admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
+  @@index([adminId, createdAt])
   @@index([targetType])
+  @@index([targetType, targetId, createdAt])
   @@index([createdAt])
 }
 
@@ -1354,24 +1410,24 @@ model SiteSetting {
   uploadAvatarMaxFileSizeMb     Int      @default(2)
   markdownEmojiMapJson          String?  @default("[]")
   headerAppLinksJson            String?  @default("[{\"id\":\"home\",\"name\":\"首页\",\"href\":\"/\"},{\"id\":\"boards\",\"name\":\"节点\",\"href\":\"/boards\"},{\"id\":\"write\",\"name\":\"发帖\",\"href\":\"/write\"},{\"id\":\"messages\",\"name\":\"消息\",\"href\":\"/messages\"}]")
-  headerAppIconName            String   @default("grid")
-  appStateJson               String?  @default("{}")
-  sensitiveStateJson         String?  @default("{}")
+  headerAppIconName             String   @default("grid")
+  appStateJson                  String?  @default("{}")
+  sensitiveStateJson            String?  @default("{}")
   footerLinksJson               String?  @default("[{\"label\":\"关于\",\"href\":\"/about\"},{\"label\":\"小黑屋\",\"href\":\"/prison\"},{\"label\":\"帮助文档\",\"href\":\"/help\"},{\"label\":\"FAQ\",\"href\":\"/faq\"},{\"label\":\"协议\",\"href\":\"/terms\"}]")
-  createdAt                     DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt                     DateTime   @db.Timestamptz(3)    @updatedAt
+  createdAt                     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                     DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model PostTip {
   id         String   @id @default(cuid())
-  postId      String
-  senderId    Int
-  receiverId  Int
-  amount      Int
-  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
-  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  sender      User     @relation("PostTipSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User     @relation("PostTipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  postId     String
+  senderId   Int
+  receiverId Int
+  amount     Int
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender     User     @relation("PostTipSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("PostTipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([senderId, createdAt])
@@ -1380,14 +1436,14 @@ model PostTip {
 }
 
 model GiftDefinition {
-  id         String   @id
-  name       String
-  icon       String
-  price      Int
-  sortOrder  Int      @default(0)
-  isEnabled  Boolean  @default(true)
-  createdAt  DateTime @db.Timestamptz(3) @default(now())
-  updatedAt  DateTime @db.Timestamptz(3) @updatedAt
+  id        String   @id
+  name      String
+  icon      String
+  price     Int
+  sortOrder Int      @default(0)
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([isEnabled, sortOrder, createdAt])
 }
@@ -1403,7 +1459,7 @@ model PostGiftEvent {
   unitPrice        Int
   quantity         Int      @default(1)
   totalPoints      Int
-  createdAt        DateTime @db.Timestamptz(3) @default(now())
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
   post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   sender           User     @relation("PostGiftSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver         User     @relation("PostGiftReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
@@ -1425,9 +1481,9 @@ model PostGiftStats {
   unitPrice        Int
   totalCount       Int      @default(0)
   totalPoints      Int      @default(0)
-  lastSentAt       DateTime @db.Timestamptz(3) @default(now())
-  createdAt        DateTime @db.Timestamptz(3) @default(now())
-  updatedAt        DateTime @db.Timestamptz(3) @updatedAt
+  lastSentAt       DateTime @default(now()) @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
   post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   receiver         User     @relation("PostGiftStatsReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
@@ -1438,8 +1494,8 @@ model PostGiftStats {
 }
 
 model PostRedPacket {
-  id             String                  @id @default(cuid())
-  postId          String                  @unique
+  id              String                      @id @default(cuid())
+  postId          String                      @unique
   senderId        Int
   grantMode       PostRedPacketGrantMode
   claimOrderMode  PostRedPacketClaimOrderMode @default(FIRST_COME_FIRST_SERVED)
@@ -1448,13 +1504,13 @@ model PostRedPacket {
   packetCount     Int
   remainingPoints Int
   remainingCount  Int
-  status          PostRedPacketStatus     @default(ACTIVE)
-  claimedCount    Int                     @default(0)
-  claimedPoints   Int                     @default(0)
-  createdAt       DateTime   @db.Timestamptz(3)                   @default(now())
-  updatedAt       DateTime   @db.Timestamptz(3)                   @updatedAt
-  post            Post                    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  sender          User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  status          PostRedPacketStatus         @default(ACTIVE)
+  claimedCount    Int                         @default(0)
+  claimedPoints   Int                         @default(0)
+  createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                    @updatedAt @db.Timestamptz(3)
+  post            Post                        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender          User                        @relation(fields: [senderId], references: [id], onDelete: Cascade)
   claims          PostRedPacketClaim[]
 
   @@index([senderId, createdAt])
@@ -1462,14 +1518,14 @@ model PostRedPacket {
 }
 
 model PostRedPacketClaim {
-  id              String                   @id @default(cuid())
+  id               String                   @id @default(cuid())
   redPacketId      String
   postId           String
   userId           Int
   triggerType      PostRedPacketTriggerType
   triggerCommentId String?
   amount           Int
-  createdAt        DateTime   @db.Timestamptz(3)                    @default(now())
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
   redPacket        PostRedPacket            @relation(fields: [redPacketId], references: [id], onDelete: Cascade)
   post             Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user             User                     @relation("PostRedPacketClaimUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -1490,8 +1546,8 @@ model CommentEffectFeedback {
   scene         String
   rewardClaimId String?
   feedbackJson  Json
-  createdAt     DateTime            @db.Timestamptz(3) @default(now())
-  updatedAt     DateTime            @db.Timestamptz(3) @updatedAt
+  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @db.Timestamptz(3)
   post          Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment       Comment             @relation(fields: [commentId], references: [id], onDelete: Cascade)
   user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1504,17 +1560,17 @@ model CommentEffectFeedback {
 }
 
 model InviteCode {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id          String    @id @default(cuid())
+  code        String    @unique
   createdById Int?
   usedById    Int?
-  usedAt      DateTime?   @db.Timestamptz(3)    
-  expiresAt   DateTime?   @db.Timestamptz(3)    
+  usedAt      DateTime? @db.Timestamptz(3)
+  expiresAt   DateTime? @db.Timestamptz(3)
   note        String?
-  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)    @updatedAt
-  createdBy   User?    @relation("InviteCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  usedBy      User?    @relation("InviteCodeConsumer", fields: [usedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  createdBy   User?     @relation("InviteCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  usedBy      User?     @relation("InviteCodeConsumer", fields: [usedById], references: [id], onDelete: SetNull)
 
   @@index([createdById])
   @@index([usedById])
@@ -1522,20 +1578,20 @@ model InviteCode {
 }
 
 model RedeemCode {
-  id                String   @id @default(cuid())
-  code              String   @unique
+  id                String    @id @default(cuid())
+  code              String    @unique
   points            Int
-  codeCategory      String   @default("default")
+  codeCategory      String    @default("default")
   categoryUserLimit Int?
   createdById       Int?
   redeemedById      Int?
-  redeemedAt        DateTime?   @db.Timestamptz(3)    
-  expiresAt         DateTime?   @db.Timestamptz(3)    
+  redeemedAt        DateTime? @db.Timestamptz(3)
+  expiresAt         DateTime? @db.Timestamptz(3)
   note              String?
-  createdAt         DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt         DateTime   @db.Timestamptz(3)    @updatedAt
-  createdBy         User?    @relation("RedeemCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  redeemedBy        User?    @relation("RedeemCodeConsumer", fields: [redeemedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  createdBy         User?     @relation("RedeemCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  redeemedBy        User?     @relation("RedeemCodeConsumer", fields: [redeemedById], references: [id], onDelete: SetNull)
 
   @@index([codeCategory, createdAt])
   @@index([codeCategory, redeemedById])
@@ -1553,27 +1609,30 @@ model VerificationCode {
   attempts    Int                 @default(0)
   maxAttempts Int                 @default(5)
   expiresAt   DateTime
-  consumedAt  DateTime?   @db.Timestamptz(3)    
+  consumedAt  DateTime?           @db.Timestamptz(3)
   sentByIp    String?
   userAgent   String?
   userId      Int?
-  createdAt   DateTime   @db.Timestamptz(3)               @default(now())
-  updatedAt   DateTime   @db.Timestamptz(3)               @updatedAt
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([channel, target, purpose])
+  @@index([channel, target, purpose, consumedAt])
+  @@index([channel, target, purpose, consumedAt, createdAt])
   @@index([expiresAt])
   @@index([userId])
 }
+
 model RequestControl {
-  id         String   @id @default(cuid())
-  scope      String
-  identity   String
-  kind       String
+  id          String   @id @default(cuid())
+  scope       String
+  identity    String
+  kind        String
   fingerprint String?
-  expiresAt  DateTime
-  createdAt  DateTime   @db.Timestamptz(3)    @default(now())
-  updatedAt  DateTime   @db.Timestamptz(3)    @updatedAt
+  expiresAt   DateTime
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([scope, identity, kind, fingerprint])
   @@index([expiresAt])
@@ -1587,11 +1646,12 @@ model UserCheckInLog {
   checkedInOn String
   isMakeUp    Boolean  @default(false)
   makeUpCost  Int      @default(0)
-  createdAt   DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, checkedInOn])
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([checkedInOn])
 }
 
@@ -1600,10 +1660,10 @@ model UserLoginLog {
   userId    Int
   ip        String?
   userAgent String?
-  createdAt DateTime   @db.Timestamptz(3)    @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([createdAt])
-
 }

@@ -4,12 +4,11 @@ import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
 
 export function findAllTags() {
   return prisma.tag.findMany({
-    include: {
-      _count: {
-        select: {
-          posts: true,
-        },
-      },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      postCount: true,
     },
     orderBy: {
       createdAt: "desc",
@@ -25,12 +24,11 @@ export function findTagBySlugOrName(normalized: string) {
         { name: normalized },
       ],
     },
-    include: {
-      _count: {
-        select: {
-          posts: true,
-        },
-      },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      postCount: true,
     },
   })
 }
@@ -59,15 +57,14 @@ export function findTagListPage(options: { page: number; pageSize: number; sort:
   const normalizedPageSize = Math.min(Math.max(1, options.pageSize), 50)
   const orderBy = options.sort === "new"
     ? [{ createdAt: "desc" as const }, { name: "asc" as const }]
-    : [{ posts: { _count: "desc" as const } }, { createdAt: "desc" as const }, { name: "asc" as const }]
+    : [{ postCount: "desc" as const }, { createdAt: "desc" as const }, { name: "asc" as const }]
 
   return prisma.tag.findMany({
-    include: {
-      _count: {
-        select: {
-          posts: true,
-        },
-      },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      postCount: true,
     },
     orderBy,
     skip: (options.page - 1) * normalizedPageSize,
@@ -251,6 +248,18 @@ export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[
   })
 }
 
+export function countZoneNormalPosts(boardIds: string[], excludedPostIds: string[] = []) {
+  return prisma.post.count({
+    where: {
+      status: "NORMAL",
+      boardId: {
+        in: boardIds,
+      },
+      id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    },
+  })
+}
+
 export function findBoardPinnedPosts(boardId: string, zoneBoardIds: string[], pageSize?: number) {
   const normalizedPageSize = typeof pageSize === "number" ? Math.min(Math.max(1, pageSize), 50) : undefined
 
@@ -298,6 +307,16 @@ export function findBoardNormalPosts(boardId: string, excludedPostIds: string[],
     orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * normalizedPageSize,
     take: normalizedPageSize,
+  })
+}
+
+export function countBoardNormalPosts(boardId: string, excludedPostIds: string[] = []) {
+  return prisma.post.count({
+    where: {
+      status: "NORMAL",
+      boardId,
+      id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    },
   })
 }
 

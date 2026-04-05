@@ -8,6 +8,7 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   const result = await createStructureItem({
     body,
     adminId: adminUser.id,
+    actor: adminUser,
   })
 
   await writeAdminLog(adminUser.id, result.action, result.targetType, result.targetId, result.detail, getRequestIp(request))
@@ -16,6 +17,7 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   errorMessage: "创建结构失败",
   logPrefix: "[api/admin/structure:POST] unexpected error",
   unauthorizedMessage: "无权执行后台操作",
+  allowModerator: true,
 })
 
 export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
@@ -23,6 +25,7 @@ export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
   const result = await updateStructureItem({
     body,
     adminId: adminUser.id,
+    actor: adminUser,
   })
 
   await writeAdminLog(adminUser.id, result.action, result.targetType, result.targetId, result.detail, getRequestIp(request))
@@ -31,6 +34,7 @@ export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
   errorMessage: "更新结构失败",
   logPrefix: "[api/admin/structure:PUT] unexpected error",
   unauthorizedMessage: "无权执行后台操作",
+  allowModerator: true,
 })
 
 export const DELETE = createAdminRouteHandler(async ({ request, adminUser }) => {
@@ -39,6 +43,7 @@ export const DELETE = createAdminRouteHandler(async ({ request, adminUser }) => 
     body,
     adminId: adminUser.id,
     requestIp: getRequestIp(request),
+    actor: adminUser,
   })
 
   await writeAdminLog(adminUser.id, result.action, result.targetType, result.targetId, result.detail, getRequestIp(request))
@@ -47,4 +52,5 @@ export const DELETE = createAdminRouteHandler(async ({ request, adminUser }) => 
   errorMessage: "删除结构失败",
   logPrefix: "[api/admin/structure:DELETE] unexpected error",
   unauthorizedMessage: "无权执行后台操作",
+  allowModerator: true,
 })

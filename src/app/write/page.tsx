@@ -116,7 +116,7 @@ export default async function WritePage(props: PageProps<"/write">) {
   const replyUnlockBlock = contentDocument?.blocks.find((block) => block.type === "REPLY_UNLOCK")
   const purchaseUnlockBlock = contentDocument?.blocks.find((block) => block.type === "PURCHASE_UNLOCK")
 
-  const isAdmin = user.role === "ADMIN" || user.role === "MODERATOR"
+  const isAdmin = user.role === "ADMIN"
   const canEditThisPost = Boolean(editingPost && (editingPost.authorId === user.id || isAdmin))
   const isStillEditable = Boolean(editingPost && isPostStillEditable(editingPost.createdAt, settings.postEditableMinutes)) || isAdmin
 

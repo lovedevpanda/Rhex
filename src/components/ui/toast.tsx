@@ -36,10 +36,17 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 let globalToastBridge: ToastContextValue | null = null
 
 const toastToneClassNames: Record<ToastVariant, string> = {
-  success: "border-emerald-200/80 bg-emerald-50/95 text-emerald-950 shadow-emerald-100/80 dark:border-emerald-900/70 dark:bg-emerald-950/85 dark:text-emerald-100 dark:shadow-black/30",
-  error: "border-rose-200/80 bg-rose-50/95 text-rose-950 shadow-rose-100/80 dark:border-rose-900/70 dark:bg-rose-950/85 dark:text-rose-100 dark:shadow-black/30",
-  info: "border-sky-200/80 bg-sky-50/95 text-sky-950 shadow-sky-100/80 dark:border-sky-900/70 dark:bg-sky-950/85 dark:text-sky-100 dark:shadow-black/30",
-  warning: "border-amber-200/80 bg-amber-50/95 text-amber-950 shadow-amber-100/80 dark:border-amber-900/70 dark:bg-amber-950/85 dark:text-amber-100 dark:shadow-black/30",
+  success: "border-emerald-200/80 bg-emerald-50/95 shadow-emerald-100/80 dark:border-emerald-500/30 dark:bg-zinc-900/95 dark:shadow-black/40",
+  error: "border-rose-200/80 bg-rose-50/95 shadow-rose-100/80 dark:border-rose-500/30 dark:bg-zinc-900/95 dark:shadow-black/40",
+  info: "border-sky-200/80 bg-sky-50/95 shadow-sky-100/80 dark:border-sky-500/30 dark:bg-zinc-900/95 dark:shadow-black/40",
+  warning: "border-amber-200/80 bg-amber-50/95 shadow-amber-100/80 dark:border-amber-500/30 dark:bg-zinc-900/95 dark:shadow-black/40",
+}
+
+const toastIconClassNames: Record<ToastVariant, string> = {
+  success: "text-emerald-600 dark:text-emerald-300",
+  error: "text-rose-600 dark:text-rose-300",
+  info: "text-sky-600 dark:text-sky-300",
+  warning: "text-amber-600 dark:text-amber-300",
 }
 
 function getToastIcon(variant: ToastVariant) {
@@ -126,15 +133,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               aria-live="polite"
             >
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0">{getToastIcon(item.variant)}</div>
+                <div className={cn("mt-0.5 shrink-0", toastIconClassNames[item.variant])}>{getToastIcon(item.variant)}</div>
                 <div className="min-w-0 flex-1 space-y-1">
-                  {item.title ? <p className="text-sm font-semibold leading-5">{item.title}</p> : null}
-                  <p className="text-sm leading-6 opacity-90">{item.description}</p>
+                  {item.title ? <p className="text-base font-semibold leading-5 text-zinc-950 dark:text-white">{item.title}</p> : null}
+                  <p className="text-sm leading-6 text-zinc-700 dark:text-zinc-200">{item.description}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => dismiss(item.id)}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-black/5 hover:text-zinc-700 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-zinc-100"
                   aria-label="关闭提示"
                 >
                   <X className="h-4 w-4" />

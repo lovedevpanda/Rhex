@@ -35,6 +35,7 @@ export interface AdminPostListItem {
 
 export interface AdminPostListResult {
   posts: AdminPostListItem[]
+  actorRole: "ADMIN" | "MODERATOR"
   boardOptions: Array<{
     slug: string
     name: string

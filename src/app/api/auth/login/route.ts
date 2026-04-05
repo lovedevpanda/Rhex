@@ -1,4 +1,4 @@
-import { compareSync } from "bcryptjs"
+import { compare } from "bcryptjs"
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
@@ -78,7 +78,11 @@ export const POST = createRouteHandler(async ({ request }) => {
       apiError(403, "该账号已被拉黑，无法登录")
     }
 
-    const isValid = compareSync(password, user.passwordHash)
+    if (user.status === "INACTIVE") {
+      apiError(403, "该账号未激活，无法登录")
+    }
+
+    const isValid = await compare(password, user.passwordHash)
 
     if (!isValid) {
       apiError(401, "用户名或密码错误")

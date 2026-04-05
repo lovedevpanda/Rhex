@@ -414,44 +414,32 @@ export function PollPanel({ postId, totalVotes, hasVoted, expiresAt, options }: 
   }
 
   return (
-    <div className="rounded-[24px] bg-slate-50 p-4 sm:p-5 dark:bg-slate-950">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div >
+      <div className="flex flex-col gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">投票帖</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">共 {totalVotes} 人参与投票，每个账号只能选择一次。</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{expiresAt ? `截止时间：${formatDateTime(expiresAt)}` : "未设置截止时间，投票将长期开放。"}</p>
-        </div>
-
-        <span className="w-fit rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{hasVoted ? "已投票" : "未投票"}</span>
-      </div>
-
-      <div className="mt-4 grid gap-2.5 sm:gap-3 md:grid-cols-3">
-        <div className="rounded-[20px] bg-white p-3.5 sm:p-4 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">领先选项</p>
-          <p className="mt-1.5 text-sm font-semibold text-slate-950 sm:mt-2 dark:text-slate-100">{leadingOption ? leadingOption.content : "暂无"}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{leadingOption ? `${leadingOption.voteCount} 票 · ${leadingOption.percentage}%` : "还没有投票数据"}</p>
-        </div>
-        <div className="rounded-[20px] bg-white p-3.5 sm:p-4 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">我的选择</p>
-          <p className="mt-1.5 text-sm font-semibold text-slate-950 sm:mt-2 dark:text-slate-100">{options.find((item) => item.isVoted)?.content ?? "暂未投票"}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{hasVoted ? "你的投票已记录" : "投票后将展示你的选择"}</p>
-        </div>
-        <div className="rounded-[20px] bg-white p-3.5 sm:p-4 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">参与情况</p>
-          <p className="mt-1.5 text-sm font-semibold text-slate-950 sm:mt-2 dark:text-slate-100">{totalVotes === 0 ? "尚未开始" : `${totalVotes} 人已参与`}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">结果会在投票后实时刷新。</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold tracking-[0.06em] text-slate-950 dark:text-slate-200/95">投票</p>
+            <span aria-hidden="true" className="h-px flex-1 bg-slate-300/90 dark:bg-border/80" />
+            <span className="w-fit rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600 dark:bg-secondary/70 dark:text-slate-300">{hasVoted ? "已投票" : "未投票"}</span>
+          </div>
+          <p className="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">共 {totalVotes} 人参与投票，每个账号只能选择一次。{expiresAt ? `截止时间：${formatDateTime(expiresAt)}` : "未设置截止时间，投票将长期开放。"}</p>
         </div>
       </div>
 
       <div className="mt-4 space-y-2.5 sm:space-y-3">
         {options.map((option) => (
-          <div key={option.id} className={option.isVoted ? "rounded-[20px] bg-sky-50 p-3.5 sm:p-4 dark:bg-slate-800" : "rounded-[20px] bg-white p-3.5 sm:p-4 dark:bg-slate-900"}>
+          <div
+            key={option.id}
+            className={option.isVoted
+              ? "rounded-[20px] border border-sky-200/80 bg-sky-50 p-3.5 shadow-sm sm:p-4 dark:border-sky-500/20 dark:bg-slate-950/90 dark:shadow-none"
+              : "rounded-[20px] border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4 dark:border-white/10 dark:bg-slate-900/75 dark:shadow-none"}
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-slate-950 dark:text-slate-100">{option.content}</p>
-                  {option.isVoted ? <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] text-sky-700 dark:bg-sky-500/14 dark:text-sky-300">我的选择</span> : null}
-                  {leadingOption?.id === option.id && totalVotes > 0 ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] text-amber-700 dark:bg-amber-500/14 dark:text-amber-300">当前领先</span> : null}
+                  {option.isVoted ? <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] text-sky-700 dark:bg-sky-500/10 dark:text-sky-200">我的选择</span> : null}
+                  {leadingOption?.id === option.id && totalVotes > 0 ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">当前领先</span> : null}
                 </div>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{option.voteCount} 票 · 占比 {option.percentage}%</p>
               </div>
@@ -459,8 +447,8 @@ export function PollPanel({ postId, totalVotes, hasVoted, expiresAt, options }: 
                 {loadingId === option.id ? "提交中..." : option.isVoted ? "已选择" : hasVoted ? "已投票" : "投票"}
               </Button>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-slate-800">
-              <div className={option.isVoted ? "h-full rounded-full bg-sky-600 dark:bg-sky-400" : "h-full rounded-full bg-sky-500 dark:bg-sky-300"} style={{ width: `${Math.max(option.percentage, totalVotes > 0 ? 6 : 0)}%` }} />
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-slate-800/80">
+              <div className={option.isVoted ? "h-full rounded-full bg-sky-600 dark:bg-sky-400" : "h-full rounded-full bg-sky-500 dark:bg-sky-500/70"} style={{ width: `${Math.max(option.percentage, totalVotes > 0 ? 6 : 0)}%` }} />
             </div>
           </div>
         ))}

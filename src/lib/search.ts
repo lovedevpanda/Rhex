@@ -1,4 +1,5 @@
-import { buildPostSearchWhere, countSearchPosts, findSearchPosts } from "@/db/search-queries"
+import { buildPostSearchWhere, countSearchPosts, findSearchPostsCursor } from "@/db/search-queries"
+import { decodePinnedTimestampCursor, encodePinnedTimestampCursor } from "@/lib/cursor-pagination"
 import { getPostPath } from "@/lib/post-links"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -18,13 +19,24 @@ export interface SearchResults {
   keyword: string
   total: number
   items: SearchResultItem[]
+  hasPrevPage: boolean
+  hasNextPage: boolean
+  prevCursor: string | null
+  nextCursor: string | null
 }
 
 function normalizeKeyword(keyword: string) {
   return keyword.trim().slice(0, 50)
 }
 
-export async function searchPosts(keyword: string, page = 1, pageSize = 10): Promise<SearchResults> {
+export async function searchPosts(
+  keyword: string,
+  options: {
+    pageSize?: number
+    after?: string | null
+    before?: string | null
+  } = {},
+): Promise<SearchResults> {
   const normalizedKeyword = normalizeKeyword(keyword)
 
   if (!normalizedKeyword) {
@@ -32,6 +44,10 @@ export async function searchPosts(keyword: string, page = 1, pageSize = 10): Pro
       keyword: "",
       total: 0,
       items: [],
+      hasPrevPage: false,
+      hasNextPage: false,
+      prevCursor: null,
+      nextCursor: null,
     }
   }
 
@@ -43,17 +59,24 @@ export async function searchPosts(keyword: string, page = 1, pageSize = 10): Pro
         keyword: normalizedKeyword,
         total: 0,
         items: [],
+        hasPrevPage: false,
+        hasNextPage: false,
+        prevCursor: null,
+        nextCursor: null,
       }
     }
 
     const where = buildPostSearchWhere(normalizedKeyword)
+    const afterCursor = decodePinnedTimestampCursor(options.after)
+    const beforeCursor = decodePinnedTimestampCursor(options.before)
 
-    const [total, posts] = await Promise.all([
+    const [total, { items: posts, hasPrevPage, hasNextPage }] = await Promise.all([
       countSearchPosts(where),
-      findSearchPosts({
+      findSearchPostsCursor({
         where,
-        page,
-        pageSize,
+        pageSize: options.pageSize ?? 10,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
       }),
     ] as const)
 
@@ -67,7 +90,10 @@ export async function searchPosts(keyword: string, page = 1, pageSize = 10): Pro
         ...mapListPost(post),
         href: getPostPath(post, { mode: settings.postLinkDisplayMode }),
       })),
-
+      hasPrevPage,
+      hasNextPage,
+      prevCursor: posts.length > 0 ? encodePinnedTimestampCursor({ id: posts[0].id, createdAt: posts[0].createdAt.toISOString(), isPinned: posts[0].isPinned }) : null,
+      nextCursor: posts.length > 0 ? encodePinnedTimestampCursor({ id: posts[posts.length - 1].id, createdAt: posts[posts.length - 1].createdAt.toISOString(), isPinned: posts[posts.length - 1].isPinned }) : null,
     }
   } catch (error) {
     console.error(error)
@@ -75,6 +101,10 @@ export async function searchPosts(keyword: string, page = 1, pageSize = 10): Pro
       keyword: normalizedKeyword,
       total: 0,
       items: [],
+      hasPrevPage: false,
+      hasNextPage: false,
+      prevCursor: null,
+      nextCursor: null,
     }
   }
 }

@@ -1,9 +1,10 @@
-import { PostStatus, ReportStatus } from "@/db/types"
+import { PostStatus, ReportStatus, UserStatus } from "@/db/types"
 
 import { countPendingSelfServeOrders } from "@/db/self-serve-ads"
 
 
 import { prisma } from "@/db/client"
+import type { Prisma } from "@/db/types"
 import { getBusinessDayRange } from "@/lib/formatters"
 
 export async function getAdminDashboardRawData() {
@@ -14,27 +15,45 @@ export async function getAdminDashboardRawData() {
   const [
     userCount,
     postCount,
+    commentCount,
+    boardCount,
+    zoneCount,
     reportCount,
     pendingReportCount,
+    processingReportCount,
+    resolvedReportCount,
     pendingPostCount,
+    offlinePostCount,
     pendingVerificationCount,
     pendingFriendLinkCount,
     pendingAdOrderCount,
     activeUserCount7d,
+    mutedUserCount,
+    bannedUserCount,
 
     newUserCount7d,
     newPostCount7d,
+    newCommentCount7d,
+    todayPostCount,
+    todayCommentCount,
+    todayReportCount,
     postAggregates,
     boardAggregates,
     todayCheckInUserCount,
     recentPosts,
-    recentReports,
+    recentComments,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.post.count(),
+    prisma.comment.count(),
+    prisma.board.count(),
+    prisma.zone.count(),
     prisma.report.count(),
     prisma.report.count({ where: { status: ReportStatus.PENDING } }),
+    prisma.report.count({ where: { status: ReportStatus.PROCESSING } }),
+    prisma.report.count({ where: { status: ReportStatus.RESOLVED } }),
     prisma.post.count({ where: { status: PostStatus.PENDING } }),
+    prisma.post.count({ where: { status: PostStatus.OFFLINE } }),
     prisma.userVerification.count({ where: { status: "PENDING" } }),
     prisma.friendLink.count({ where: { status: "PENDING" } }),
     countPendingSelfServeOrders("self-serve-ads"),
@@ -48,8 +67,14 @@ export async function getAdminDashboardRawData() {
         ],
       },
     }),
+    prisma.user.count({ where: { status: UserStatus.MUTED } }),
+    prisma.user.count({ where: { status: UserStatus.BANNED } }),
     prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.post.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.comment.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.post.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.comment.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.report.count({ where: { createdAt: { gte: todayStart } } }),
     prisma.post.aggregate({
       _sum: {
         viewCount: true,
@@ -71,18 +96,26 @@ export async function getAdminDashboardRawData() {
         author: { select: { username: true, nickname: true } },
       },
     }),
-    prisma.report.findMany({
+    prisma.comment.findMany({
       orderBy: { createdAt: "desc" },
       take: 8,
-      select: {
-        id: true,
-        targetType: true,
-        targetId: true,
-        reasonType: true,
-        reasonDetail: true,
-        status: true,
-        createdAt: true,
-        reporter: { select: { username: true, nickname: true } },
+      where: {
+        parentId: null,
+      },
+      include: {
+        post: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+          },
+        },
+        user: {
+          select: {
+            username: true,
+            nickname: true,
+          },
+        },
       },
     }),
   ])
@@ -104,16 +137,28 @@ export async function getAdminDashboardRawData() {
     overview: {
       userCount,
       postCount,
+      commentCount,
+      boardCount,
+      zoneCount,
       reportCount,
       pendingReportCount,
+      processingReportCount,
+      resolvedReportCount,
       pendingPostCount,
+      offlinePostCount,
       pendingVerificationCount,
       pendingFriendLinkCount,
       pendingAdOrderCount,
       activeUserCount7d,
+      mutedUserCount,
+      bannedUserCount,
 
       newUserCount7d,
       newPostCount7d,
+      newCommentCount7d,
+      todayPostCount,
+      todayCommentCount,
+      todayReportCount,
       totalViewCount: postAggregates._sum.viewCount ?? 0,
       totalLikeCount: postAggregates._sum.likeCount ?? 0,
       totalFavoriteCount: postAggregates._sum.favoriteCount ?? 0,
@@ -129,15 +174,19 @@ export async function getAdminDashboardRawData() {
       reportCount: reportTrend[index] ?? 0,
     })),
     recentPosts,
-    recentReports,
+    recentComments,
   }
 }
 
-export async function getAdminStructureRawData() {
+export async function getAdminStructureRawData(options?: {
+  zoneWhere?: Prisma.ZoneWhereInput
+  boardWhere?: Prisma.BoardWhereInput
+}) {
   const { start: todayStart } = getBusinessDayRange()
 
   const [zones, boards, todayBoardPostStats] = await Promise.all([
     prisma.zone.findMany({
+      where: options?.zoneWhere,
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       select: {
         id: true,
@@ -166,8 +215,8 @@ export async function getAdminStructureRawData() {
       },
     }),
     prisma.board.findMany({
+      where: options?.boardWhere,
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      take: 50,
       select: {
         id: true,
         name: true,
@@ -204,6 +253,7 @@ export async function getAdminStructureRawData() {
     prisma.post.groupBy({
       by: ["boardId"],
       where: {
+        ...(options?.boardWhere ? { board: options.boardWhere } : {}),
         createdAt: {
           gte: todayStart,
         },

@@ -5,7 +5,7 @@ import type { CSSProperties } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
-const adminNavigation = [
+export const adminNavigation = [
   { href: "/admin", label: "总览", icon: LayoutGrid },
   { href: "/admin?tab=users", label: "用户管理", icon: Users },
   { href: "/admin?tab=posts", label: "帖子管理", icon: BookText },
@@ -19,7 +19,7 @@ const adminNavigation = [
   { href: "/admin?tab=security", label: "内容安全", icon: ShieldAlert },
   { href: "/admin/apps", label: "应用", icon: AppWindow },
   { href: "/admin?tab=settings&section=profile", label: "站点设置", icon: Settings },
-]
+] 
 
 const adminThemeStyle: CSSProperties = {
   colorScheme: "light",
@@ -42,10 +42,11 @@ const adminThemeStyle: CSSProperties = {
 interface AdminShellProps {
   currentTab: string
   adminName: string
+  navigationItems?: typeof adminNavigation
   children: React.ReactNode
 }
 
-export function AdminShell({ currentTab, adminName, children }: AdminShellProps) {
+export function AdminShell({ currentTab, adminName, navigationItems = adminNavigation, children }: AdminShellProps) {
   return (
     <div
       style={adminThemeStyle}
@@ -76,7 +77,7 @@ export function AdminShell({ currentTab, adminName, children }: AdminShellProps)
           </Card>
 
           <nav className="space-y-2">
-            {adminNavigation.map((item) => {
+            {navigationItems.map((item) => {
               const Icon = item.icon
               const active = currentTab === item.href || (item.href.includes("tab=") && currentTab === new URL(`https://local${item.href}`).searchParams.get("tab"))
 

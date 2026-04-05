@@ -1,11 +1,11 @@
 import type { Metadata } from "next"
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 
 import { ForumFeedList } from "@/components/forum-feed-list"
 import { ForumPageShell } from "@/components/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
+import { PageNumberPagination } from "@/components/page-number-pagination"
 import { SelfServeAdsSidebar } from "@/components/self-serve-ads-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { getHomeAnnouncements } from "@/lib/announcements"
@@ -61,7 +61,7 @@ export async function HomeFeedPage({ sort, searchParams, mainTopSlot }: HomeFeed
 
   const currentUserPromise = getCurrentUser()
   const feedPromise = currentUserPromise.then((currentUser) => getLatestFeed(currentPage, 35, sort, currentUser?.id))
-  const [feed, boards, zones, currentUser, hotTopics, announcements, settings, friendLinks, selfServeAdsConfig, selfServeAdsPanelData] = await Promise.all([
+  const [feedPage, boards, zones, currentUser, hotTopics, announcements, settings, friendLinks, selfServeAdsConfig, selfServeAdsPanelData] = await Promise.all([
     feedPromise,
     getBoards(),
     getZones(),
@@ -73,12 +73,14 @@ export async function HomeFeedPage({ sort, searchParams, mainTopSlot }: HomeFeed
     getSelfServeAdsAppConfig(),
     getSelfServeAdsPanelData(),
   ])
+  const { items: feed, page, totalPages, hasPrevPage, hasNextPage } = feedPage
 
-  const nextPage = currentPage + 1
-  const prevPage = Math.max(1, currentPage - 1)
+  if (currentPage !== page) {
+    redirect(buildHomeFeedHref(sort, page))
+  }
+
   const isFollowingFeed = sort === "following"
-  const showPagination = isFollowingFeed ? currentPage > 1 || feed.length > 0 : true
-  const hasNextPage = isFollowingFeed ? feed.length >= 35 : true
+  const showPagination = isFollowingFeed ? page > 1 || feed.length > 0 : true
   const emptyStateText = isFollowingFeed
     ? currentUser
       ? "你关注的节点和用户还没有可展示的帖子，或者你还没开始关注。"
@@ -115,23 +117,15 @@ export async function HomeFeedPage({ sort, searchParams, mainTopSlot }: HomeFeed
 
               {feed.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">{emptyStateText}</div> : null}
 
-              {showPagination ? <nav className="mx-auto flex w-full justify-center py-4" aria-label="pagination">
-                <ul className="flex flex-row items-center gap-1">
-                  <li>
-                    <Link href={buildHomeFeedHref(sort, prevPage)} aria-disabled={currentPage <= 1} className={currentPage <= 1 ? "pointer-events-none inline-flex h-9 items-center justify-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium opacity-50 sm:pl-2.5" : "inline-flex h-9 items-center justify-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium hover:bg-accent sm:pl-2.5"}>
-                      <span className="hidden sm:block">上一页</span>
-                    </Link>
-                  </li>
-                  <li>
-                    <span className="inline-flex size-9 items-center justify-center rounded-md border bg-background text-sm font-medium">{currentPage}</span>
-                  </li>
-                  <li>
-                    <Link href={buildHomeFeedHref(sort, nextPage)} aria-disabled={!hasNextPage} className={!hasNextPage ? "pointer-events-none inline-flex h-9 items-center justify-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium opacity-50 sm:pr-2.5" : "inline-flex h-9 items-center justify-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium hover:bg-accent sm:pr-2.5"}>
-                      <span className="hidden sm:block">下一页</span>
-                    </Link>
-                  </li>
-                </ul>
-              </nav> : null}
+              {showPagination ? (
+                <PageNumberPagination
+                  page={page}
+                  totalPages={totalPages}
+                  hasPrevPage={hasPrevPage}
+                  hasNextPage={hasNextPage}
+                  buildHref={(targetPage) => buildHomeFeedHref(sort, targetPage)}
+                />
+              ) : null}
             </div>
           )}
           rightSidebar={(

@@ -1,7 +1,7 @@
 import type { PlatformShortcutMap } from "@/lib/client-platform"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 
-export type EditorTab = "write" | "preview"
+export type EditorTab = "write" | "live-preview" | "preview"
 
 export type EditorSelectionRange = {
   start: number

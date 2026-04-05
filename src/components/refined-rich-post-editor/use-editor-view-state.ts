@@ -29,6 +29,8 @@ export function useEditorViewState({
   const [activeLineNumber, setActiveLineNumber] = useState(1)
   const [lineHeights, setLineHeights] = useState<number[]>([EDITOR_FALLBACK_LINE_HEIGHT_PX])
 
+  const hasEditorSurface = useCallback((tab: EditorTab) => tab !== "preview", [])
+
   const contentMinHeight = isFullscreen ? "100%" : minHeight
   const logicalLines = useMemo(() => value.split("\n"), [value])
   const lineNumbers = useMemo(() => Array.from({ length: logicalLines.length }, (_, index) => index + 1), [logicalLines.length])
@@ -144,7 +146,7 @@ export function useEditorViewState({
       return
     }
 
-    if (activeTab === "write") {
+    if (hasEditorSurface(activeTab)) {
       const element = textareaRef.current
       if (element) {
         writeTabViewStateRef.current = {
@@ -162,10 +164,10 @@ export function useEditorViewState({
     }
 
     setActiveTab(nextTab)
-  }, [activeTab, selectionRef, textareaRef])
+  }, [activeTab, hasEditorSurface, selectionRef, textareaRef])
 
   useEffect(() => {
-    if (activeTab !== "write") {
+    if (!hasEditorSurface(activeTab)) {
       return
     }
 
@@ -197,7 +199,7 @@ export function useEditorViewState({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeTab, selectionRef, textareaRef])
+  }, [activeTab, hasEditorSurface, selectionRef, textareaRef])
 
   const handleTextareaScroll = useCallback((event: React.UIEvent<HTMLTextAreaElement>) => {
     setEditorScrollTop(event.currentTarget.scrollTop)

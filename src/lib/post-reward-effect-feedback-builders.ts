@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto"
 
 import type { AppliedPointEffectTrace, PreparedPointDelta, PreparedProbabilityValue } from "@/lib/point-center"
-import type { PostRewardPoolEffectFeedback, PostRewardPoolEffectFeedbackEvent } from "@/lib/post-reward-effect-feedback"
+import type { PostRewardPoolEffectFeedback, PostRewardPoolEffectFeedbackBadge, PostRewardPoolEffectFeedbackEvent } from "@/lib/post-reward-effect-feedback"
 
 const JACKPOT_PROBABILITY_POSITIVE_HIT_TITLES = ["欧皇附体", "锦鲤贴脸", "今天偏爱你"]
 const JACKPOT_PROBABILITY_POSITIVE_MISS_TITLES = ["倒霉瓜", "就差一点", "祝福差点成真"]
@@ -37,8 +37,41 @@ function getPrimaryAppliedRule(traces: AppliedPointEffectTrace[]) {
   return traces.find((trace) => trace.badgeIconText || trace.badgeName) ?? traces[0] ?? null
 }
 
+function getAppliedBadges(traces: AppliedPointEffectTrace[]): PostRewardPoolEffectFeedbackBadge[] {
+  const seen = new Set<string>()
+  const badges: PostRewardPoolEffectFeedbackBadge[] = []
+
+  for (const trace of traces) {
+    if (!trace.badgeIconText && !trace.badgeName) {
+      continue
+    }
+
+    const key = `${trace.badgeName ?? ""}::${trace.badgeIconText ?? ""}::${trace.badgeColor ?? ""}`
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    badges.push({
+      name: trace.badgeName ?? null,
+      iconText: trace.badgeIconText ?? null,
+      color: trace.badgeColor ?? null,
+    })
+  }
+
+  return badges
+}
+
 function getAppliedEffectNames(traces: AppliedPointEffectTrace[]) {
   return Array.from(new Set(traces.map((trace) => trace.ruleName).filter(Boolean))).join("、")
+}
+
+function getAppliedBadgeNames(traces: AppliedPointEffectTrace[]) {
+  return Array.from(new Set(
+    traces
+      .map((trace) => trace.badgeName?.trim())
+      .filter((name): name is string => Boolean(name)),
+  ))
 }
 
 function buildJackpotProbabilityFeedback(params: {
@@ -61,6 +94,7 @@ function buildJackpotProbabilityFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(JACKPOT_PROBABILITY_POSITIVE_HIT_TITLES),
       description: `${effectNames}把中奖概率从 ${before}% 抬到了 ${after}%，这次顺利命中聚宝盆。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -70,6 +104,7 @@ function buildJackpotProbabilityFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(JACKPOT_PROBABILITY_POSITIVE_MISS_TITLES),
       description: `你是人间的小确幸，${effectNames}给你提升了中奖概率，从 ${before}% 拉到 ${after}% ，但这次还是没中。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -79,6 +114,7 @@ function buildJackpotProbabilityFeedback(params: {
       tone: "negative",
       title: pickRandomCopy(JACKPOT_PROBABILITY_NEGATIVE_HIT_TITLES),
       description: `${effectNames}把中奖概率从 ${before}% 压到了 ${after}% ，你还是硬生生命中了聚宝盆。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -87,6 +123,7 @@ function buildJackpotProbabilityFeedback(params: {
     tone: "negative",
     title: pickRandomCopy(JACKPOT_PROBABILITY_NEGATIVE_MISS_TITLES),
     description: `${effectNames}把中奖概率从 ${before}% 压到了 ${after}% ，这次没能命中聚宝盆。`,
+    badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
   }
 }
 
@@ -109,6 +146,7 @@ function buildJackpotPointFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(JACKPOT_POINT_POSITIVE_TITLES),
       description: `${effectNames}让这次聚宝盆额外多拿了 ${adjustment} ${params.pointName}，最终到手 ${finalDelta} ${params.pointName}。`,
+      badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
     }
   }
 
@@ -118,6 +156,7 @@ function buildJackpotPointFeedback(params: {
       tone: "negative",
       title: pickRandomCopy(JACKPOT_POINT_NEGATIVE_TITLES),
       description: `${effectNames}直接把奖励翻成了倒扣，原本 ${params.preparedReward.baseDelta} ${params.pointName} 的聚宝盆，最后反而损失了 ${Math.abs(finalDelta)} ${params.pointName}。`,
+      badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
     }
   }
 
@@ -126,6 +165,7 @@ function buildJackpotPointFeedback(params: {
     tone: "negative",
     title: pickRandomCopy(JACKPOT_POINT_NEGATIVE_TITLES),
     description: `${effectNames}吃掉了 ${Math.abs(adjustment)} ${params.pointName}，原本 ${params.preparedReward.baseDelta} ${params.pointName} 的聚宝盆，最后只到手 ${formatSignedPoints(finalDelta)} ${params.pointName}。`,
+    badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
   }
 }
 
@@ -156,11 +196,16 @@ export function buildJackpotEffectFeedback(params: {
     ...params.preparedProbability.appliedRules,
     ...(params.preparedReward?.appliedRules ?? []),
   ])
+  const appliedBadges = getAppliedBadges([
+    ...params.preparedProbability.appliedRules,
+    ...(params.preparedReward?.appliedRules ?? []),
+  ])
 
   return {
     badgeName: primaryRule?.badgeName ?? null,
     badgeIconText: primaryRule?.badgeIconText ?? null,
     badgeColor: primaryRule?.badgeColor ?? null,
+    badges: appliedBadges,
     events,
   }
 }
@@ -189,6 +234,7 @@ function buildRedPacketProbabilityFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(RED_PACKET_PROBABILITY_POSITIVE_HIT_TITLES),
       description: `${effectNames}把这次红包随机命中率从 ${before}% 拉到了 ${after}% ，红包顺利落到了你手上。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -198,6 +244,7 @@ function buildRedPacketProbabilityFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(RED_PACKET_PROBABILITY_POSITIVE_MISS_TITLES),
       description: `${effectNames}已经把这次红包随机命中率从 ${before}% 拉到了 ${after}% ，但红包还是被别人抢走了。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -207,6 +254,7 @@ function buildRedPacketProbabilityFeedback(params: {
       tone: "negative",
       title: pickRandomCopy(RED_PACKET_PROBABILITY_NEGATIVE_HIT_TITLES),
       description: `${effectNames}把这次红包随机命中率从 ${before}% 压到了 ${after}% ，你还是把红包抢到了手。`,
+      badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
     }
   }
 
@@ -215,6 +263,7 @@ function buildRedPacketProbabilityFeedback(params: {
     tone: "negative",
     title: pickRandomCopy(RED_PACKET_PROBABILITY_NEGATIVE_MISS_TITLES),
     description: `${effectNames}把这次红包随机命中率从 ${before}% 压到了 ${after}% ，这次红包落到了别人手里。`,
+    badgeNames: getAppliedBadgeNames(params.preparedProbability.appliedRules),
   }
 }
 
@@ -241,6 +290,7 @@ function buildRedPacketPointFeedback(params: {
       tone: "positive",
       title: pickRandomCopy(RED_PACKET_POINT_POSITIVE_TITLES),
       description: `${effectNames}让这次红包额外多拿了 ${adjustment} ${params.pointName}，最终到手 ${finalDelta} ${params.pointName}。`,
+      badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
     }
   }
 
@@ -250,6 +300,7 @@ function buildRedPacketPointFeedback(params: {
       tone: "negative",
       title: pickRandomCopy(RED_PACKET_POINT_NEGATIVE_TITLES),
       description: `${effectNames}直接把红包翻成了倒扣，原本 ${params.preparedReward.baseDelta} ${params.pointName} 的红包，最后反而损失了 ${Math.abs(finalDelta)} ${params.pointName}。`,
+      badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
     }
   }
 
@@ -258,6 +309,7 @@ function buildRedPacketPointFeedback(params: {
     tone: "negative",
     title: pickRandomCopy(RED_PACKET_POINT_NEGATIVE_TITLES),
     description: `${effectNames}吃掉了 ${Math.abs(adjustment)} ${params.pointName}，原本 ${params.preparedReward.baseDelta} ${params.pointName} 的红包，最后只到手 ${formatSignedPoints(finalDelta)} ${params.pointName}。`,
+    badgeNames: getAppliedBadgeNames(params.preparedReward.appliedRules),
   }
 }
 
@@ -288,11 +340,16 @@ export function buildRedPacketEffectFeedback(params: {
     ...(params.preparedProbability?.appliedRules ?? []),
     ...(params.preparedReward?.appliedRules ?? []),
   ])
+  const appliedBadges = getAppliedBadges([
+    ...(params.preparedProbability?.appliedRules ?? []),
+    ...(params.preparedReward?.appliedRules ?? []),
+  ])
 
   return {
     badgeName: primaryRule?.badgeName ?? null,
     badgeIconText: primaryRule?.badgeIconText ?? null,
     badgeColor: primaryRule?.badgeColor ?? null,
+    badges: appliedBadges,
     events,
   }
 }

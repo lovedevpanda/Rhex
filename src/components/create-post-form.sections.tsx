@@ -115,7 +115,7 @@ export function PollSettingsSection({
     <div className="space-y-3">
       <div>
         <p className="text-sm font-medium">投票选项</p>
-        <p className="mt-1 text-xs leading-6 text-muted-foreground">至少填写 2 个选项，最多 8 个，审核通过后前台用户可参与投票。</p>
+        <p className="mt-1 text-xs leading-6 text-muted-foreground">至少填写 2 个选项，最多 8 个。</p>
       </div>
       <div className="space-y-3">
         {pollOptions.map((option, index) => (
@@ -237,7 +237,7 @@ export function LotterySettingsSection({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-[20px] border border-border bg-background p-4">
+      <div className="space-y-3 rounded-[20px]">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">奖项配置</p>
@@ -259,7 +259,7 @@ export function LotterySettingsSection({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-[20px] border border-border bg-background p-4">
+      <div className="space-y-3 rounded-[20px] ">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">参与条件</p>

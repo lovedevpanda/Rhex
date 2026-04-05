@@ -1,10 +1,10 @@
 import { togglePostLike } from "@/db/interaction-queries"
-import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { handlePostLikeSideEffects } from "@/lib/interaction-side-effects"
 import { logRequestSucceeded } from "@/lib/request-log"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const postId = String(body.postId ?? "")
 
   if (!postId) {
@@ -38,6 +38,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "帖子点赞失败",
   logPrefix: "[api/posts/like] unexpected error",
   unauthorizedMessage: "请先登录后再点赞",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
-

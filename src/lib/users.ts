@@ -3,24 +3,14 @@ import { getCurrentSessionActor } from "@/lib/auth"
 import { getLevelBadgeData } from "@/lib/level-badge"
 import { mapListPost } from "@/lib/post-map"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
+import { getUserDisplayName } from "@/lib/user-display"
 import { withRuntimeFallback } from "@/lib/runtime-errors"
 
 export type PublicUserStatus = "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
 export type PublicUserRole = "USER" | "MODERATOR" | "ADMIN"
 
-export interface UserDisplayNameSource {
-  username: string
-  nickname?: string | null
-}
-
-export function getUserDisplayName(user: UserDisplayNameSource | null | undefined, fallback = "") {
-  if (!user) {
-    return fallback
-  }
-
-  const nickname = user.nickname?.trim()
-  return nickname || user.username || fallback
-}
+export { getUserDisplayName }
+export type { UserDisplayNameSource } from "@/lib/user-display"
 
 export interface SiteUserProfile {
   id: number

@@ -12,5 +12,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "标记通知失败",
   logPrefix: "[api/notifications/read] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

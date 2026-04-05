@@ -1,76 +1,48 @@
-import { access, readFile } from "fs/promises"
-import path from "path"
+import { createReadStream } from "fs"
+import { stat } from "fs/promises"
+import { Readable } from "stream"
 
 import { notFound } from "next/navigation"
 
 import { getSiteSettings } from "@/lib/site-settings"
-import { normalizeUploadLocalPath } from "@/lib/upload-path"
+import { buildUploadStoragePath } from "@/lib/upload-path"
+import { getUploadMimeType, isAllowedUploadFolder, isSafeUploadSegment } from "@/lib/upload-rules"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const projectRoot = process.cwd()
-const publicRoot = path.join(projectRoot, "public")
-const ALLOWED_UPLOAD_FOLDERS = new Set(["avatars", "posts", "comments", "friend-links", "site-logo"])
-
-function getMimeType(fileName: string) {
-  const extension = path.extname(fileName).toLowerCase()
-
-  switch (extension) {
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg"
-    case ".png":
-      return "image/png"
-    case ".gif":
-      return "image/gif"
-    case ".webp":
-      return "image/webp"
-    case ".avif":
-      return "image/avif"
-    default:
-      return "application/octet-stream"
-  }
-}
-
-function isSafeSegment(value: string) {
-  return /^[a-zA-Z0-9._-]+$/.test(value) && !value.includes("..")
-}
-
 async function resolveUploadFilePath(folder: string, fileName: string) {
   const settings = await getSiteSettings()
-  const configuredLocalPath = (() => {
-    try {
-      return normalizeUploadLocalPath(settings.uploadLocalPath)
-    } catch {
-      return "uploads"
+
+  try {
+    const filePath = buildUploadStoragePath(settings.uploadLocalPath, folder, fileName)
+    const fileStat = await stat(filePath)
+
+    if (!fileStat.isFile()) {
+      return null
     }
-  })()
-  const candidatePaths = [
-    path.join(projectRoot, configuredLocalPath, folder, fileName),
-    path.join(publicRoot, configuredLocalPath, folder, fileName),
-  ]
 
-  if (configuredLocalPath !== "uploads") {
-    candidatePaths.push(path.join(projectRoot, "uploads", folder, fileName))
-    candidatePaths.push(path.join(publicRoot, "uploads", folder, fileName))
-  }
-
-  for (const candidatePath of candidatePaths) {
-    try {
-      await access(candidatePath)
-      return candidatePath
-    } catch {
-      continue
+    return {
+      filePath,
+      fileStat,
     }
+  } catch {
+    return null
   }
+}
 
-  return null
+function buildUploadHeaders(fileName: string, fileSize: number, lastModified: Date) {
+  return {
+    "Content-Type": getUploadMimeType(fileName),
+    "Content-Length": String(fileSize),
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Last-Modified": lastModified.toUTCString(),
+  }
 }
 
 async function readUploadResponse(folder: string, fileName: string) {
-  if (!ALLOWED_UPLOAD_FOLDERS.has(folder) || !isSafeSegment(fileName)) {
+  if (!isAllowedUploadFolder(folder) || !isSafeUploadSegment(fileName)) {
     notFound()
   }
 
@@ -80,15 +52,8 @@ async function readUploadResponse(folder: string, fileName: string) {
     notFound()
   }
 
-  const buffer = await readFile(resolvedFilePath)
-
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": getMimeType(fileName),
-      "Content-Length": String(buffer.byteLength),
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "Accept-Ranges": "bytes",
-    },
+  return new Response(Readable.toWeb(createReadStream(resolvedFilePath.filePath)) as ReadableStream<Uint8Array>, {
+    headers: buildUploadHeaders(fileName, resolvedFilePath.fileStat.size, resolvedFilePath.fileStat.mtime),
   })
 }
 
@@ -106,9 +71,17 @@ export async function GET(_request: Request, props: UploadRouteProps) {
 
 export async function HEAD(_request: Request, props: UploadRouteProps) {
   const params = await props.params
-  const response = await readUploadResponse(params.folder, params.filename)
+  if (!isAllowedUploadFolder(params.folder) || !isSafeUploadSegment(params.filename)) {
+    notFound()
+  }
+
+  const resolvedFilePath = await resolveUploadFilePath(params.folder, params.filename)
+
+  if (!resolvedFilePath) {
+    notFound()
+  }
 
   return new Response(null, {
-    headers: response.headers,
+    headers: buildUploadHeaders(params.filename, resolvedFilePath.fileStat.size, resolvedFilePath.fileStat.mtime),
   })
 }

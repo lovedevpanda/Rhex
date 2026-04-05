@@ -63,5 +63,5 @@ export const POST = createUserRouteHandler<NotificationSettingsResponse>(async (
   errorMessage: "保存通知设置失败",
   logPrefix: "[api/profile/notification-settings] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

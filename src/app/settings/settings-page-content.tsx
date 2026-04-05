@@ -50,6 +50,10 @@ function parsePointEffectSummary(summary: string | null | undefined) {
     .filter((item): item is NonNullable<ReturnType<typeof parsePointEffectSummaryToken>> => Boolean(item))
 }
 
+function buildCursorHref(basePath: string, queryKey: string, cursor: string | null) {
+  return cursor ? `${basePath}&${queryKey}=${encodeURIComponent(cursor)}` : "#"
+}
+
 export function SettingsPageContent({ data }: { data: SettingsPageData }) {
   const { route, settings } = data
 
@@ -455,13 +459,20 @@ function MyRepliesPanel({ replies, postLinkDisplayMode }: { replies: SettingsPag
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>我的回复</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {replies.total} 条记录 · 第 {replies.page} / {replies.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {replies.total} 条记录</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <UserRecentRepliesList replies={replies.items} postLinkDisplayMode={postLinkDisplayMode} emptyText="当前还没有发表过回复。" />
 
-        {replies.total > 0 ? <PaginationBar page={replies.page} hasPrevPage={replies.hasPrevPage} hasNextPage={replies.hasNextPage} basePath="/settings?tab=post-management&postTab=replies" /> : null}
+        {replies.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={replies.hasPrevPage}
+            hasNextPage={replies.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=post-management&postTab=replies", "listBefore", replies.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=post-management&postTab=replies", "listAfter", replies.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -534,7 +545,7 @@ function FollowBoardsPanel({ followedBoards }: { followedBoards: SettingsPageDat
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>关注节点</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {followedBoards.total} 个节点 · 第 {followedBoards.page} / {followedBoards.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {followedBoards.total} 个节点</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -562,7 +573,14 @@ function FollowBoardsPanel({ followedBoards }: { followedBoards: SettingsPageDat
           ))}
         </div>
 
-        {followedBoards.total > 0 ? <PaginationBar page={followedBoards.page} hasPrevPage={followedBoards.hasPrevPage} hasNextPage={followedBoards.hasNextPage} basePath="/settings?tab=follows&followTab=boards" /> : null}
+        {followedBoards.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={followedBoards.hasPrevPage}
+            hasNextPage={followedBoards.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=follows&followTab=boards", "listBefore", followedBoards.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=follows&followTab=boards", "listAfter", followedBoards.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -582,7 +600,7 @@ function FollowUsersPanel({ followedUsers }: { followedUsers: SettingsPageData["
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>关注用户</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {followedUsers.total} 位用户 · 第 {followedUsers.page} / {followedUsers.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {followedUsers.total} 位用户</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -608,7 +626,14 @@ function FollowUsersPanel({ followedUsers }: { followedUsers: SettingsPageData["
           ))}
         </div>
 
-        {followedUsers.total > 0 ? <PaginationBar page={followedUsers.page} hasPrevPage={followedUsers.hasPrevPage} hasNextPage={followedUsers.hasNextPage} basePath="/settings?tab=follows&followTab=users" /> : null}
+        {followedUsers.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={followedUsers.hasPrevPage}
+            hasNextPage={followedUsers.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=follows&followTab=users", "listBefore", followedUsers.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=follows&followTab=users", "listAfter", followedUsers.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -628,7 +653,7 @@ function FollowersPanel({ followers }: { followers: SettingsPageData["followers"
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>我的粉丝</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {followers.total} 位用户 · 第 {followers.page} / {followers.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {followers.total} 位用户</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -654,7 +679,14 @@ function FollowersPanel({ followers }: { followers: SettingsPageData["followers"
           ))}
         </div>
 
-        {followers.total > 0 ? <PaginationBar page={followers.page} hasPrevPage={followers.hasPrevPage} hasNextPage={followers.hasNextPage} basePath="/settings?tab=follows&followTab=followers" /> : null}
+        {followers.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={followers.hasPrevPage}
+            hasNextPage={followers.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=follows&followTab=followers", "listBefore", followers.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=follows&followTab=followers", "listAfter", followers.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -674,7 +706,7 @@ function FollowTagsPanel({ followedTags }: { followedTags: SettingsPageData["fol
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>关注标签</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {followedTags.total} 个标签 · 第 {followedTags.page} / {followedTags.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {followedTags.total} 个标签</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -698,7 +730,14 @@ function FollowTagsPanel({ followedTags }: { followedTags: SettingsPageData["fol
           ))}
         </div>
 
-        {followedTags.total > 0 ? <PaginationBar page={followedTags.page} hasPrevPage={followedTags.hasPrevPage} hasNextPage={followedTags.hasNextPage} basePath="/settings?tab=follows&followTab=tags" /> : null}
+        {followedTags.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={followedTags.hasPrevPage}
+            hasNextPage={followedTags.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=follows&followTab=tags", "listBefore", followedTags.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=follows&followTab=tags", "listAfter", followedTags.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -730,7 +769,7 @@ function BlockedUsersPanel({ blockedUsers }: { blockedUsers: SettingsPageData["b
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>拉黑用户</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {blockedUsers.total} 位用户 · 第 {blockedUsers.page} / {blockedUsers.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {blockedUsers.total} 位用户</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -764,7 +803,14 @@ function BlockedUsersPanel({ blockedUsers }: { blockedUsers: SettingsPageData["b
           ))}
         </div>
 
-        {blockedUsers.total > 0 ? <PaginationBar page={blockedUsers.page} hasPrevPage={blockedUsers.hasPrevPage} hasNextPage={blockedUsers.hasNextPage} basePath="/settings?tab=follows&followTab=blocks" /> : null}
+        {blockedUsers.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={blockedUsers.hasPrevPage}
+            hasNextPage={blockedUsers.hasNextPage}
+            prevHref={buildCursorHref("/settings?tab=follows&followTab=blocks", "listBefore", blockedUsers.prevCursor)}
+            nextHref={buildCursorHref("/settings?tab=follows&followTab=blocks", "listAfter", blockedUsers.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -812,7 +858,7 @@ function PostListPanel({
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>{title}</CardTitle>
-          <span className="text-sm text-muted-foreground">共 {posts.total} 条记录 · 第 {posts.page} / {posts.totalPages} 页</span>
+          <span className="text-sm text-muted-foreground">共 {posts.total} 条记录</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -835,7 +881,14 @@ function PostListPanel({
           )
         })}
 
-        {posts.total > 0 ? <PaginationBar page={posts.page} hasPrevPage={posts.hasPrevPage} hasNextPage={posts.hasNextPage} basePath={paginationBase} /> : null}
+        {posts.total > 0 ? (
+          <CursorPaginationBar
+            hasPrevPage={posts.hasPrevPage}
+            hasNextPage={posts.hasNextPage}
+            prevHref={buildCursorHref(paginationBase, "listBefore", posts.prevCursor)}
+            nextHref={buildCursorHref(paginationBase, "listAfter", posts.nextCursor)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -914,7 +967,24 @@ function PointsPanel({ pointLogs, currentPoints, pointName }: { pointLogs: Setti
             )
           })}
 
-          {pointLogs.total > 0 ? <PaginationBar page={pointLogs.page} hasPrevPage={pointLogs.hasPrevPage} hasNextPage={pointLogs.hasNextPage} basePath="/settings?tab=points" /> : null}
+          {pointLogs.total > 0 ? (
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Link
+                href={pointLogs.hasPrevPage && pointLogs.prevCursor ? `/settings?tab=points&pointsBefore=${encodeURIComponent(pointLogs.prevCursor)}` : "#"}
+                aria-disabled={!pointLogs.hasPrevPage}
+                className={pointLogs.hasPrevPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
+              >
+                上一页
+              </Link>
+              <Link
+                href={pointLogs.hasNextPage && pointLogs.nextCursor ? `/settings?tab=points&pointsAfter=${encodeURIComponent(pointLogs.nextCursor)}` : "#"}
+                aria-disabled={!pointLogs.hasNextPage}
+                className={pointLogs.hasNextPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
+              >
+                下一页
+              </Link>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -973,18 +1043,18 @@ function ProgressItem({ title, current, required, remaining, completed }: { titl
   )
 }
 
-function PaginationBar({ page, hasPrevPage, hasNextPage, basePath }: { page: number; hasPrevPage: boolean; hasNextPage: boolean; basePath: string }) {
+function CursorPaginationBar({ hasPrevPage, hasNextPage, prevHref, nextHref }: { hasPrevPage: boolean; hasNextPage: boolean; prevHref: string; nextHref: string }) {
   return (
     <div className="flex items-center justify-end gap-2 pt-2">
       <Link
-        href={`${basePath}&page=${Math.max(1, page - 1)}`}
+        href={hasPrevPage ? prevHref : "#"}
         aria-disabled={!hasPrevPage}
         className={hasPrevPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
       >
         上一页
       </Link>
       <Link
-        href={`${basePath}&page=${page + 1}`}
+        href={hasNextPage ? nextHref : "#"}
         aria-disabled={!hasNextPage}
         className={hasNextPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
       >

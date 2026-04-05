@@ -86,6 +86,12 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
   })
 }
 
+export function countLatestFeedPosts(excludedPostIds: string[] = []) {
+  return prisma.post.count({
+    where: buildFeedWhere(excludedPostIds),
+  })
+}
+
 export function findFollowingFeedPosts(
   page: number,
   pageSize: number,
@@ -103,6 +109,12 @@ export function findFollowingFeedPosts(
     orderBy: getFeedOrderBy(sort),
     skip: (page - 1) * normalizedPageSize,
     take: normalizedPageSize,
+  })
+}
+
+export function countFollowingFeedPosts(filters: { boardIds: string[]; authorIds: number[] }) {
+  return prisma.post.count({
+    where: buildFeedWhere([], filters),
   })
 }
 

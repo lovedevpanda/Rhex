@@ -1,29 +1,17 @@
-import { AUDIO_EXTENSIONS, COMMON_EMBED_HOSTS, VIDEO_EXTENSIONS } from "@/components/refined-rich-post-editor/constants"
 import type { MediaInsertResult } from "@/components/refined-rich-post-editor/types"
-
-function normalizeMediaUrl(input: string) {
-  const value = input.trim()
-  if (!value) {
-    return null
-  }
-
-  const normalized = value.startsWith("//") ? `https:${value}` : value
-
-  try {
-    return new URL(normalized)
-  } catch {
-    return null
-  }
-}
+import { AUDIO_EXTENSIONS, MARKDOWN_EMBED_HOST_SET, VIDEO_EXTENSIONS, normalizeMarkdownMediaSrc, normalizeMarkdownMediaUrl } from "@/lib/markdown/media"
 
 export function inferMediaInsert(input: string): MediaInsertResult | null {
-  const url = normalizeMediaUrl(input)
+  const url = normalizeMarkdownMediaUrl(input)
+  const originalSrc = normalizeMarkdownMediaSrc(input)
   if (!url) {
     return null
   }
 
   const pathname = url.pathname.toLowerCase()
-  const originalSrc = input.trim().startsWith("//") ? `//${url.host}${url.pathname}${url.search}${url.hash}` : url.toString()
+  if (!originalSrc) {
+    return null
+  }
 
   if (VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext))) {
     return {
@@ -39,7 +27,7 @@ export function inferMediaInsert(input: string): MediaInsertResult | null {
     }
   }
 
-  if (COMMON_EMBED_HOSTS.has(url.hostname)) {
+  if (MARKDOWN_EMBED_HOST_SET.has(url.hostname)) {
     return {
       template: `MEDIA::iframe::${originalSrc}`,
       message: "已识别为站点媒体链接，将按 iframe 渲染",
@@ -53,19 +41,7 @@ export function inferMediaInsert(input: string): MediaInsertResult | null {
 }
 
 export function normalizeRemoteUrl(input: string) {
-  const value = input.trim()
-  if (!value) {
-    return null
-  }
-
-  const normalized = value.startsWith("//") ? `https:${value}` : value
-
-  try {
-    const url = new URL(normalized)
-    return url.protocol === "http:" || url.protocol === "https:" ? url : null
-  } catch {
-    return null
-  }
+  return normalizeMarkdownMediaUrl(input)
 }
 
 function normalizeMarkdownAltText(input: string) {
@@ -78,13 +54,14 @@ function normalizeMarkdownAltText(input: string) {
 
 export function inferRemoteImageInsert(urlInput: string, altInput: string): MediaInsertResult | null {
   const url = normalizeRemoteUrl(urlInput)
+  const originalSrc = normalizeMarkdownMediaSrc(urlInput)
   if (!url) {
     return null
   }
 
-  const originalSrc = urlInput.trim().startsWith("//")
-    ? `//${url.host}${url.pathname}${url.search}${url.hash}`
-    : url.toString()
+  if (!originalSrc) {
+    return null
+  }
   const altText = normalizeMarkdownAltText(altInput) || "image"
 
   return {

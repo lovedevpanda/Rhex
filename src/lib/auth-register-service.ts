@@ -1,7 +1,18 @@
 import { VerificationChannel } from "@/db/types"
 import { hashSync } from "bcryptjs"
 
-import { prisma } from "@/db/client"
+import {
+  createRegisteredUserRecord,
+  findRegisterInviterByUsername,
+  findRegistrationConflict,
+  runRegisterTransaction,
+} from "@/db/auth-register-queries"
+import {
+  createUserLoginLogEntry,
+  findInviteCodeRegistrationContext,
+  incrementUserInviteCount,
+  markInviteCodeAsUsed,
+} from "@/db/external-auth-user-queries"
 import { apiError } from "@/lib/api-route"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { enforceSensitiveText } from "@/lib/content-safety"
@@ -153,21 +164,11 @@ async function ensureRegisterTargetsAvailable(context: RegisterContext) {
   const { payload, nicknameSafety } = context
   const sanitizedNickname = nicknameSafety?.sanitizedText ?? payload.nickname
 
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { username: payload.username },
-        ...(payload.email ? [{ email: payload.email }] : []),
-        ...(payload.phone ? [{ phone: payload.phone }] : []),
-        ...(payload.nickname ? [{ nickname: sanitizedNickname }] : []),
-      ],
-    },
-    select: {
-      username: true,
-      email: true,
-      phone: true,
-      nickname: true,
-    },
+  const existingUser = await findRegistrationConflict({
+    username: payload.username,
+    email: payload.email || undefined,
+    phone: payload.phone || undefined,
+    nickname: payload.nickname ? sanitizedNickname : undefined,
   })
 
   if (existingUser?.username === payload.username) {
@@ -236,15 +237,12 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
   const registerInitialPoints = Math.max(0, settings.registerInitialPoints)
   const sanitizedNickname = nicknameSafety?.sanitizedText || payload.username
 
-  const user = await prisma.$transaction(async (tx) => {
+  const user = await runRegisterTransaction(async (tx) => {
     let inviter: null | { id: number; username: string; points: number } = null
     let inviteCodeRecord: null | { id: string; code: string } = null
 
     if (payload.inviterUsername) {
-      inviter = await tx.user.findUnique({
-        where: { username: payload.inviterUsername },
-        select: { id: true, username: true, points: true },
-      })
+      inviter = await findRegisterInviterByUsername(payload.inviterUsername, tx)
 
       if (!inviter) {
         apiError(404, "邀请人不存在")
@@ -256,21 +254,7 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
     }
 
     if (payload.inviteCode) {
-      const foundCode = await tx.inviteCode.findUnique({
-        where: { code: payload.inviteCode },
-        select: {
-          id: true,
-          code: true,
-          usedById: true,
-          createdBy: {
-            select: {
-              id: true,
-              username: true,
-              points: true,
-            },
-          },
-        },
-      })
+      const foundCode = await findInviteCodeRegistrationContext(payload.inviteCode, tx)
 
       if (!foundCode) {
         apiError(404, "邀请码不存在")
@@ -297,55 +281,30 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
 
     const inviteeRegisterReward = inviter && inviteeReward > 0 ? inviteeReward : 0
 
-    const createdUser = await tx.user.create({
-      data: {
-        username: payload.username,
-        email: settings.registerEmailEnabled ? payload.email || null : null,
-        phone: settings.registerPhoneEnabled ? payload.phone || null : null,
-        emailVerifiedAt: settings.registerEmailEnabled && settings.registerEmailVerification ? new Date() : null,
-        phoneVerifiedAt: settings.registerPhoneEnabled && settings.registerPhoneVerification ? new Date() : null,
-        passwordHash: hashSync(payload.password, 10),
-        nickname: settings.registerNicknameEnabled ? sanitizedNickname : payload.username,
-        gender: settings.registerGenderEnabled ? payload.gender : null,
-        status: "ACTIVE",
-        role: "USER",
-        inviterId: inviter?.id,
-        lastLoginAt: new Date(),
-        lastLoginIp: registerIp,
-        points: 0,
-      },
-      select: {
-        id: true,
-        username: true,
-      },
+    const createdUser = await createRegisteredUserRecord({
+      tx,
+      username: payload.username,
+      email: settings.registerEmailEnabled ? payload.email || null : null,
+      phone: settings.registerPhoneEnabled ? payload.phone || null : null,
+      emailVerifiedAt: settings.registerEmailEnabled && settings.registerEmailVerification ? new Date() : null,
+      phoneVerifiedAt: settings.registerPhoneEnabled && settings.registerPhoneVerification ? new Date() : null,
+      passwordHash: hashSync(payload.password, 10),
+      nickname: settings.registerNicknameEnabled ? sanitizedNickname : payload.username,
+      gender: settings.registerGenderEnabled ? payload.gender : null,
+      inviterId: inviter?.id,
+      lastLoginAt: new Date(),
+      lastLoginIp: registerIp,
     })
 
     if (inviteCodeRecord) {
-      await tx.inviteCode.update({
-        where: { id: inviteCodeRecord.id },
-        data: {
-          usedById: createdUser.id,
-          usedAt: new Date(),
-        },
-      })
+      await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
     }
 
     if (inviter) {
-      await tx.user.update({
-        where: { id: inviter.id },
-        data: {
-          inviteCount: { increment: 1 },
-        },
-      })
+      await incrementUserInviteCount(inviter.id, tx)
     }
 
-    await tx.userLoginLog.create({
-      data: {
-        userId: createdUser.id,
-        ip: registerIp,
-        userAgent,
-      },
-    })
+    await createUserLoginLogEntry(createdUser.id, registerIp, userAgent, tx)
 
     if (inviter && inviterReward > 0) {
       const preparedInviterReward = await prepareScopedPointDelta({

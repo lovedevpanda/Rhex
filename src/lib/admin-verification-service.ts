@@ -1,7 +1,19 @@
-import { prisma } from "@/db/client"
+import {
+  countVerificationApplicationsByType,
+  createVerificationTypeRecord,
+  deleteVerificationTypeRecord,
+  findAdminVerificationTypes,
+  findRecentVerificationApplications,
+  findVerificationApplicationForReview,
+  runVerificationReviewTransaction,
+  updateVerificationTypeRecord,
+} from "@/db/admin-verification-queries"
 import { apiError, type JsonObject } from "@/lib/api-route"
-import { getRequestIp, type requireAdminUser, writeAdminLog } from "@/lib/admin"
+import { getRequestIp, writeAdminLog } from "@/lib/admin"
+import type { AdminActor } from "@/lib/moderator-permissions"
 import { createSystemNotification } from "@/lib/notification-writes"
+import { getUserDisplayName } from "@/lib/user-display"
+import { parseVerificationFormSchema } from "@/lib/verification-form-schema"
 
 function normalizeText(value: unknown, fallback = "") {
   return String(value ?? fallback).trim()
@@ -16,7 +28,21 @@ function normalizeNumber(value: unknown, fallback = 0) {
   return Number.isFinite(numberValue) ? numberValue : fallback
 }
 
-type AdminActor = NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
+function buildVerificationTypeWriteInput(body: JsonObject) {
+  return {
+    name: normalizeText(body.name),
+    slug: normalizeText(body.slug),
+    description: normalizeText(body.description) || undefined,
+    iconText: normalizeText(body.iconText, "✔️") || "✔️",
+    color: normalizeText(body.color, "#2563eb") || "#2563eb",
+    formSchemaJson: typeof body.formSchemaJson === "string" ? body.formSchemaJson : undefined,
+    sortOrder: normalizeNumber(body.sortOrder),
+    status: body.status === undefined ? true : normalizeBoolean(body.status),
+    needRemark: normalizeBoolean(body.needRemark),
+    userLimit: Math.max(1, normalizeNumber(body.userLimit, 1)),
+    allowResubmitAfterReject: body.allowResubmitAfterReject === undefined ? true : normalizeBoolean(body.allowResubmitAfterReject),
+  }
+}
 
 function buildVerificationReviewNotification(params: {
   typeName: string
@@ -39,27 +65,8 @@ function buildVerificationReviewNotification(params: {
 
 export async function getVerificationAdminData() {
   const [types, applications] = await Promise.all([
-    prisma.verificationType.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      include: {
-        _count: {
-          select: { applications: true },
-        },
-      },
-    }),
-    prisma.userVerification.findMany({
-      orderBy: [{ submittedAt: "desc" }],
-      take: 200,
-      include: {
-        type: true,
-        user: {
-          select: { id: true, username: true, nickname: true },
-        },
-        reviewer: {
-          select: { id: true, username: true, nickname: true },
-        },
-      },
-    }),
+    findAdminVerificationTypes(),
+    findRecentVerificationApplications(),
   ])
 
   return {
@@ -67,9 +74,13 @@ export async function getVerificationAdminData() {
       id: type.id,
       name: type.name,
       slug: type.slug,
-      description: type.description,
-      iconText: type.iconText,
+      description: type.description ?? "",
+      iconText: type.iconText ?? "✔️",
       color: type.color,
+      formFields: parseVerificationFormSchema(type.formSchemaJson, {
+        allowFallbackLabel: true,
+        coerceInvalidType: true,
+      }),
       sortOrder: type.sortOrder,
       status: type.status,
       needRemark: type.needRemark,
@@ -93,7 +104,7 @@ export async function getVerificationAdminData() {
       user: {
         id: item.user.id,
         username: item.user.username,
-        displayName: item.user.nickname?.trim() || item.user.username,
+        displayName: getUserDisplayName(item.user),
       },
       type: {
         id: item.type.id,
@@ -105,7 +116,7 @@ export async function getVerificationAdminData() {
         ? {
             id: item.reviewer.id,
             username: item.reviewer.username,
-            displayName: item.reviewer.nickname?.trim() || item.reviewer.username,
+            displayName: getUserDisplayName(item.reviewer),
           }
         : null,
     })),
@@ -117,28 +128,14 @@ export async function createVerificationType(params: {
   admin: AdminActor
   request: Request
 }) {
-  const name = normalizeText(params.body.name)
-  const slug = normalizeText(params.body.slug)
+  const payload = buildVerificationTypeWriteInput(params.body)
+  const { name, slug } = payload
 
   if (!name || !slug) {
     apiError(400, "认证名称和标识不能为空")
   }
 
-  const created = await prisma.verificationType.create({
-    data: {
-      name,
-      slug,
-      description: normalizeText(params.body.description) || undefined,
-      iconText: normalizeText(params.body.iconText, "✔️") || "✔️",
-      color: normalizeText(params.body.color, "#2563eb") || "#2563eb",
-      formSchemaJson: typeof params.body.formSchemaJson === "string" ? params.body.formSchemaJson : undefined,
-      sortOrder: normalizeNumber(params.body.sortOrder),
-      status: params.body.status === undefined ? true : normalizeBoolean(params.body.status),
-      needRemark: normalizeBoolean(params.body.needRemark),
-      userLimit: Math.max(1, normalizeNumber(params.body.userLimit, 1)),
-      allowResubmitAfterReject: params.body.allowResubmitAfterReject === undefined ? true : normalizeBoolean(params.body.allowResubmitAfterReject),
-    },
-  })
+  const created = await createVerificationTypeRecord(payload)
 
   await writeAdminLog(params.admin.id, "verificationType.create", "VERIFICATION_TYPE", created.id, `创建认证类型 ${created.name}`, getRequestIp(params.request))
   return { id: created.id }
@@ -163,15 +160,7 @@ export async function updateVerificationTypeOrReview(params: {
       apiError(400, "审核参数无效")
     }
 
-    const application = await prisma.userVerification.findUnique({
-      where: { id: applicationId },
-      include: {
-        type: true,
-        user: {
-          select: { username: true, nickname: true },
-        },
-      },
-    })
+    const application = await findVerificationApplicationForReview(applicationId)
 
     if (!application) {
       apiError(404, "认证申请不存在")
@@ -185,75 +174,45 @@ export async function updateVerificationTypeOrReview(params: {
       apiError(400, "请填写驳回原因")
     }
 
-    await prisma.$transaction(async (tx) => {
-      if (status === "APPROVED") {
-        await tx.userVerification.updateMany({
-          where: { userId: application.userId, status: "APPROVED" },
-          data: {
-            status: "CANCELLED",
-            note: "已有新的认证通过，旧认证已自动失效",
-            reviewedAt: new Date(),
-            reviewerId: params.admin.id,
-          },
-        })
-      }
-
-      const notification = buildVerificationReviewNotification({
-        typeName: application.type.name,
-        status,
-        note,
-        rejectReason,
-      })
-
-      await tx.userVerification.update({
-        where: { id: applicationId },
-        data: {
-          status,
-          note: note || undefined,
-          rejectReason: status === "REJECTED" ? rejectReason : null,
-          reviewedAt: new Date(),
-          reviewerId: params.admin.id,
-        },
-      })
-
-      await createSystemNotification({
-        client: tx,
-        userId: application.userId,
-        senderId: params.admin.id,
-        relatedType: "ANNOUNCEMENT",
-        relatedId: applicationId,
-        title: notification.title,
-        content: notification.content,
-      })
+    const notification = buildVerificationReviewNotification({
+      typeName: application.type.name,
+      status,
+      note,
+      rejectReason,
     })
 
-    await writeAdminLog(params.admin.id, `verification.review.${status.toLowerCase()}`, "USER_VERIFICATION", applicationId, `${status === "APPROVED" ? "通过" : "驳回"} ${application.user.nickname?.trim() || application.user.username} 的 ${application.type.name} 认证申请`, requestIp)
+    await runVerificationReviewTransaction({
+      applicationId,
+      userId: application.userId,
+      adminId: params.admin.id,
+      status,
+      note,
+      rejectReason,
+      afterReview: async (tx) => {
+        await createSystemNotification({
+          client: tx,
+          userId: application.userId,
+          senderId: params.admin.id,
+          relatedType: "ANNOUNCEMENT",
+          relatedId: applicationId,
+          title: notification.title,
+          content: notification.content,
+        })
+      },
+    })
+
+    await writeAdminLog(params.admin.id, `verification.review.${status.toLowerCase()}`, "USER_VERIFICATION", applicationId, `${status === "APPROVED" ? "通过" : "驳回"} ${getUserDisplayName(application.user)} 的 ${application.type.name} 认证申请`, requestIp)
     return { reviewed: true, status }
   }
 
-  const name = normalizeText(params.body.name)
-  const slug = normalizeText(params.body.slug)
+  const payload = buildVerificationTypeWriteInput(params.body)
+  const { name, slug } = payload
 
   if (!id || !name || !slug) {
     apiError(400, "缺少必要参数")
   }
 
-  await prisma.verificationType.update({
-    where: { id },
-    data: {
-      name,
-      slug,
-      description: normalizeText(params.body.description) || undefined,
-      iconText: normalizeText(params.body.iconText, "✔️") || "✔️",
-      color: normalizeText(params.body.color, "#2563eb") || "#2563eb",
-      formSchemaJson: typeof params.body.formSchemaJson === "string" ? params.body.formSchemaJson : undefined,
-      sortOrder: normalizeNumber(params.body.sortOrder),
-      status: params.body.status === undefined ? true : normalizeBoolean(params.body.status),
-      needRemark: normalizeBoolean(params.body.needRemark),
-      userLimit: Math.max(1, normalizeNumber(params.body.userLimit, 1)),
-      allowResubmitAfterReject: params.body.allowResubmitAfterReject === undefined ? true : normalizeBoolean(params.body.allowResubmitAfterReject),
-    },
-  })
+  await updateVerificationTypeRecord(id, payload)
 
   await writeAdminLog(params.admin.id, "verificationType.update", "VERIFICATION_TYPE", id, `更新认证类型 ${name}`, requestIp)
   return { reviewed: false }
@@ -270,11 +229,11 @@ export async function deleteVerificationType(params: {
     apiError(400, "缺少必要参数")
   }
 
-  const applicationCount = await prisma.userVerification.count({ where: { typeId: id } })
+  const applicationCount = await countVerificationApplicationsByType(id)
   if (applicationCount > 0) {
     apiError(400, "该认证已有申请记录，暂不允许删除")
   }
 
-  await prisma.verificationType.delete({ where: { id } })
+  await deleteVerificationTypeRecord(id)
   await writeAdminLog(params.admin.id, "verificationType.delete", "VERIFICATION_TYPE", id, "删除认证类型", getRequestIp(params.request))
 }

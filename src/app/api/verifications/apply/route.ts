@@ -37,5 +37,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "提交失败",
   logPrefix: "[api/verifications/apply] unexpected error",
   unauthorizedMessage: "请先登录后再申请认证",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

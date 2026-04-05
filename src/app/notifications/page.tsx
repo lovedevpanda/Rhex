@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-import { redirect } from "next/navigation"
 
 import { NotificationsPagination } from "@/components/notifications-pagination"
 import { NotificationsToolbar } from "@/components/notifications-toolbar"
@@ -20,27 +19,31 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-function parsePageParam(value: string | string[] | undefined) {
-  const rawValue = Array.isArray(value) ? value[0] : value
-  const page = Number(rawValue)
-
-  if (!Number.isInteger(page) || page < 1) {
-    return 1
-  }
-
-  return page
+function readParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }
 
-function buildPageHref(page: number) {
-  return page <= 1 ? "/notifications" : `/notifications?page=${page}`
+function buildNotificationsHref(params: { after?: string | null; before?: string | null }) {
+  const query = new URLSearchParams()
+
+  if (params.after) {
+    query.set("after", params.after)
+  }
+
+  if (params.before) {
+    query.set("before", params.before)
+  }
+
+  const queryString = query.toString()
+  return queryString ? `/notifications?${queryString}` : "/notifications"
 }
 
 export default async function NotificationsPage(
   props: {
-    searchParams?: Promise<{ page?: string | string[] }>
+    searchParams?: Promise<{ after?: string | string[]; before?: string | string[] }>
   }
 ) {
-  const searchParams = await props.searchParams;
+  const searchParams = await props.searchParams
   const user = await getCurrentUser()
 
   if (!user) {
@@ -59,20 +62,14 @@ export default async function NotificationsPage(
     )
   }
 
-  const resolvedSearchParams = searchParams ? await searchParams : undefined
-  const requestedPage = parsePageParam(resolvedSearchParams?.page)
+  const resolvedSearchParams = searchParams ?? undefined
+  const after = readParam(resolvedSearchParams?.after)
+  const before = readParam(resolvedSearchParams?.before)
 
-  const [{ items: notifications, totalCount }, unreadCount] = await Promise.all([
-    getUserNotifications(user.id, requestedPage, PAGE_SIZE),
+  const [{ items: notifications, hasPrevPage, hasNextPage, prevCursor, nextCursor }, unreadCount] = await Promise.all([
+    getUserNotifications(user.id, { pageSize: PAGE_SIZE, after, before }),
     getUserUnreadNotificationCount(user.id),
   ])
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-  const currentPage = Math.min(requestedPage, totalPages)
-
-  if (requestedPage !== currentPage) {
-    redirect(buildPageHref(currentPage))
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -100,7 +97,10 @@ export default async function NotificationsPage(
                   createdAt={notification.createdAt}
                 />
               ))}
-              <NotificationsPagination currentPage={currentPage} totalPages={totalPages} />
+              <NotificationsPagination
+                prevHref={hasPrevPage && prevCursor ? buildNotificationsHref({ before: prevCursor }) : null}
+                nextHref={hasNextPage && nextCursor ? buildNotificationsHref({ after: nextCursor }) : null}
+              />
             </CardContent>
           </Card>
         </div>

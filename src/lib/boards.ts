@@ -1,13 +1,14 @@
 import { cache } from "react"
 
 import { findFollowRecord } from "@/db/follow-queries"
-import { findBoardNormalPosts, findBoardPinnedPosts, findZoneBoardIdsById } from "@/db/taxonomy-queries"
+import { resolvePagination } from "@/db/helpers"
+import { countBoardNormalPosts, findBoardNormalPosts, findBoardPinnedPosts, findZoneBoardIdsById } from "@/db/taxonomy-queries"
 import { resolveBoardSettings } from "@/lib/board-settings"
 import { resolvePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
 import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
-import { prisma } from "@/db/client"
 import { mapListPost } from "@/lib/post-map"
-import { findActiveBoardsWithZoneAndPostCount } from "@/db/board-read-queries"
+import { findActiveBoardsWithZoneAndPostCount, findBoardBySlugWithZoneAndPostCount } from "@/db/board-read-queries"
+import type { SitePostItem } from "@/lib/posts"
 
 
 
@@ -78,21 +79,7 @@ export async function getFeaturedBoards(limit: number): Promise<SiteBoardItem[]>
 }
 
 const getCachedBoardBySlug = cache(async (slug: string): Promise<SiteBoardItem | null> => {
-  const board = await prisma.board.findUnique({
-    where: { slug },
-    include: {
-      zone: true,
-      _count: {
-        select: {
-          posts: {
-            where: {
-              status: "NORMAL",
-            },
-          },
-        },
-      },
-    },
-  })
+  const board = await findBoardBySlugWithZoneAndPostCount(slug)
 
   if (!board) {
     return null
@@ -128,28 +115,64 @@ export async function getBoardBySlug(slug: string): Promise<SiteBoardItem | null
   return getCachedBoardBySlug(slug)
 }
 
-export async function getBoardPosts(slug: string, page = 1, pageSize = 30) {
+export interface BoardPostPageResult {
+  items: SitePostItem[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export async function getBoardPosts(slug: string, page = 1, pageSize = 30): Promise<BoardPostPageResult> {
   const board = await getBoardBySlug(slug)
 
   if (!board) {
-    return []
+    return {
+      items: [],
+      page: 1,
+      pageSize,
+      total: 0,
+      totalPages: 1,
+      hasPrevPage: false,
+      hasNextPage: false,
+    }
   }
 
   const zone = board.zoneId ? await findZoneBoardIdsById(board.zoneId) : null
   const zoneBoardIds = zone?.boards.map((item: (typeof zone.boards)[number]) => item.id) ?? [board.id]
   const pinnedPosts = await findBoardPinnedPosts(board.id, zoneBoardIds)
+  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
+  const total = await countBoardNormalPosts(board.id, excludedPostIds)
+  const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
 
-  if (page === 1) {
+  if (pagination.page === 1) {
     const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts)
-    const normalPosts = await findBoardNormalPosts(board.id, pinnedPostIds, 1, pageSize)
+    const normalPosts = await findBoardNormalPosts(board.id, pinnedPostIds, 1, pagination.pageSize)
 
-    return [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))]
+    return {
+      items: [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))],
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total: pagination.total,
+      totalPages: pagination.totalPages,
+      hasPrevPage: pagination.hasPrevPage,
+      hasNextPage: pagination.hasNextPage,
+    }
   }
 
-  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
-  const normalPosts = await findBoardNormalPosts(board.id, excludedPostIds, page, pageSize)
+  const normalPosts = await findBoardNormalPosts(board.id, excludedPostIds, pagination.page, pagination.pageSize)
 
-  return normalPosts.map((post) => mapListPost(post))
+  return {
+    items: normalPosts.map((post) => mapListPost(post)),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    total: pagination.total,
+    totalPages: pagination.totalPages,
+    hasPrevPage: pagination.hasPrevPage,
+    hasNextPage: pagination.hasNextPage,
+  }
 }
 
 export async function isUserFollowingBoard(userId: number, boardId: string) {

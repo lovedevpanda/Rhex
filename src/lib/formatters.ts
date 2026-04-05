@@ -24,6 +24,28 @@ function getDateParts(date = new Date(), timeZone = BUSINESS_TIME_ZONE) {
   return { year, month, day }
 }
 
+function getTimeParts(date = new Date(), timeZone = BUSINESS_TIME_ZONE) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(date)
+  const hour = parts.find((item) => item.type === "hour")?.value
+  const minute = parts.find((item) => item.type === "minute")?.value
+
+  if (!hour || !minute) {
+    throw new Error("无法解析时间")
+  }
+
+  return {
+    hour: Number(hour),
+    minute: Number(minute),
+  }
+}
+
 function parseBusinessDateTimeInput(input: string) {
   const normalized = input.trim()
   const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/)
@@ -187,6 +209,11 @@ export function getBusinessDayRange(date = new Date()) {
   const end = new Date(Date.UTC(year, month - 1, day + 1, 0 - 8, 0, 0, 0))
 
   return { start, end, dayKey }
+}
+
+export function getBusinessMinuteOfDay(date = new Date(), timeZone = BUSINESS_TIME_ZONE) {
+  const { hour, minute } = getTimeParts(date, timeZone)
+  return hour * 60 + minute
 }
 
 export function formatMonthDayTime(input: string | Date, locale = "zh-CN") {

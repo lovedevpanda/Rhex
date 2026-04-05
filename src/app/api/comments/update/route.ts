@@ -1,9 +1,9 @@
-import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { updateCommentFlow } from "@/lib/comment-update-service"
 import { logRequestSucceeded } from "@/lib/request-log"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const result = await updateCommentFlow({
     body,
     currentUser: {

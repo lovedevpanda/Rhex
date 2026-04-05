@@ -1,21 +1,14 @@
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/db/client"
+import { userDisplayNameSelect, userIdentitySelect } from "@/db/user-selects"
 
 const challengeDetailInclude = {
   creator: {
-    select: {
-      id: true,
-      username: true,
-      nickname: true,
-    },
+    select: userIdentitySelect,
   },
   challenger: {
-    select: {
-      id: true,
-      username: true,
-      nickname: true,
-    },
+    select: userIdentitySelect,
   },
   attempt: true,
 } as const
@@ -23,6 +16,13 @@ const challengeDetailInclude = {
 export type YinYangChallengeDetailRow = Awaited<ReturnType<typeof findChallengeById>> extends infer TResult
   ? NonNullable<TResult>
   : never
+
+export interface YinYangUserPointSnapshot {
+  id: number
+  username: string
+  nickname: string | null
+  points: number
+}
 
 export async function countUserCreatedChallengesInRange(userId: number, start: Date, end: Date) {
   return prisma.yinYangChallenge.count({
@@ -267,7 +267,7 @@ export async function listTopYinYangWinners(limit = 10) {
   }
 
   const [users, loseCounts, todayStats] = await Promise.all([
-    prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true, nickname: true } }),
+    prisma.user.findMany({ where: { id: { in: userIds } }, select: userIdentitySelect }),
     prisma.yinYangChallenge.groupBy({ by: ["loserId"], where: { status: "SETTLED", loserId: { in: userIds } }, _count: { _all: true } }),
     prisma.yinYangChallengeDailyStat.findMany({ where: { userId: { in: userIds } } }),
   ])
@@ -306,11 +306,7 @@ export async function listTopYinYangEarners(limit = 10) {
   const rows = await prisma.yinYangChallengeDailyStat.findMany({
     include: {
       user: {
-        select: {
-          id: true,
-          username: true,
-          nickname: true,
-        },
+        select: userIdentitySelect,
       },
     },
     orderBy: [{ todayProfitPoints: "desc" }, { todayLossPoints: "asc" }, { winCount: "desc" }],
@@ -356,4 +352,59 @@ export async function listTopYinYangEarners(limit = 10) {
   return Array.from(byUser.values())
     .sort((left, right) => right.totalProfitPoints - left.totalProfitPoints || left.totalLossPoints - right.totalLossPoints || right.winCount - left.winCount)
     .slice(0, Math.max(1, Math.min(limit, 20)))
+}
+
+export function findYinYangUserPointSnapshot(
+  userId: number,
+  client?: Prisma.TransactionClient,
+) {
+  const db = client ?? prisma
+  return db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      ...userDisplayNameSelect,
+      points: true,
+    },
+  })
+}
+
+export function getYinYangUserSummaryStats(userId: number, dateKey: string) {
+  return Promise.all([
+    prisma.yinYangChallenge.count({
+      where: { status: "SETTLED", winnerId: userId },
+    }),
+    prisma.yinYangChallenge.count({
+      where: { status: "SETTLED", loserId: userId },
+    }),
+    prisma.yinYangChallengeDailyStat.findUnique({
+      where: {
+        userId_dateKey: {
+          userId,
+          dateKey,
+        },
+      },
+    }),
+    prisma.yinYangChallenge.aggregate({
+      where: { status: "SETTLED", winnerId: userId },
+      _sum: { rewardPoints: true },
+    }),
+    prisma.yinYangChallenge.aggregate({
+      where: { status: "SETTLED", loserId: userId },
+      _sum: { stakePoints: true },
+    }),
+  ]).then(([winCount, loseCount, today, totalProfit, totalLoss]) => ({
+    winCount,
+    loseCount,
+    todayProfitPoints: today?.todayProfitPoints ?? 0,
+    todayLossPoints: today?.todayLossPoints ?? 0,
+    totalProfitPoints: totalProfit._sum.rewardPoints ?? 0,
+    totalLossPoints: totalLoss._sum.stakePoints ?? 0,
+  }))
+}
+
+export function runYinYangTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  return prisma.$transaction(callback)
 }

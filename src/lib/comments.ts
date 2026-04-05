@@ -24,6 +24,7 @@ function parseRewardEffectFeedback(rawValue: string) {
 
 export interface SiteCommentReplyItem {
   id: string
+  status: "NORMAL" | "HIDDEN" | "DELETED" | "PENDING"
   author: string
   authorId: number
   authorUsername: string
@@ -59,6 +60,7 @@ export interface SiteCommentReplyItem {
 
 export interface SiteCommentItem {
   id: string
+  status: "NORMAL" | "HIDDEN" | "DELETED" | "PENDING"
   author: string
   authorId: number
   authorUsername: string
@@ -199,18 +201,20 @@ export async function getCommentsByPostId(
     }
 
     const [total, rawRootComments] = await Promise.all([
-      countRootCommentsByPostId(postId, viewer?.userId),
+      countRootCommentsByPostId(postId, viewer?.userId, true),
       findRootCommentsByPostId({
         postId,
         sort,
         page,
         pageSize,
         viewerUserId: viewer?.userId,
+        includeHidden: true,
       }),
     ])
 
     const rootComments = rawRootComments as unknown as Array<{
       id: string
+      status: "NORMAL" | "HIDDEN" | "DELETED" | "PENDING"
       userId: number
       content: string
       likeCount: number
@@ -227,8 +231,10 @@ export async function getCommentsByPostId(
       parentIds: rootIds,
       sort,
       viewerUserId: viewer?.userId,
+      includeHidden: true,
     }) as unknown as Array<{
       id: string
+      status: "NORMAL" | "HIDDEN" | "DELETED" | "PENDING"
       userId: number
       parentId: string | null
       content: string
@@ -278,6 +284,7 @@ export async function getCommentsByPostId(
 
       currentReplies.push({
         id: comment.id,
+        status: comment.status,
         postId,
         author: comment.user.nickname ?? comment.user.username,
         authorId: comment.userId,
@@ -310,6 +317,7 @@ export async function getCommentsByPostId(
 
       return {
         id: comment.id,
+        status: comment.status,
         postId,
         author: getUserDisplayName(comment.user),
         authorId: comment.userId,

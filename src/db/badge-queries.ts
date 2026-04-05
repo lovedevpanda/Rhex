@@ -108,6 +108,18 @@ export function findAllBadgesWithRules() {
   })
 }
 
+export function findGrantedUserBadgeWithTx(tx: Prisma.TransactionClient, userId: number, badgeId: string) {
+  return tx.userBadge.findUnique({
+    where: {
+      userId_badgeId: {
+        userId,
+        badgeId,
+      },
+    },
+    select: { id: true },
+  })
+}
+
 export async function findBadgeEffectRulesByBadgeIds(badgeIds: string[]) {
   if (badgeIds.length === 0) {
     return []
@@ -171,9 +183,12 @@ export function createSelfClaimUserBadge(input: {
   badgeId: string
   grantSource: BadgeGrantSource
   grantSnapshot: string | null
+  client?: Prisma.TransactionClient
 }) {
 
-  return prisma.userBadge.create({
+  const client = input.client ?? prisma
+
+  return client.userBadge.create({
     data: {
       userId: input.userId,
       badgeId: input.badgeId,
@@ -219,6 +234,19 @@ export function findDisplayedUserBadges(userId: number) {
       displayOrder: true,
     },
   })
+}
+
+export function findBadgeUserPoints(userId: number, client: Prisma.TransactionClient) {
+  return client.user.findUnique({
+    where: { id: userId },
+    select: { id: true, points: true },
+  })
+}
+
+export function runBadgeTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  return prisma.$transaction(callback)
 }
 
 export async function findDisplayedBadgeEffectRules(userId: number) {

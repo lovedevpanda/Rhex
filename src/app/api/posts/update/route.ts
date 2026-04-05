@@ -37,5 +37,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "修改帖子失败",
   logPrefix: "[api/posts/update] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

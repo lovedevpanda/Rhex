@@ -38,12 +38,12 @@ function normalizeTagListPage(page?: number) {
   return Math.max(1, Math.trunc(page))
 }
 
-function mapSiteTagItem(tag: { id: string; name: string; slug: string; _count: { posts: number } }): SiteTagItem {
+function mapSiteTagItem(tag: { id: string; name: string; slug: string; postCount: number }): SiteTagItem {
   return {
     id: tag.id,
     name: tag.name,
     slug: tag.slug,
-    count: tag._count.posts,
+    count: tag.postCount,
   }
 }
 

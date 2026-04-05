@@ -10,6 +10,8 @@ interface PostAdminPanelProps {
   postId: string
   postSlug: string
   currentBoardSlug: string
+  actorRole: "ADMIN" | "MODERATOR"
+  allowedPinScopes: Array<"NONE" | "BOARD" | "ZONE" | "GLOBAL">
   postAuthorId: number
   postAuthorUsername: string
   postAuthorStatus?: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
@@ -32,11 +34,14 @@ export function PostAdminPanel({
   postId,
   postSlug,
   currentBoardSlug,
+  actorRole,
+  allowedPinScopes,
   postAuthorId,
   postAuthorUsername,
   postAuthorStatus,
   postStatus,
   isPinned,
+  
   isFeatured,
   boardOptions,
 }: PostAdminPanelProps) {
@@ -74,7 +79,7 @@ export function PostAdminPanel({
       const response = await fetch("/api/admin/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, targetId, ...extra }),
+        body: JSON.stringify({ action, targetId, postId, ...extra }),
       })
       const result = await response.json()
       setFeedback(result.message ?? (response.ok ? "操作成功" : "操作失败"))
@@ -115,25 +120,31 @@ export function PostAdminPanel({
     void runAction("post.moveBoard", postId, { boardSlug: moveBoardSlug })
   }
 
+  const canEditPostContent = actorRole === "ADMIN"
   const userActions: AdminQuickAction[] = postAuthorStatus === "BANNED"
-    ? [{ action: "user.activate", targetId: String(postAuthorId), label: "解除封禁" }]
+    ? (actorRole === "ADMIN" ? [{ action: "user.activate", targetId: String(postAuthorId), label: "解除封禁" }] : [])
     : postAuthorStatus === "MUTED"
       ? [
           { action: "user.activate", targetId: String(postAuthorId), label: "解除禁言" },
-          { action: "user.ban", targetId: String(postAuthorId), label: "封禁此用户", tone: "danger" as const },
+          ...(actorRole === "ADMIN" ? [{ action: "user.ban", targetId: String(postAuthorId), label: "封禁此用户", tone: "danger" as const }] : []),
         ]
       : [
           { action: "user.mute", targetId: String(postAuthorId), label: "禁言此用户" },
-          { action: "user.ban", targetId: String(postAuthorId), label: "封禁此用户", tone: "danger" as const },
+          ...(actorRole === "ADMIN" ? [{ action: "user.ban", targetId: String(postAuthorId), label: "封禁此用户", tone: "danger" as const }] : []),
         ]
 
   const pinActions: AdminQuickAction[] = isPinned
-    ? [{ action: "post.pin", targetId: postId, label: "取消置顶", extra: { scope: "NONE" } }]
-    : [
-        { action: "post.pin", targetId: postId, label: "节点置顶", extra: { scope: "BOARD" } },
-        { action: "post.pin", targetId: postId, label: "分区置顶", extra: { scope: "ZONE" } },
-        { action: "post.pin", targetId: postId, label: "全局置顶", extra: { scope: "GLOBAL" } },
-      ]
+    ? (allowedPinScopes.includes("NONE")
+      ? [{ action: "post.pin", targetId: postId, label: "取消置顶", extra: { scope: "NONE" } }]
+      : [])
+    : allowedPinScopes
+        .filter((scope) => scope !== "NONE")
+        .map((scope) => ({
+          action: "post.pin",
+          targetId: postId,
+          label: scope === "GLOBAL" ? "全局置顶" : scope === "ZONE" ? "分区置顶" : "节点置顶",
+          extra: { scope },
+        }))
 
   const postVisibilityAction: AdminQuickAction = postStatus === "OFFLINE"
     ? { action: "post.show", targetId: postId, label: "上线帖子" }
@@ -155,9 +166,11 @@ export function PostAdminPanel({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" className="h-8 px-3 text-xs" onClick={openEditPage} disabled={pendingAction}>
-          编辑帖子
-        </Button>
+        {canEditPostContent ? (
+          <Button variant="outline" className="h-8 px-3 text-xs" onClick={openEditPage} disabled={pendingAction}>
+            编辑帖子
+          </Button>
+        ) : null}
         <Button variant="outline" className="h-8 px-3 text-xs" onClick={openMoveDialog} disabled={pendingAction}>
           移动节点
         </Button>

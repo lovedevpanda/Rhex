@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache"
 
-import { apiSuccess, createAdminRouteHandler } from "@/lib/api-route"
+import { apiSuccess, createAdminRouteHandler, readJsonBody } from "@/lib/api-route"
 import {
   getAdminAnnouncementList,
   removeAdminAnnouncement,
@@ -19,11 +19,24 @@ export const GET = createAdminRouteHandler(async () => {
 })
 
 export const POST = createAdminRouteHandler(async ({ request }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const action = String(body.action ?? "save")
+  const input = {
+    id: typeof body.id === "string" ? body.id : undefined,
+    type: typeof body.type === "string" ? body.type : undefined,
+    title: typeof body.title === "string" ? body.title : "",
+    content: typeof body.content === "string" ? body.content : undefined,
+    sourceType: typeof body.sourceType === "string" ? body.sourceType : undefined,
+    slug: typeof body.slug === "string" ? body.slug : undefined,
+    linkUrl: typeof body.linkUrl === "string" ? body.linkUrl : undefined,
+    titleColor: typeof body.titleColor === "string" ? body.titleColor : undefined,
+    titleBold: typeof body.titleBold === "boolean" ? body.titleBold : undefined,
+    status: typeof body.status === "string" ? body.status : "DRAFT",
+    isPinned: typeof body.isPinned === "boolean" ? body.isPinned : undefined,
+  }
 
   if (action === "delete") {
-    await removeAdminAnnouncement(String(body.id ?? ""))
+    await removeAdminAnnouncement(String(input.id ?? ""))
     revalidatePath("/")
     revalidatePath("/help")
     revalidatePath("/announcements")
@@ -32,7 +45,7 @@ export const POST = createAdminRouteHandler(async ({ request }) => {
   }
 
   if (action === "toggle-pin") {
-    await toggleAdminAnnouncementPin(String(body.id ?? ""), Boolean(body.isPinned))
+    await toggleAdminAnnouncementPin(String(input.id ?? ""), Boolean(input.isPinned))
     revalidatePath("/")
     revalidatePath("/help")
     revalidatePath("/announcements")
@@ -41,7 +54,7 @@ export const POST = createAdminRouteHandler(async ({ request }) => {
   }
 
   if (action === "update-status") {
-    await updateAdminAnnouncementStatus(String(body.id ?? ""), String(body.status ?? "DRAFT"))
+    await updateAdminAnnouncementStatus(String(input.id ?? ""), input.status)
     revalidatePath("/")
     revalidatePath("/help")
     revalidatePath("/announcements")
@@ -49,25 +62,13 @@ export const POST = createAdminRouteHandler(async ({ request }) => {
     return apiSuccess(undefined, "站点文档状态已更新")
   }
 
-  await saveAdminAnnouncement({
-    id: body.id,
-    type: body.type,
-    title: body.title,
-    content: body.content,
-    sourceType: body.sourceType,
-    slug: body.slug,
-    linkUrl: body.linkUrl,
-    titleColor: body.titleColor,
-    titleBold: body.titleBold,
-    status: body.status,
-    isPinned: body.isPinned,
-  })
+  await saveAdminAnnouncement(input)
 
   revalidatePath("/")
   revalidatePath("/help")
   revalidatePath("/announcements")
   revalidatePath("/admin")
-  return apiSuccess(undefined, body.id ? "站点文档已更新" : "站点文档已创建")
+  return apiSuccess(undefined, input.id ? "站点文档已更新" : "站点文档已创建")
 }, {
   errorMessage: "站点文档操作失败",
   logPrefix: "[api/admin/announcements:POST] unexpected error",

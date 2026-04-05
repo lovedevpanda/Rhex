@@ -12,12 +12,12 @@ import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
 
 type EditorHeaderProps = {
-  activeTab: "write" | "preview"
+  activeTab: "write" | "live-preview" | "preview"
   disabled: boolean
   isFullscreen: boolean
   uploading: boolean
   valueLength: number
-  onTabChange: (tab: "write" | "preview") => void
+  onTabChange: (tab: "write" | "live-preview" | "preview") => void
   onEnterFullscreen: () => void
   onExitFullscreen: () => void
 }
@@ -62,6 +62,13 @@ export function EditorHeader({
             </button>
             <button
               type="button"
+              onClick={() => onTabChange("live-preview")}
+              className={activeTab === "live-preview" ? "border-b-2 border-foreground pb-2 text-sm font-medium text-foreground transition-colors" : "pb-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"}
+            >
+              实时预览
+            </button>
+            <button
+              type="button"
               onClick={() => onTabChange("preview")}
               className={activeTab === "preview" ? "border-b-2 border-foreground pb-2 text-sm font-medium text-foreground transition-colors" : "pb-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"}
             >
@@ -89,7 +96,7 @@ export function EditorHeader({
 }
 
 type EditorBodyProps = {
-  activeTab: "write" | "preview"
+  activeTab: "write" | "live-preview" | "preview"
   isFullscreen: boolean
   contentMinHeight: number | string
   value: string
@@ -105,6 +112,7 @@ type EditorBodyProps = {
   activeLineNumber: number
   editorScrollTop: number
   onChange: (value: string) => void
+  onEditorScrollSync: (scrollTop: number) => void
   onScroll: (event: React.UIEvent<HTMLTextAreaElement>) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSelect: (event: React.SyntheticEvent<HTMLTextAreaElement>) => void
@@ -128,94 +136,189 @@ export function EditorBody({
   activeLineNumber,
   editorScrollTop,
   onChange,
+  onEditorScrollSync,
   onScroll,
   onKeyDown,
   onSelect,
   onPaste,
 }: EditorBodyProps) {
+  const isLivePreview = activeTab === "live-preview"
+  const previewPanelRef = React.useRef<HTMLDivElement | null>(null)
+  const scrollSyncSourceRef = React.useRef<"editor" | "preview" | null>(null)
   const writeContainerClassName = isFullscreen
     ? "relative flex min-h-0 flex-1 overflow-hidden rounded-xl bg-transparent"
     : "relative flex overflow-hidden rounded-xl bg-transparent"
   const writeContainerStyle = isFullscreen
-    ? { minHeight: 0 }
+    ? { minHeight: 0, height: "100%" }
     : { minHeight: contentMinHeight, maxHeight: contentMinHeight }
   const textareaStyle = isFullscreen
-    ? { minHeight: 0, maxHeight: "none" as const }
+    ? { minHeight: 0, height: "100%", maxHeight: "none" as const }
     : { minHeight: contentMinHeight, maxHeight: contentMinHeight }
+  const previewStyle = isFullscreen
+    ? { minHeight: 0, height: "100%" }
+    : { minHeight: contentMinHeight, maxHeight: contentMinHeight }
+
+  const writePanel = (
+    <div
+      key="write-panel"
+      className={writeContainerClassName}
+      style={writeContainerStyle}
+    >
+      <div
+        aria-hidden="true"
+        className={cn(
+          "hidden flex-none select-none overflow-hidden pr-1 pt-1 text-right font-mono text-[10px] text-muted-foreground/45 sm:block",
+          EDITOR_LINE_NUMBER_GUTTER_WIDTH_CLASS,
+        )}
+      >
+        <div style={{ transform: `translateY(-${editorScrollTop}px)` }}>
+          {lineNumbers.map((lineNumber) => (
+            <div
+              key={lineNumber}
+              className={lineNumber === activeLineNumber ? "leading-7 text-foreground/85" : "leading-7 text-muted-foreground/45"}
+              style={{ height: lineHeights[lineNumber - 1] ?? `${EDITOR_LINE_HEIGHT_REM}rem` }}
+            >
+              {lineNumber}
+            </div>
+          ))}
+        </div>
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onScroll={(event) => {
+          if (scrollSyncSourceRef.current === "preview") {
+            return
+          }
+
+          onScroll(event)
+        }}
+        onKeyDown={onKeyDown}
+        onKeyUp={onSelect}
+        onClick={onSelect}
+        onSelect={onSelect}
+        onPaste={onPaste}
+        disabled={disabled}
+        className="w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent pl-2 pr-0 py-1 font-mono text-sm leading-7 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        placeholder={placeholder}
+        style={textareaStyle}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-0 -z-10 overflow-hidden opacity-0"
+      >
+        <div
+          ref={lineMeasureContainerRef}
+          className="box-border whitespace-pre-wrap break-words"
+        >
+          {logicalLines.map((line, index) => (
+            <div
+              key={`line-measure-${index}`}
+              ref={(node) => {
+                lineMeasureRefs.current[index] = node
+              }}
+              style={{ minHeight: `${EDITOR_LINE_HEIGHT_REM}rem` }}
+            >
+              {line.length > 0 ? line : " "}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  const previewPanel = (
+    <div
+      ref={previewPanelRef}
+      key="preview-panel"
+      className="min-h-0 min-w-0 overflow-y-auto"
+      style={previewStyle}
+      onScroll={(event) => {
+        if (!isLivePreview || scrollSyncSourceRef.current === "editor") {
+          return
+        }
+
+        const textarea = textareaRef.current
+        const previewPanelElement = event.currentTarget
+        if (!textarea) {
+          return
+        }
+
+        const previewScrollableHeight = previewPanelElement.scrollHeight - previewPanelElement.clientHeight
+        const editorScrollableHeight = textarea.scrollHeight - textarea.clientHeight
+        if (previewScrollableHeight <= 0 || editorScrollableHeight <= 0) {
+          textarea.scrollTop = 0
+          onEditorScrollSync(0)
+          return
+        }
+
+        const scrollRatio = previewPanelElement.scrollTop / previewScrollableHeight
+        const nextEditorScrollTop = editorScrollableHeight * scrollRatio
+
+        scrollSyncSourceRef.current = "preview"
+        textarea.scrollTop = nextEditorScrollTop
+        onEditorScrollSync(nextEditorScrollTop)
+
+        window.requestAnimationFrame(() => {
+          if (scrollSyncSourceRef.current === "preview") {
+            scrollSyncSourceRef.current = null
+          }
+        })
+      }}
+    >
+      <MarkdownContent content={value} emptyText="暂无预览内容" markdownEmojiMap={markdownEmojiMap} />
+    </div>
+  )
+
+  React.useEffect(() => {
+    if (!isLivePreview) {
+      return
+    }
+
+    const textarea = textareaRef.current
+    const previewPanelElement = previewPanelRef.current
+    if (!textarea || !previewPanelElement) {
+      return
+    }
+
+    const editorScrollableHeight = textarea.scrollHeight - textarea.clientHeight
+    const previewScrollableHeight = previewPanelElement.scrollHeight - previewPanelElement.clientHeight
+    if (editorScrollableHeight <= 0 || previewScrollableHeight <= 0) {
+      previewPanelElement.scrollTop = 0
+      return
+    }
+
+    const scrollRatio = textarea.scrollTop / editorScrollableHeight
+    scrollSyncSourceRef.current = "editor"
+    previewPanelElement.scrollTop = previewScrollableHeight * scrollRatio
+
+    window.requestAnimationFrame(() => {
+      if (scrollSyncSourceRef.current === "editor") {
+        scrollSyncSourceRef.current = null
+      }
+    })
+  }, [editorScrollTop, isLivePreview, textareaRef, value])
 
   return (
     <div
-      className={activeTab === "write"
-        ? (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pt-3 sm:px-5" : "pl-1 pr-3 pt-3 sm:pl-1 sm:pr-5")
-        : (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pb-4 pt-3 sm:px-5 sm:pb-8" : "px-3 pb-4 pt-3 sm:px-5")}
+      className={activeTab === "live-preview"
+        ? (isFullscreen ? "grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden px-3 pb-4 pt-3 sm:px-5 sm:pb-8 xl:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] xl:gap-0" : "grid grid-cols-1 gap-4 px-3 pb-4 pt-3 sm:px-5 xl:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] xl:gap-0")
+        : activeTab === "write"
+          ? (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pt-3 sm:px-5" : "pl-1 pr-3 pt-3 sm:pl-1 sm:pr-5")
+          : (isFullscreen ? "flex min-h-0 flex-1 flex-col px-3 pb-4 pt-3 sm:px-5 sm:pb-8" : "px-3 pb-4 pt-3 sm:px-5")}
     >
-      {activeTab === "write" ? (
-        <div
-          key="write-panel"
-          className={writeContainerClassName}
-          style={writeContainerStyle}
-        >
-          <div
-            aria-hidden="true"
-            className={cn(
-              "hidden flex-none select-none overflow-hidden pr-1 pt-1 text-right font-mono text-[10px] text-muted-foreground/45 sm:block",
-              EDITOR_LINE_NUMBER_GUTTER_WIDTH_CLASS,
-            )}
-          >
-            <div style={{ transform: `translateY(-${editorScrollTop}px)` }}>
-              {lineNumbers.map((lineNumber) => (
-                <div
-                  key={lineNumber}
-                  className={lineNumber === activeLineNumber ? "leading-7 text-foreground/85" : "leading-7 text-muted-foreground/45"}
-                  style={{ height: lineHeights[lineNumber - 1] ?? `${EDITOR_LINE_HEIGHT_REM}rem` }}
-                >
-                  {lineNumber}
-                </div>
-              ))}
-            </div>
+      {isLivePreview ? (
+        <>
+          <div className={cn("min-w-0 xl:pr-5", isFullscreen && "min-h-0 overflow-hidden")}>
+            {writePanel}
           </div>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onScroll={onScroll}
-            onKeyDown={onKeyDown}
-            onKeyUp={onSelect}
-            onClick={onSelect}
-            onSelect={onSelect}
-            onPaste={onPaste}
-            disabled={disabled}
-            className="w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent pl-2 pr-0 py-1 font-mono text-sm leading-7 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            placeholder={placeholder}
-            style={textareaStyle}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-0 top-0 -z-10 overflow-hidden opacity-0"
-          >
-            <div
-              ref={lineMeasureContainerRef}
-              className="box-border whitespace-pre-wrap break-words"
-            >
-              {logicalLines.map((line, index) => (
-                <div
-                  key={`line-measure-${index}`}
-                  ref={(node) => {
-                    lineMeasureRefs.current[index] = node
-                  }}
-                  style={{ minHeight: `${EDITOR_LINE_HEIGHT_REM}rem` }}
-                >
-                  {line.length > 0 ? line : " "}
-                </div>
-              ))}
-            </div>
+          <div className={cn("hidden bg-border xl:block", isFullscreen && "min-h-0")} aria-hidden="true" />
+          <div className={cn("min-w-0 border-t border-border pt-4 xl:border-t-0 xl:pl-5 xl:pt-0", isFullscreen && "min-h-0 overflow-hidden")}>
+            {previewPanel}
           </div>
-        </div>
-      ) : (
-        <div key="preview-panel" className="min-w-0 overflow-y-auto" style={{ minHeight: contentMinHeight, maxHeight: contentMinHeight }}>
-          <MarkdownContent content={value} emptyText="暂无预览内容" markdownEmojiMap={markdownEmojiMap} />
-        </div>
-      )}
+        </>
+      ) : activeTab === "write" ? writePanel : previewPanel}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { PostStatus } from "@/db/types"
 
-import { prisma } from "@/db/client"
+import { findPostOfflineTarget, findPostOfflineUser, runPostOfflineTransaction, updatePostOfflineTarget } from "@/db/post-offline-queries"
 import { getCurrentUser } from "@/lib/auth"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -33,15 +33,7 @@ export async function getPostOfflineActionMeta(postId: string) {
   const [currentUser, settings, post] = await Promise.all([
     getCurrentUser(),
     getSiteSettings(),
-    prisma.post.findUnique({
-      where: { id: postId },
-      select: {
-        id: true,
-        authorId: true,
-        status: true,
-        title: true,
-      },
-    }),
+    findPostOfflineTarget(postId),
   ])
 
   if (!currentUser || !post || post.authorId !== currentUser.id || post.status !== PostStatus.NORMAL) {
@@ -70,26 +62,15 @@ export async function offlineOwnPost(input: { postId: string; reason?: string | 
   const settings = await getSiteSettings()
   const reason = String(input.reason ?? "").trim()
 
-  const result = await prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({
-      where: { id: currentUser.id },
-      select: { id: true, points: true, vipLevel: true, vipExpiresAt: true },
-    })
+  const result = await runPostOfflineTransaction(async (tx) => {
+    const latestUser = await findPostOfflineUser(currentUser.id, tx)
 
     if (!latestUser) {
       throw new Error("当前用户不存在")
     }
 
     const latestPrice = resolvePostOfflinePrice(latestUser, settings)
-    const post = await tx.post.findUnique({
-      where: { id: input.postId },
-      select: {
-        id: true,
-        title: true,
-        authorId: true,
-        status: true,
-      },
-    })
+    const post = await findPostOfflineTarget(input.postId, tx)
 
     if (!post || post.authorId !== latestUser.id) {
       throw new Error("只能下线自己发布的帖子")
@@ -127,19 +108,9 @@ export async function offlineOwnPost(input: { postId: string; reason?: string | 
       .filter(Boolean)
       .join("；")
 
-    const updated = await tx.post.update({
-      where: { id: post.id },
-      data: {
-        status: PostStatus.OFFLINE,
-        reviewNote: nextReviewNote || null,
-      },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        status: true,
-        reviewNote: true,
-      },
+    const updated = await updatePostOfflineTarget(tx, {
+      postId: post.id,
+      reviewNote: nextReviewNote || null,
     })
 
     return {

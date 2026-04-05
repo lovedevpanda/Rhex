@@ -6,10 +6,10 @@ import { CheckCircle2, Clock3, ShieldCheck, XCircle } from "lucide-react"
 import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/button"
 import { showConfirm } from "@/components/ui/confirm-dialog"
+import type { VerificationFormField } from "@/lib/verification-form-schema"
 
 
 type VerificationApplicationStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
-type VerificationFieldType = "text" | "textarea" | "number" | "url"
 
 interface VerificationCenterProps {
   types: Array<{
@@ -23,15 +23,7 @@ interface VerificationCenterProps {
     status: boolean
     userLimit: number
     allowResubmitAfterReject: boolean
-    formFields: Array<{
-      id: string
-      label: string
-      type: VerificationFieldType
-      placeholder?: string
-      required: boolean
-      helpText?: string
-      sortOrder: number
-    }>
+    formFields: VerificationFormField[]
     currentApplication?: {
       id: string
       status: VerificationApplicationStatus

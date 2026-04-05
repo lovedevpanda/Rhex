@@ -21,6 +21,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "评论点赞失败",
   logPrefix: "[api/comments/like] unexpected error",
   unauthorizedMessage: "请先登录后再点赞",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

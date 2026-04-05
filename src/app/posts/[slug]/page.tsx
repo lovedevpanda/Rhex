@@ -15,6 +15,7 @@ import { PostDetailHeader } from "@/components/post-detail-header"
 import { PostAdminPanel } from "@/components/post-admin-panel"
 import { PostEditPanel } from "@/components/post-edit-panel"
 import { PostEngagementBar } from "@/components/post-engagement-bar"
+import { PostRewardPoolHighlightBar } from "@/components/post-reward-pool-highlight-bar"
 import { PostReadingHistoryRecorder } from "@/components/post-reading-history-recorder"
 import { PostSidebarPanels } from "@/components/post-sidebar-panels"
 import { RestrictedPostBlock } from "@/components/restricted-post-block"
@@ -24,6 +25,7 @@ import { SiteHeader } from "@/components/site-header"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
+import { PinScope } from "@/db/types"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
 import { getBoards } from "@/lib/boards"
 import { getCommentsByPostId, getUserReplyCountByPost } from "@/lib/comments"
@@ -45,6 +47,7 @@ import { getSiteSettings } from "@/lib/site-settings"
 
 import { getZones } from "@/lib/zones"
 import { getCanonicalPostPath } from "@/lib/post-links"
+import { canManageBoard, getAvailablePinScopes, isSiteAdmin as isSiteAdminActor, resolveAdminActorFromSessionUser } from "@/lib/moderator-permissions"
 
 export async function generateMetadata(props: PageProps<"/posts/[slug]">): Promise<Metadata> {
   const params = await props.params;
@@ -106,26 +109,30 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       })
     : false
 
-  const isAdmin = Boolean(currentUser && (currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"))
-
-  const isOwnerOrAdmin = Boolean(currentUser?.id === basePost.authorId || isAdmin)
-  const canViewPendingPost = basePost.status === "PENDING" && isOwnerOrAdmin
-  const canViewOfflinePost = basePost.status === "OFFLINE" && isAdmin
+  const adminActorPromise = currentUser && (currentUser.role === "ADMIN" || currentUser.role === "MODERATOR")
+    ? resolveAdminActorFromSessionUser(currentUser)
+    : Promise.resolve(null)
 
   const boardAccessContextPromise = getBoardAccessContextByPostId(basePost.id)
   const boardAccessContext = await boardAccessContextPromise
+  const adminActor = await adminActorPromise
+  const canManageThisPost = Boolean(adminActor && boardAccessContext && canManageBoard(adminActor, boardAccessContext.board.id, boardAccessContext.board.zoneId))
+  const isSiteAdmin = isSiteAdminActor(adminActor)
+  const isOwnerOrManager = Boolean(currentUser?.id === basePost.authorId || canManageThisPost)
+  const canViewPendingPost = basePost.status === "PENDING" && isOwnerOrManager
+  const canViewOfflinePost = basePost.status === "OFFLINE" && isOwnerOrManager
 
   const viewPermission = boardAccessContext ? checkBoardPermission(currentUser, boardAccessContext.settings, "view") : { allowed: true, message: "" }
   const postViewPermission = checkPostAccessPermission(currentUser, resolvePostAccessRequirements(basePost))
   const mergedViewPermission = mergeAccessPermissions(viewPermission, postViewPermission)
-  const canViewRestrictedPost = basePost.status === "NORMAL" && (mergedViewPermission.allowed || isOwnerOrAdmin)
+  const canViewRestrictedPost = basePost.status === "NORMAL" && (mergedViewPermission.allowed || isOwnerOrManager)
   const shouldRenderOfflineNotice = basePost.status === "OFFLINE" && !canViewOfflinePost
 
   if (basePost.status === "PENDING" && !canViewPendingPost) {
     notFound()
   }
 
-  if (basePost.status !== "NORMAL" && basePost.status !== "PENDING" && basePost.status !== "OFFLINE" && !isOwnerOrAdmin) {
+  if (basePost.status !== "NORMAL" && basePost.status !== "PENDING" && basePost.status !== "OFFLINE" && !isOwnerOrManager) {
     notFound()
   }
 
@@ -140,7 +147,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
   const commentResultPromise = canViewComments
     ? getCommentsByPostId(basePost.id, { sort: currentSort, page: currentPage, pageSize: 15 }, {
       userId: currentUser?.id,
-      isAdmin,
+      isAdmin: canManageThisPost,
       postAuthorId: basePost.authorId,
       commentsVisibleToAuthorOnly: basePost.commentsVisibleToAuthorOnly,
     })
@@ -190,12 +197,12 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
     } : basePost.tipping,
       contentBlocks: (basePost.contentBlocks ?? []).map((block) => {
 
-        const replyUnlocked = isOwnerOrAdmin || userReplyCount >= (block.replyThreshold ?? 1)
+        const replyUnlocked = isOwnerOrManager || userReplyCount >= (block.replyThreshold ?? 1)
 
         const visible = block.type === "PUBLIC"
-          || (block.type === "AUTHOR_ONLY" && isOwnerOrAdmin)
+          || (block.type === "AUTHOR_ONLY" && isOwnerOrManager)
           || (block.type === "REPLY_UNLOCK" && replyUnlocked)
-          || (block.type === "PURCHASE_UNLOCK" && (purchasedBlockIds.has(block.id) || isOwnerOrAdmin))
+          || (block.type === "PURCHASE_UNLOCK" && (purchasedBlockIds.has(block.id) || isOwnerOrManager))
 
         return {
           ...block,
@@ -238,9 +245,47 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       label: board.name,
     }))
 
-  const adminBoardOptions = ungroupedBoards.length > 0
-    ? [...groupedBoardOptions, { zone: "未分区节点", items: ungroupedBoards }]
+  const filteredAdminBoardOptions = adminActor
+    ? groupedBoardOptions
+        .map((group) => ({
+          zone: group.zone,
+          items: group.items.filter((item) => {
+            const matchedBoard = boards.find((candidate) => candidate.slug === item.value)
+            return matchedBoard ? canManageBoard(adminActor, matchedBoard.id, matchedBoard.zoneId) : false
+          }),
+        }))
+        .filter((group) => group.items.length > 0)
     : groupedBoardOptions
+  const filteredUngroupedBoards = adminActor
+    ? ungroupedBoards.filter((item) => {
+        const matchedBoard = boards.find((candidate) => candidate.slug === item.value)
+        return matchedBoard ? canManageBoard(adminActor, matchedBoard.id, matchedBoard.zoneId) : false
+      })
+    : ungroupedBoards
+  const adminBoardOptions = filteredUngroupedBoards.length > 0
+    ? [...filteredAdminBoardOptions, { zone: "未分区节点", items: filteredUngroupedBoards }]
+    : filteredAdminBoardOptions
+  const normalizedPinScope = displayPost.pinScope === PinScope.NONE
+    || displayPost.pinScope === PinScope.BOARD
+    || displayPost.pinScope === PinScope.ZONE
+    || displayPost.pinScope === PinScope.GLOBAL
+    ? displayPost.pinScope
+    : null
+  const allowedPinScopes = adminActor && boardAccessContext
+    ? getAvailablePinScopes(adminActor, {
+        zoneId: boardAccessContext.board.zoneId,
+        currentPinScope: normalizedPinScope,
+      })
+    : []
+  const hasAppendices = Boolean(displayPost.appendices && displayPost.appendices.length > 0)
+  const hasRewardPoolHighlight = Boolean(
+    displayPost.redPacket?.enabled
+    && displayPost.redPacket.status === "ACTIVE"
+    && (
+      (displayPost.redPacket.rewardMode === "JACKPOT" && displayPost.redPacket.remainingPoints > 0)
+      || (displayPost.redPacket.rewardMode !== "JACKPOT" && displayPost.redPacket.remainingCount > 0 && displayPost.redPacket.remainingPoints > 0)
+    ),
+  )
 
   const jsonLd = buildArticleJsonLd({
 
@@ -283,8 +328,13 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
 
               <>
               <div className="space-y-0">
-                  <PostBodyCopyMenu copyPath={`/posts/${displayPost.slug}`}>
-                    <Card className={displayPost.appendices && displayPost.appendices.length > 0 ? "rounded-b-none" : undefined}>
+                  <PostBodyCopyMenu
+                    copyPath={`/posts/${displayPost.slug}`}
+                    canReport={Boolean(currentUser && currentUser.id !== displayPost.authorId)}
+                    reportTargetId={displayPost.id}
+                    reportLabel={displayPost.title}
+                  >
+                    <Card className={hasRewardPoolHighlight || hasAppendices ? "rounded-b-none" : undefined}>
                       <CardContent className="pt-4 px-4 pb-4 sm:px-6 sm:pb-6 md:px-8 md:pb-8">
                       {displayPost.status === "NORMAL" && canViewRestrictedPost ? (
                         <PostReadingHistoryRecorder
@@ -316,8 +366,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                             acceptedAnswerAuthor={displayPost.bounty.acceptedAnswerAuthor}
                           />
                         ) : null}
-                        {displayPost.poll ? <PollPanel postId={displayPost.id} totalVotes={displayPost.poll.totalVotes} hasVoted={displayPost.poll.hasVoted} expiresAt={displayPost.poll.expiresAt} options={displayPost.poll.options} /> : null}
-                        {displayPost.lottery ? <LotteryPanel postId={displayPost.id} lottery={displayPost.lottery} isOwnerOrAdmin={isOwnerOrAdmin} /> : null}
+                        {displayPost.lottery ? <LotteryPanel postId={displayPost.id} lottery={displayPost.lottery} isOwnerOrAdmin={isOwnerOrManager} /> : null}
 
 
                       </div>
@@ -340,11 +389,15 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                                   replyThreshold={block.replyThreshold}
                                   price={block.price}
                                   userReplyCount={userReplyCount}
-                                  isOwnerOrAdmin={isOwnerOrAdmin}
+                                  isOwnerOrAdmin={isOwnerOrManager}
 
                                 />
                               )
                           ))}
+
+
+                       {displayPost.poll ? <PollPanel postId={displayPost.id} totalVotes={displayPost.poll.totalVotes} hasVoted={displayPost.poll.hasVoted} expiresAt={displayPost.poll.expiresAt} options={displayPost.poll.options} /> : null}
+
                         </div>
 
                       <PostEngagementBar
@@ -354,17 +407,23 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                         favoriteCount={displayPost.stats.favorites}
                         initialLiked={displayPost.viewerState?.liked}
                         initialFavored={displayPost.viewerState?.favored}
-                        canReport={Boolean(currentUser && currentUser.id !== displayPost.authorId)}
-                        reportLabel={displayPost.title}
                         redPacket={displayPost.redPacket}
                         tipping={displayPost.tipping}
                       />
                       </CardContent>
+                      
                     </Card>
+
+                    
                   </PostBodyCopyMenu>
 
-                  {displayPost.appendices && displayPost.appendices.length > 0 ? (
-                    <PostAppendixTimeline appendices={displayPost.appendices} markdownEmojiMap={settings.markdownEmojiMap} />
+
+
+
+                  <PostRewardPoolHighlightBar summary={displayPost.redPacket} attachedTop attachedBottom={hasAppendices} />
+
+                  {hasAppendices ? (
+                    <PostAppendixTimeline appendices={displayPost.appendices ?? []} markdownEmojiMap={settings.markdownEmojiMap} />
                   ) : null}
                 </div>
 
@@ -384,11 +443,13 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
 
                 ) : null}
 
-                {isAdmin ? (
+                {canManageThisPost ? (
                   <PostAdminPanel
                     postId={displayPost.id}
                     postSlug={displayPost.slug}
                     currentBoardSlug={displayPost.boardSlug ?? ""}
+                    actorRole={adminActor?.role ?? "MODERATOR"}
+                    allowedPinScopes={allowedPinScopes}
                     postAuthorId={displayPost.authorId ?? 0}
                     postAuthorUsername={displayPost.authorUsername ?? displayPost.author}
                     postAuthorStatus={displayPost.authorStatus}
@@ -444,8 +505,9 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                         currentUserId={currentUser?.id}
                         canAcceptAnswer={displayPost.type === "BOUNTY" && currentUser?.id === displayPost.authorId && !displayPost.bounty?.isResolved}
                         commentsVisibleToAuthorOnly={displayPost.commentsVisibleToAuthorOnly}
-                        isAdmin={isAdmin}
-                        canPinComment={Boolean(currentUser?.id === displayPost.authorId || isAdmin)}
+                        isAdmin={canManageThisPost}
+                        adminRole={adminActor?.role ?? null}
+                        canPinComment={Boolean(currentUser?.id === displayPost.authorId || isSiteAdmin)}
                         markdownEmojiMap={settings.markdownEmojiMap}
                         commentEditWindowMinutes={settings.commentEditableMinutes}
                       />

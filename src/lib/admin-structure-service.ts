@@ -12,6 +12,8 @@ import {
 } from "@/db/admin-structure-queries"
 
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
+import type { AdminActor } from "@/lib/moderator-permissions"
+import { ensureCanEditBoard, ensureCanEditZone, isSiteAdmin } from "@/lib/moderator-permissions"
 
 import { DEFAULT_ALLOWED_POST_TYPES_VALUE, serializePostTypes } from "@/lib/post-types"
 import { normalizeNullablePostListDisplayMode } from "@/lib/post-list-display"
@@ -110,7 +112,12 @@ function handleStructureMutationError(type: string, error: unknown) {
 export async function createStructureItem(params: {
   body: JsonObject
   adminId: number
+  actor: AdminActor
 }) {
+  if (!isSiteAdmin(params.actor)) {
+    apiError(403, "仅管理员可创建分区或节点")
+  }
+
   const rawBody = params.body as Record<string, unknown>
   const type = readOptionalStringField(rawBody, "type")
   const name = readOptionalStringField(rawBody, "name")
@@ -164,6 +171,7 @@ export async function createStructureItem(params: {
 export async function updateStructureItem(params: {
   body: JsonObject
   adminId: number
+  actor: AdminActor
 }) {
   const rawBody = params.body as Record<string, unknown>
   const type = readOptionalStringField(rawBody, "type")
@@ -179,6 +187,7 @@ export async function updateStructureItem(params: {
 
   if (type === "zone") {
     try {
+      await ensureCanEditZone(params.actor, id)
       const icon = readOptionalStringField(rawBody, "icon") || "📚"
       await updateZone(id, buildZonePayload(rawBody, sortOrder, name, slug, description, icon))
 
@@ -190,7 +199,11 @@ export async function updateStructureItem(params: {
 
   if (type === "board") {
     try {
+      const currentBoard = await ensureCanEditBoard(params.actor, id)
       const zoneId = readOptionalStringField(rawBody, "zoneId")
+      if (!isSiteAdmin(params.actor) && (zoneId || null) !== currentBoard.zoneId) {
+        apiError(403, "版主不能调整节点所属分区")
+      }
       const icon = readOptionalStringField(rawBody, "icon") || "💬"
       await updateBoard(id, {
         name,
@@ -217,7 +230,12 @@ export async function deleteStructureItem(params: {
   body: JsonObject
   adminId: number
   requestIp: string | null
+  actor: AdminActor
 }) {
+  if (!isSiteAdmin(params.actor)) {
+    apiError(403, "仅管理员可删除分区或节点")
+  }
+
   const rawBody = params.body as Record<string, unknown>
   const type = readOptionalStringField(rawBody, "type")
   const id = readOptionalStringField(rawBody, "id")

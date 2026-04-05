@@ -1,11 +1,11 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { CollapsibleInfoCard } from "@/components/collapsible-info-card"
 import { ForumPageShell } from "@/components/forum-page-shell"
 import { ForumPostStream } from "@/components/forum-post-stream"
+import { PageNumberPagination } from "@/components/page-number-pagination"
 
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
@@ -23,6 +23,11 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { getZoneBoards, getZoneBySlug, getZonePosts, getZones } from "@/lib/zones"
 import { RssSubscribeButton } from "@/components/rss-subscribe-button"
 
+
+function buildZonePageHref(slug: string, page = 1) {
+  const normalizedPage = Math.max(1, Math.trunc(page))
+  return normalizedPage <= 1 ? `/zones/${slug}` : `/zones/${slug}?page=${normalizedPage}`
+}
 
 export async function generateStaticParams() {
   const zones = await getZones()
@@ -49,8 +54,8 @@ export async function generateMetadata(props: PageProps<"/zones/[slug]">): Promi
 
 
 export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
-  const searchParams = await props.searchParams;
-  const params = await props.params;
+  const searchParams = await props.searchParams
+  const params = await props.params
   const [zone, currentUser, settings] = await Promise.all([getZoneBySlug(params.slug), getCurrentUser(), getSiteSettings()])
 
   if (!zone) {
@@ -76,16 +81,26 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
     requirePostReview: zone.requirePostReview ?? false,
   }, "view")
 
-  const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
-  const [zoneBoards, posts, allBoards, allZones, hotTopics] = await Promise.all([
+  const rawPage = readSearchParam(searchParams?.page)
+  const currentPage = Math.max(1, Number(rawPage ?? "1") || 1)
+  const [zoneBoards, postsPage, allBoards, allZones, hotTopics] = await Promise.all([
     getZoneBoards(params.slug),
-    permission.allowed ? getZonePosts(params.slug, currentPage, 20) : Promise.resolve([]),
+    permission.allowed
+      ? getZonePosts(params.slug, currentPage, 20)
+      : Promise.resolve({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1, hasPrevPage: false, hasNextPage: false }),
     getBoards(),
     getZones(),
     getHomeSidebarHotTopics(5),
   ])
-  const prevPage = Math.max(1, currentPage - 1)
-  const nextPage = currentPage + 1
+  const { items: posts, page, totalPages, hasPrevPage, hasNextPage } = postsPage
+
+  if (rawPage !== undefined && currentPage === 1) {
+    redirect(buildZonePageHref(params.slug))
+  }
+
+  if (currentPage !== page) {
+    redirect(buildZonePageHref(params.slug, page))
+  }
   const sidebarUser = await resolveSidebarUser(currentUser, settings)
 
 
@@ -136,19 +151,17 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
               ) : (
                 <>
 
-                  <ForumPostStream posts={posts} listDisplayMode={zone.postListDisplayMode} visiblePinScopes={["GLOBAL", "ZONE"]} showPinnedDivider={currentPage === 1} />
+                  <ForumPostStream posts={posts} listDisplayMode={zone.postListDisplayMode} visiblePinScopes={["GLOBAL", "ZONE"]} showPinnedDivider={page === 1} />
 
                   {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前分区下还没有公开内容。</div> : null}
 
-                  <div className="flex items-center justify-between pt-2">
-                    <Link href={`/zones/${params.slug}?page=${prevPage}`} className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}>
-                      <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
-                    </Link>
-                    <span className="text-sm text-muted-foreground">第 {currentPage} 页</span>
-                    <Link href={`/zones/${params.slug}?page=${nextPage}`}>
-                      <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
-                    </Link>
-                  </div>
+                  <PageNumberPagination
+                    page={page}
+                    totalPages={totalPages}
+                    hasPrevPage={hasPrevPage}
+                    hasNextPage={hasNextPage}
+                    buildHref={(targetPage) => buildZonePageHref(params.slug, targetPage)}
+                  />
                 </>
               )}
             </div>

@@ -2,11 +2,13 @@ import { UserRole, UserStatus } from "@/db/types"
 
 import type { Prisma } from "@/db/types"
 
-import { buildAdminUserSummary, findAdminUsersPage } from "@/db/admin-user-queries"
+import { buildAdminUserSummary, findAdminUsersPage, findModeratorScopeOptions } from "@/db/admin-user-queries"
 
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
 
 import type { AdminUserListResult } from "@/lib/admin-user-management"
+import { apiError } from "@/lib/api-route"
+import { requireSiteAdminActor } from "@/lib/moderator-permissions"
 import { isVipActive } from "@/lib/vip-status"
 
 
@@ -39,6 +41,11 @@ function normalizeSort(sort?: string) {
 }
 
 export async function getAdminUsers(options: GetAdminUsersOptions = {}): Promise<AdminUserListResult> {
+  const actor = await requireSiteAdminActor()
+  if (!actor) {
+    apiError(403, "无权限访问用户管理")
+  }
+
   const keyword = String(options.keyword ?? "").trim()
   const role = userRoleValues.has(options.role as UserRole) ? String(options.role) : "ALL"
   const status = userStatusValues.has(options.status as UserStatus) ? String(options.status) : "ALL"
@@ -93,7 +100,10 @@ export async function getAdminUsers(options: GetAdminUsersOptions = {}): Promise
   const page = Math.min(requestedPage, totalPages)
   const skip = (page - 1) * pageSize
 
-  const users = await findAdminUsersPage(where, orderBy, skip, pageSize)
+  const [users, moderatorScopeOptions] = await Promise.all([
+    findAdminUsersPage(where, orderBy, skip, pageSize),
+    findModeratorScopeOptions(),
+  ])
 
 
   const mappedUsers = users.map((user) => ({
@@ -114,22 +124,32 @@ export async function getAdminUsers(options: GetAdminUsersOptions = {}): Promise
     postCount: user.postCount,
     commentCount: user.commentCount,
     checkInDays: user.levelProgress?.checkInDays ?? 0,
-    favoriteCount: user.favorites.length,
+    favoriteCount: user._count.favorites,
     likeReceivedCount: user.likeReceivedCount,
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     lastLoginIp: user.lastLoginIp ?? null,
     createdAt: user.createdAt.toISOString(),
     bio: user.bio ?? "",
-    loginLogs: user.loginLogs.map((log) => ({
-      id: log.id,
-      ip: log.ip,
-      createdAt: log.createdAt.toISOString(),
-      userAgent: log.userAgent,
+    moderatedZoneScopes: user.moderatedZoneScopes.map((scope) => ({
+      zoneId: scope.zoneId,
+      zoneName: scope.zone.name,
+      zoneSlug: scope.zone.slug,
+      canEditSettings: scope.canEditSettings,
+    })),
+    moderatedBoardScopes: user.moderatedBoardScopes.map((scope) => ({
+      boardId: scope.boardId,
+      boardName: scope.board.name,
+      boardSlug: scope.board.slug,
+      zoneId: scope.board.zoneId ?? null,
+      zoneName: scope.board.zone?.name ?? null,
+      zoneSlug: scope.board.zone?.slug ?? null,
+      canEditSettings: scope.canEditSettings,
     })),
   }))
 
   return {
     users: mappedUsers,
+    moderatorScopeOptions,
     summary: {
       total,
       active,

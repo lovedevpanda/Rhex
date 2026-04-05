@@ -282,5 +282,5 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "消息流建立失败",
   logPrefix: "[api/messages/stream] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

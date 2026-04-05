@@ -1,5 +1,6 @@
+import { resolvePagination } from "@/db/helpers"
 import { findFollowFeedTargetIds } from "@/db/follow-queries"
-import { findFollowingFeedPosts, findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
+import { countFollowingFeedPosts, countLatestFeedPosts, findFollowingFeedPosts, findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
 import { findGlobalPinnedPosts } from "@/db/taxonomy-queries"
 import { formatRelativeTime } from "@/lib/formatters"
 import { extractPinnedPostIds } from "@/lib/pinned-posts"
@@ -47,6 +48,16 @@ export interface ForumFeedItem {
   isFeatured: boolean
   type: LocalPostType
   typeLabel: string
+}
+
+export interface ForumFeedPageResult {
+  items: ForumFeedItem[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
 }
 
 type FeedPostRecord = Awaited<ReturnType<typeof findLatestFeedPosts>>[number]
@@ -132,35 +143,66 @@ function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord): ForumFeedItem
   }
 }
 
-export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "latest", currentUserId?: number): Promise<ForumFeedItem[]> {
+export async function getLatestFeed(page = 1, pageSize = 20, sort: FeedSort = "latest", currentUserId?: number): Promise<ForumFeedPageResult> {
   if (sort === "following") {
     if (!currentUserId) {
-      return []
+      return {
+        items: [],
+        page: 1,
+        pageSize,
+        total: 0,
+        totalPages: 1,
+        hasPrevPage: false,
+        hasNextPage: false,
+      }
     }
 
     const { boardIds, authorIds } = await findFollowFeedTargetIds(currentUserId)
 
     if (boardIds.length === 0 && authorIds.length === 0) {
-      return []
+      return {
+        items: [],
+        page: 1,
+        pageSize,
+        total: 0,
+        totalPages: 1,
+        hasPrevPage: false,
+        hasNextPage: false,
+      }
     }
 
-    const posts = await findFollowingFeedPosts(page, pageSize, sort, { boardIds, authorIds })
+    const total = await countFollowingFeedPosts({ boardIds, authorIds })
+    const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
+    const posts = await findFollowingFeedPosts(pagination.page, pagination.pageSize, sort, { boardIds, authorIds })
 
-    return posts.map((post) => mapFeedPost(post))
+    return {
+      items: posts.map((post) => mapFeedPost(post)),
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total: pagination.total,
+      totalPages: pagination.totalPages,
+      hasPrevPage: pagination.hasPrevPage,
+      hasNextPage: pagination.hasNextPage,
+    }
   }
 
-  if (page === 1) {
-    const globalPinnedPosts = await findGlobalPinnedPosts()
-    const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
-    const pinnedItems = globalPinnedPosts.map((post) => mapFeedPost(post))
-    const normalPosts = await findLatestFeedPosts(1, pageSize, sort, pinnedPostIds)
+  const globalPinnedPosts = await findGlobalPinnedPosts()
+  const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
+  const total = await countLatestFeedPosts(pinnedPostIds)
+  const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
+  const normalPosts = await findLatestFeedPosts(pagination.page, pagination.pageSize, sort, pinnedPostIds)
 
-    return [...pinnedItems, ...normalPosts.map((post) => mapFeedPost(post))]
+  return {
+    items: pagination.page === 1
+      ? [...globalPinnedPosts.map((post) => mapFeedPost(post)), ...normalPosts.map((post) => mapFeedPost(post))]
+      : normalPosts.map((post) => mapFeedPost(post)),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    total: pagination.total,
+    totalPages: pagination.totalPages,
+    hasPrevPage: pagination.hasPrevPage,
+    hasNextPage: pagination.hasNextPage,
   }
-
-  const posts = await findLatestFeedPosts(page, pageSize, sort, [])
-
-  return posts.map((post) => mapFeedPost(post))
 }
 
 export async function getLatestTopics(limit = 10) {

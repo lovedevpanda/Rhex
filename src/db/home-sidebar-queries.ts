@@ -1,6 +1,32 @@
-import { CommentStatus, Prisma } from "@/db/types"
+import { CommentStatus, PostStatus, Prisma } from "@/db/types"
 
 import { prisma } from "@/db/client"
+
+export async function findHomeSidebarStats() {
+  const [postCount, replyCount, userCount] = await Promise.all([
+    prisma.post.count({
+      where: {
+        status: {
+          notIn: [PostStatus.PENDING, PostStatus.DELETED],
+        },
+      },
+    }),
+    prisma.comment.count({
+      where: {
+        status: {
+          notIn: [CommentStatus.PENDING, CommentStatus.DELETED],
+        },
+      },
+    }),
+    prisma.user.count(),
+  ])
+
+  return {
+    postCount,
+    replyCount,
+    userCount,
+  }
+}
 
 const POST_INCLUDE = {
   author: {

@@ -3,8 +3,6 @@ import BigNumber from "bignumber.js"
 export { YinYangContractPage } from "@/components/yinyang-contract-page"
 
 export { YinYangContractAdminPage } from "@/components/yinyang-contract-admin-page"
-
-import { prisma } from "@/db/client"
 import { createSystemNotification } from "@/lib/notification-writes"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import {
@@ -14,7 +12,9 @@ import {
   createYinYangChallengeAttempt,
   createYinYangChallengeRecord,
   findChallengeById,
+  findYinYangUserPointSnapshot,
   getOrCreateDailyStat,
+  getYinYangUserSummaryStats,
   listOpenYinYangChallenges,
   listRecentYinYangChallengesByUser,
   getTopKingByDateKey,
@@ -23,6 +23,7 @@ import {
   listTopYinYangWinners,
 
   lockOpenChallenge,
+  runYinYangTransaction,
   settleChallengeRecord,
   updateDailyStat,
   type YinYangChallengeDetailRow,
@@ -33,6 +34,7 @@ import { getYinYangContractAppConfig } from "@/lib/app-config"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { PublicRouteError } from "@/lib/public-route-error"
 import { parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
+import { getUserDisplayName } from "@/lib/user-display"
 
 
 
@@ -197,9 +199,9 @@ function mapChallengeRow(row: YinYangChallengeDetailRow): YinYangChallengeCard {
   return {
     id: row.id,
     creatorId: row.creatorId,
-    creatorName: row.creator.nickname?.trim() || row.creator.username,
+    creatorName: getUserDisplayName(row.creator),
     challengerId: row.challengerId,
-    challengerName: row.challenger ? (row.challenger.nickname?.trim() || row.challenger.username) : null,
+    challengerName: row.challenger ? getUserDisplayName(row.challenger) : null,
     status: row.status,
     question: row.question,
     optionA: row.optionA,
@@ -273,42 +275,25 @@ async function bumpDailyStats(userId: number, patch: { winCount?: number; loseCo
 }
 
 async function buildSummary(user: CurrentUser): Promise<YinYangMyStats> {
-  const [{ pointName, config }, createdToday, acceptedToday, aggregates] = await Promise.all([
+  const todayDateKey = getBusinessDayRange().start.toISOString().slice(0, 10)
+  const [{ pointName, config }, createdToday, acceptedToday, summaryStats] = await Promise.all([
     getConfigAndSettings(),
     countUserCreatedChallengesInRange(user.id, getBusinessDayRange().start, getBusinessDayRange().end),
     countUserAcceptedChallengesInRange(user.id, getBusinessDayRange().start, getBusinessDayRange().end),
-    prisma.yinYangChallenge.aggregate({
-      where: {
-        status: "SETTLED",
-        OR: [{ winnerId: user.id }, { loserId: user.id }],
-      },
-      _count: {
-        id: true,
-      },
-    }),
+    getYinYangUserSummaryStats(user.id, todayDateKey),
   ])
-
-  const [winCount, loseCount, today, totalProfit, totalLoss] = await Promise.all([
-    prisma.yinYangChallenge.count({ where: { status: "SETTLED", winnerId: user.id } }),
-    prisma.yinYangChallenge.count({ where: { status: "SETTLED", loserId: user.id } }),
-    prisma.yinYangChallengeDailyStat.findUnique({ where: { userId_dateKey: { userId: user.id, dateKey: getBusinessDayRange().start.toISOString().slice(0, 10) } } }),
-    prisma.yinYangChallenge.aggregate({ where: { status: "SETTLED", winnerId: user.id }, _sum: { rewardPoints: true } }),
-    prisma.yinYangChallenge.aggregate({ where: { status: "SETTLED", loserId: user.id }, _sum: { stakePoints: true } }),
-  ])
-
-  void aggregates
 
   return {
     userId: user.id,
     pointName,
     points: user.points ?? 0,
-    winCount,
-    loseCount,
+    winCount: summaryStats.winCount,
+    loseCount: summaryStats.loseCount,
 
-    todayProfitPoints: today?.todayProfitPoints ?? 0,
-    todayLossPoints: today?.todayLossPoints ?? 0,
-    totalProfitPoints: totalProfit._sum.rewardPoints ?? 0,
-    totalLossPoints: totalLoss._sum.stakePoints ?? 0,
+    todayProfitPoints: summaryStats.todayProfitPoints,
+    todayLossPoints: summaryStats.todayLossPoints,
+    totalProfitPoints: summaryStats.totalProfitPoints,
+    totalLossPoints: summaryStats.totalLossPoints,
     dailyCreateLimit: Number(config.dailyCreateLimit ?? 5),
     dailyAcceptLimit: Number(config.dailyAcceptLimit ?? 10),
     createdToday,
@@ -332,7 +317,7 @@ async function buildLeaderboards() {
 
   const normalize = (row: { userId: number; nickname: string | null; username: string; winCount: number; loseCount: number; todayProfitPoints: number; todayLossPoints: number; totalProfitPoints: number; totalLossPoints: number }) => ({
     userId: row.userId,
-    userName: row.nickname?.trim() || row.username,
+    userName: getUserDisplayName(row),
     winCount: row.winCount,
     loseCount: row.loseCount,
     todayProfitPoints: row.todayProfitPoints,
@@ -346,8 +331,8 @@ async function buildLeaderboards() {
   return {
     winnerLeaderboard: winnerRows.map(normalize),
     earnerLeaderboard: earnerRows.map(normalize),
-    previousKing: previousKing ? (previousKing.user.nickname?.trim() || previousKing.user.username) : null,
-    currentKing: todayKings[0] ? (todayKings[0].user.nickname?.trim() || todayKings[0].user.username) : null,
+    previousKing: previousKing ? getUserDisplayName(previousKing.user) : null,
+    currentKing: todayKings[0] ? getUserDisplayName(todayKings[0].user) : null,
   }
 }
 
@@ -448,15 +433,8 @@ export async function createYinYangChallenge(user: CurrentUser, input: CreateCha
   if (preparedStakeDelta.finalDelta < 0 && (user.points ?? 0) < Math.abs(preparedStakeDelta.finalDelta)) {
     businessRuleError("积分不足，无法发起挑战")
   }
-
-  await prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true,
-        points: true,
-      },
-    })
+  await runYinYangTransaction(async (tx) => {
+    const latestUser = await findYinYangUserPointSnapshot(user.id, tx)
 
     if (!latestUser) {
       businessRuleError("用户不存在")
@@ -517,23 +495,13 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
   if (preparedStakeDelta.finalDelta < 0 && (user.points ?? 0) < Math.abs(preparedStakeDelta.finalDelta)) {
     businessRuleError("积分不足，无法应战")
   }
-
-
-
-  await prisma.$transaction(async (tx) => {
+  await runYinYangTransaction(async (tx) => {
     const locked = await lockOpenChallenge(tx, challenge.id, user.id)
     if (!locked) {
       businessRuleError("该挑战已被其他用户抢先应战")
     }
 
-
-    const challenger = await tx.user.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true,
-        points: true,
-      },
-    })
+    const challenger = await findYinYangUserPointSnapshot(user.id, tx)
 
     if (!challenger) {
       businessRuleError("用户不存在")
@@ -563,13 +531,7 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     })
     const winner = winnerId === challenger.id
       ? challenger
-      : await tx.user.findUnique({
-          where: { id: winnerId },
-          select: {
-            id: true,
-            points: true,
-          },
-        })
+      : await findYinYangUserPointSnapshot(winnerId, tx)
 
     if (!winner) {
       businessRuleError("用户不存在")
@@ -620,7 +582,7 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     ])
   }
 
-  const challengerName = user.nickname?.trim() || user.username
+  const challengerName = getUserDisplayName(user)
   const creatorWon = challenge.creatorId !== user.id && input.selectedOption !== challenge.correctOption
   const resultTitle = creatorWon ? "你发起的阴阳契获胜了" : "你发起的阴阳契被破解了"
   const resultContent = creatorWon
@@ -637,12 +599,7 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     title: resultTitle,
     content: resultContent,
   })
-
-  const refreshedUser = await prisma.user.findUnique({
-
-    where: { id: user.id },
-    select: { id: true, username: true, nickname: true, points: true },
-  })
+  const refreshedUser = await findYinYangUserPointSnapshot(user.id)
   if (!refreshedUser) {
     businessRuleError("用户状态已失效")
   }

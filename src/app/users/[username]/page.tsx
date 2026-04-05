@@ -117,6 +117,8 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
 
   const identityTags = [
     { label: `@${user.username}`, tone: "plain" as const },
+    user.role === "ADMIN" ? { label: "管理员", tone: "danger" as const } : null,
+    user.role === "MODERATOR" ? { label: "版主", tone: "sky" as const } : null,
     user.status === "BANNED" ? { label: "账号封禁中", tone: "danger" as const } : null,
     user.status === "MUTED" ? { label: "账号禁言中", tone: "warning" as const } : null,
     vipActive ? { label: `VIP${vipLevel}`, tone: "vip" as const } : null,
@@ -160,6 +162,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {user.role === "ADMIN" ? <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-200">管理员</span> : null}
+                        {user.role === "MODERATOR" ? <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">版主</span> : null}
                         {vipActive ? <VipBadge level={vipLevel} compact /> : null}
                         {user.levelName && user.levelColor && user.levelIcon ? <LevelBadge level={user.level} name={user.levelName} color={user.levelColor} icon={user.levelIcon} compact /> : null}
                         {isRestrictedUser ? <UserStatusBadge status={user.status} /> : null}

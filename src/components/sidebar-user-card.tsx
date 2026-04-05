@@ -582,14 +582,14 @@ function InlineStatBlock({ label, value, icon, href }: { label: string; value: n
 
   if (href) {
     return (
-      <Link href={href} className="rounded-[12px] border border-border bg-secondary/25 px-2 py-1.5 text-center transition-colors hover:bg-accent/50 dark:bg-secondary/45">
+      <Link href={href} className="rounded-[12px] border border-border bg-secondary/25 px-2 py-1.5 text-center transition-colors hover:bg-accent/50 dark:bg-secondary/50">
         {content}
       </Link>
     )
   }
 
   return (
-    <div className="rounded-[12px] border border-border bg-secondary/25 px-2 py-1.5 text-center dark:bg-secondary/45">
+    <div className="rounded-[12px] border border-border bg-secondary/25 px-2 py-1.5 text-center dark:bg-secondary/50">
       {content}
     </div>
   )

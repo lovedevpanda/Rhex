@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 
 import { prisma } from "@/db/client"
 
@@ -103,6 +103,38 @@ export async function listRedeemedCodesByUserWithTx(tx: Prisma.TransactionClient
       redeemedById: userId,
     },
   }) as Promise<RedeemCodeCoreRow[]>
+}
+
+export function countRedeemedCodesByUserCategoryWithTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    userId: number
+    codeCategory: string
+  },
+) {
+  return tx.$queryRaw<Array<{ count: number | string | bigint }>>(Prisma.sql`
+    SELECT COUNT(*)::int AS "count"
+    FROM "RedeemCode"
+    WHERE "redeemedById" = ${params.userId}
+      AND ${
+        params.codeCategory === "default"
+          ? Prisma.sql`("codeCategory" = 'default' OR "codeCategory" IS NULL)`
+          : Prisma.sql`"codeCategory" = ${params.codeCategory}`
+      }
+  `).then((rows) => Number(rows[0]?.count ?? 0))
+}
+
+export function findUserPointsByIdWithTx(tx: Prisma.TransactionClient, userId: number) {
+  return tx.user.findUnique({
+    where: { id: userId },
+    select: { id: true, points: true },
+  })
+}
+
+export function runRedeemCodeTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  return prisma.$transaction(callback)
 }
 
 

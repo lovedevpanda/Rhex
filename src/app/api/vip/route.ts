@@ -81,5 +81,5 @@ export const POST = createUserRouteHandler(async ({ request }) => {
   errorMessage: "VIP 操作失败",
   logPrefix: "[api/vip] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

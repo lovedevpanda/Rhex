@@ -1,7 +1,6 @@
 import { BadgeRuleOperator, BadgeRuleType, BadgeGrantSource, PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/db/types"
 
-import { findAllBadgesWithRules, findBadgeEffectRulesByBadgeIds, findBadgeEligibilityUserSnapshot, findDisplayedUserBadges, findGrantedBadgesForUserRecord, findGrantedUserBadge, findUserBadgeDisplayStates, findUserBadgeWithBadge, updateUserBadgeDisplayById } from "@/db/badge-queries"
-import { prisma } from "@/db/client"
+import { createSelfClaimUserBadge, findAllBadgesWithRules, findBadgeEffectRulesByBadgeIds, findBadgeEligibilityUserSnapshot, findBadgeUserPoints, findDisplayedUserBadges, findGrantedBadgesForUserRecord, findGrantedUserBadge, findGrantedUserBadgeWithTx, findUserBadgeDisplayStates, findUserBadgeWithBadge, runBadgeTransaction, updateUserBadgeDisplayById } from "@/db/badge-queries"
 import { apiError } from "./api-route"
 import type { BadgeRuleTypeValue } from "@/lib/badge-rule-definitions"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
@@ -496,25 +495,14 @@ export async function claimBadge(userId: number, badgeId: string) {
       })
     : null
 
-  await prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({
-      where: { id: userId },
-      select: { id: true, points: true },
-    })
+  await runBadgeTransaction(async (tx) => {
+    const latestUser = await findBadgeUserPoints(userId, tx)
 
     if (!latestUser) {
       apiError(404, "用户不存在")
     }
 
-    const existingUserBadge = await tx.userBadge.findUnique({
-      where: {
-        userId_badgeId: {
-          userId,
-          badgeId,
-        },
-      },
-      select: { id: true },
-    })
+    const existingUserBadge = await findGrantedUserBadgeWithTx(tx, userId, badgeId)
 
     if (existingUserBadge) {
       apiError(409, "你已经领取过这个勋章")
@@ -532,13 +520,12 @@ export async function claimBadge(userId: number, badgeId: string) {
       })
     }
 
-    await tx.userBadge.create({
-      data: {
-        userId,
-        badgeId,
-        grantSource: BadgeGrantSource.SELF_CLAIM,
-        grantSnapshot: snapshot ? JSON.stringify(snapshot) : null,
-      },
+    await createSelfClaimUserBadge({
+      userId,
+      badgeId,
+      grantSource: BadgeGrantSource.SELF_CLAIM,
+      grantSnapshot: snapshot ? JSON.stringify(snapshot) : null,
+      client: tx,
     })
   })
 

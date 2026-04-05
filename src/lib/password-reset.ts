@@ -56,6 +56,10 @@ export async function sendPasswordResetCode(input: {
     apiError(403, "该账号已被禁用，无法找回密码")
   }
 
+  if (user.status === "INACTIVE") {
+    apiError(403, "该账号未激活，无法找回密码")
+  }
+
 
   const result = await sendVerificationCode({
     channel: VerificationChannel.EMAIL,
@@ -103,6 +107,10 @@ export async function resetPasswordByEmailCode(input: {
 
   if (user.status === "BANNED") {
     apiError(403, "该账号已被禁用，无法重置密码")
+  }
+
+  if (user.status === "INACTIVE") {
+    apiError(403, "该账号未激活，无法重置密码")
   }
 
 

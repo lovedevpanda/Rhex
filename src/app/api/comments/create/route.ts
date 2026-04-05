@@ -1,4 +1,4 @@
-import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { createCommentFlow } from "@/lib/comment-create-service"
 import { dispatchPostFollowCommentNotificationsBestEffort } from "@/lib/follow-notifications"
 import { handleCommentCreateSideEffects } from "@/lib/interaction-side-effects"
@@ -6,7 +6,7 @@ import { evaluateUserLevelProgress } from "@/lib/level-system"
 import { logRequestSucceeded } from "@/lib/request-log"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
-  const body = await request.json()
+  const body = await readJsonBody(request)
   const result = await createCommentFlow({
     body,
     currentUser: {

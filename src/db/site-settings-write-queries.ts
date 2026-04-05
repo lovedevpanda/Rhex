@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/db/client"
+import { syncGiftDefinitions } from "@/db/post-gift-queries"
 
 export function findSiteSettingsRecordForUpdate() {
   return prisma.siteSetting.findFirst({
@@ -37,5 +38,22 @@ export function updateSiteSettingsMarkdownEmoji(id: string, markdownEmojiMapJson
     data: {
       markdownEmojiMapJson,
     },
+  })
+}
+
+export async function updateSiteSettingsRecordWithGiftDefinitions(
+  id: string,
+  data: Prisma.SiteSettingUpdateInput,
+  giftDefinitions: Parameters<typeof syncGiftDefinitions>[0],
+) {
+  return prisma.$transaction(async (tx) => {
+    const settings = await tx.siteSetting.update({
+      where: { id },
+      data,
+    })
+
+    await syncGiftDefinitions(giftDefinitions, tx)
+
+    return settings
   })
 }

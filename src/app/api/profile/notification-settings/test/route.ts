@@ -40,5 +40,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "Webhook 测试失败",
   logPrefix: "[api/profile/notification-settings/test] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

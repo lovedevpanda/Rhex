@@ -4,18 +4,6 @@ export const EDITOR_LINE_HEIGHT_REM = 1.75
 export const EDITOR_LINE_NUMBER_GUTTER_WIDTH_CLASS = "w-7"
 export const EDITOR_FALLBACK_LINE_HEIGHT_PX = 28
 
-export const VIDEO_EXTENSIONS = [".mp4", ".webm", ".ogg", ".mov", ".m3u8"]
-export const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]
-export const COMMON_EMBED_HOSTS = new Set([
-  "player.bilibili.com",
-  "www.bilibili.com",
-  "music.163.com",
-  "www.youtube.com",
-  "youtube.com",
-  "youtu.be",
-  "v.qq.com",
-])
-
 export const TOOLBAR_TIPS = {
   heading: {
     label: "标题层级",

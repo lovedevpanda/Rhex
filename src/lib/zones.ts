@@ -1,6 +1,7 @@
 import { cache } from "react"
 
-import { findAllZonesWithBoards, findGlobalPinnedPosts, findZoneBoardIdsBySlug, findZoneBoardListBySlug, findZoneNormalPosts, findZonePinnedPosts, findZoneWithBoardsBySlug } from "@/db/taxonomy-queries"
+import { resolvePagination } from "@/db/helpers"
+import { countZoneNormalPosts, findAllZonesWithBoards, findGlobalPinnedPosts, findZoneBoardIdsBySlug, findZoneBoardListBySlug, findZoneNormalPosts, findZonePinnedPosts, findZoneWithBoardsBySlug } from "@/db/taxonomy-queries"
 import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
 import { mapListPost } from "@/lib/post-map"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
@@ -100,11 +101,29 @@ export async function getZoneBoards(slug: string) {
   }))
 }
 
-export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promise<SitePostItem[]> {
+export interface ZonePostPageResult {
+  items: SitePostItem[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasPrevPage: boolean
+  hasNextPage: boolean
+}
+
+export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promise<ZonePostPageResult> {
   const zone = await findZoneBoardIdsBySlug(slug)
 
   if (!zone || zone.boards.length === 0) {
-    return []
+    return {
+      items: [],
+      page: 1,
+      pageSize,
+      total: 0,
+      totalPages: 1,
+      hasPrevPage: false,
+      hasNextPage: false,
+    }
   }
 
   const boardIds = zone.boards.map((item: (typeof zone.boards)[number]) => item.id)
@@ -113,16 +132,34 @@ export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promi
     findZonePinnedPosts(boardIds),
   ])
   const pinnedPosts = [...globalPinnedPosts, ...zonePinnedPosts]
+  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
+  const total = await countZoneNormalPosts(boardIds, excludedPostIds)
+  const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
 
-  if (page === 1) {
+  if (pagination.page === 1) {
     const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts)
-    const normalPosts = await findZoneNormalPosts(boardIds, pinnedPostIds, 1, pageSize)
+    const normalPosts = await findZoneNormalPosts(boardIds, pinnedPostIds, 1, pagination.pageSize)
 
-    return [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))]
+    return {
+      items: [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))],
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total: pagination.total,
+      totalPages: pagination.totalPages,
+      hasPrevPage: pagination.hasPrevPage,
+      hasNextPage: pagination.hasNextPage,
+    }
   }
 
-  const excludedPostIds = extractPinnedPostIds(pinnedPosts)
-  const normalPosts = await findZoneNormalPosts(boardIds, excludedPostIds, page, pageSize)
+  const normalPosts = await findZoneNormalPosts(boardIds, excludedPostIds, pagination.page, pagination.pageSize)
 
-  return normalPosts.map((post) => mapListPost(post))
+  return {
+    items: normalPosts.map((post) => mapListPost(post)),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    total: pagination.total,
+    totalPages: pagination.totalPages,
+    hasPrevPage: pagination.hasPrevPage,
+    hasNextPage: pagination.hasNextPage,
+  }
 }

@@ -30,6 +30,7 @@ import { UserStatus } from "@/db/types"
 import { apiError } from "@/lib/api-route"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { messageEventBus } from "@/lib/message-event-bus"
+import { getUserDisplayName } from "@/lib/user-display"
 import { ensureUsersCanInteract } from "@/lib/user-blocks"
 import type {
 
@@ -41,7 +42,6 @@ import type {
   MessageHistoryResult,
   MessageParticipantProfile,
 } from "@/lib/message-types"
-import { getUserDisplayName } from "@/lib/users"
 
 
 
@@ -53,10 +53,6 @@ type MessageTransactionClient = DbTransaction
 
 const INITIAL_MESSAGE_PAGE_SIZE = 20
 const MESSAGE_HISTORY_BATCH_SIZE = 50
-
-function getDisplayName(user: { username: string; nickname?: string | null }) {
-  return user.nickname?.trim() || user.username
-}
 
 
 function mapConversationParticipant(
@@ -75,7 +71,7 @@ function mapConversationParticipant(
   return {
     id: participant.user.id,
     username: participant.user.username,
-    displayName: participant.userId === currentUserId ? "我" : getDisplayName(participant.user),
+    displayName: participant.userId === currentUserId ? "我" : getUserDisplayName(participant.user),
     avatarPath: participant.user.avatarPath,
     isCurrentUser: participant.userId === currentUserId,
   }

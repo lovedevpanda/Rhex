@@ -1,6 +1,7 @@
 import { prisma } from "@/db/client"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { drawLotteryWinners } from "@/lib/lottery"
+import { canManageBoard, resolveAdminActorFromSessionUser } from "@/lib/moderator-permissions"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
@@ -12,6 +13,12 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       id: true,
       authorId: true,
       type: true,
+      boardId: true,
+      board: {
+        select: {
+          zoneId: true,
+        },
+      },
     },
   })
 
@@ -19,8 +26,9 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     apiError(404, "抽奖帖不存在")
   }
 
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.role === "MODERATOR"
-  if (!isAdmin && post.authorId !== currentUser.id) {
+  const adminActor = await resolveAdminActorFromSessionUser(currentUser)
+  const canManageAsAdmin = adminActor && (adminActor.role === "ADMIN" || canManageBoard(adminActor, post.boardId, post.board.zoneId))
+  if (!canManageAsAdmin && post.authorId !== currentUser.id) {
     apiError(403, "仅楼主或管理员可开奖")
   }
 
@@ -30,6 +38,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "开奖失败",
   logPrefix: "[api/posts/draw] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

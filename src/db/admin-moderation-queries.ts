@@ -9,6 +9,13 @@ export function hideCommentById(commentId: string) {
   })
 }
 
+export function showCommentById(commentId: string) {
+  return prisma.comment.update({
+    where: { id: commentId },
+    data: { status: CommentStatus.NORMAL },
+  })
+}
+
 export function findBoardPostingState(boardId: string) {
   return prisma.board.findUnique({
     where: { id: boardId },

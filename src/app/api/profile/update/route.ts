@@ -321,6 +321,6 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   errorMessage: "保存资料失败",
   logPrefix: "[api/profile/update] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
 

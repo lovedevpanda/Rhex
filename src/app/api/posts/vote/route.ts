@@ -67,5 +67,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "投票失败",
   logPrefix: "[api/posts/vote] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

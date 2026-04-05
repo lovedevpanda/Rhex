@@ -1,12 +1,12 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { BoardFollowButton } from "@/components/board-follow-button"
 import { CollapsibleInfoCard } from "@/components/collapsible-info-card"
 import { ForumPageShell } from "@/components/forum-page-shell"
 import { ForumPostStream } from "@/components/forum-post-stream"
+import { PageNumberPagination } from "@/components/page-number-pagination"
 import { RssSubscribeButton } from "@/components/rss-subscribe-button"
 
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
@@ -26,6 +26,11 @@ import { getZones } from "@/lib/zones"
 
 
 
+
+function buildBoardPageHref(slug: string, page = 1) {
+  const normalizedPage = Math.max(1, Math.trunc(page))
+  return normalizedPage <= 1 ? `/boards/${slug}` : `/boards/${slug}?page=${normalizedPage}`
+}
 
 export async function generateStaticParams() {
   const boards = await getBoards()
@@ -59,8 +64,8 @@ export async function generateMetadata(props: PageProps<"/boards/[slug]">): Prom
 
 
 export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
-  const searchParams = await props.searchParams;
-  const params = await props.params;
+  const searchParams = await props.searchParams
+  const params = await props.params
   const [board, currentUser, settings] = await Promise.all([getBoardBySlug(params.slug), getCurrentUser(), getSiteSettings()])
 
   if (!board) {
@@ -86,23 +91,30 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
     requirePostReview: board.requirePostReview ?? false,
   }, "view")
 
-  const currentPage = Number(readSearchParam(searchParams?.page) ?? "1") || 1
-  const [posts, boards, zones, hotTopics] = await Promise.all([
-    permission.allowed ? getBoardPosts(params.slug, currentPage, 20) : Promise.resolve([]),
+  const rawPage = readSearchParam(searchParams?.page)
+  const currentPage = Math.max(1, Number(rawPage ?? "1") || 1)
+  const [postsPage, boards, zones, hotTopics] = await Promise.all([
+    permission.allowed
+      ? getBoardPosts(params.slug, currentPage, 20)
+      : Promise.resolve({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1, hasPrevPage: false, hasNextPage: false }),
     getBoards(),
     getZones(),
     getHomeSidebarHotTopics(5),
   ])
+  const { items: posts, page, totalPages, hasPrevPage, hasNextPage } = postsPage
+
+  if (rawPage !== undefined && currentPage === 1) {
+    redirect(buildBoardPageHref(params.slug))
+  }
+
+  if (currentPage !== page) {
+    redirect(buildBoardPageHref(params.slug, page))
+  }
   const zoneBoards = board.zoneId ? boards.filter((item) => item.zoneId === board.zoneId) : []
   const parentZone = board.zoneId ? zones.find((item) => item.id === board.zoneId) ?? null : null
   const isFollowingBoard = currentUser
     ? await isUserFollowingBoard(currentUser.id, board.id)
     : false
-
-  const nextPage = currentPage + 1
-
-
-  const prevPage = Math.max(1, currentPage - 1)
   const sidebarUser = await resolveSidebarUser(currentUser, settings)
 
 
@@ -154,21 +166,19 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
                 <>
          
 
-                  <ForumPostStream posts={posts} listDisplayMode={board.postListDisplayMode} showBoard={false} showPinnedDivider={currentPage === 1} />
+                  <ForumPostStream posts={posts} listDisplayMode={board.postListDisplayMode} showBoard={false} showPinnedDivider={page === 1} />
 
 
 
                   {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前节点还没有内容。</div> : null}
 
-                  <div className="flex items-center justify-between pt-2">
-                    <Link href={`/boards/${params.slug}?page=${prevPage}`} className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}>
-                      <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">上一页</span>
-                    </Link>
-                    <span className="text-sm text-muted-foreground">第 {currentPage} 页</span>
-                    <Link href={`/boards/${params.slug}?page=${nextPage}`}>
-                      <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">下一页</span>
-                    </Link>
-                  </div>
+                  <PageNumberPagination
+                    page={page}
+                    totalPages={totalPages}
+                    hasPrevPage={hasPrevPage}
+                    hasNextPage={hasNextPage}
+                    buildHref={(targetPage) => buildBoardPageHref(params.slug, targetPage)}
+                  />
                 </>
               )}
             </div>

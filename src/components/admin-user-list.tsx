@@ -124,6 +124,9 @@ export function AdminUserList({ data }: AdminUserListProps) {
           const canPromoteModerator = user.role === "USER"
           const canSetAdmin = user.role !== "ADMIN"
           const canDemote = user.role !== "USER"
+          const moderatorScopeSummary = user.role === "MODERATOR"
+            ? `${user.moderatedZoneScopes.length} 个分区 / ${user.moderatedBoardScopes.length} 个节点`
+            : null
           return (
             <div key={user.id} className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-[220px_120px_150px_150px_minmax(0,1fr)_320px]">
               <div className="min-w-0">
@@ -138,7 +141,7 @@ export function AdminUserList({ data }: AdminUserListProps) {
               <div className="space-y-1 text-muted-foreground">
                 <div className="font-medium text-foreground">{user.role}</div>
                 <div>{user.status}</div>
-                <div>邀请人 {user.inviterName ?? "-"}</div>
+                <div>{moderatorScopeSummary ?? `邀请人 ${user.inviterName ?? "-"}`}</div>
               </div>
 
               <div className="space-y-1 text-muted-foreground">
@@ -163,7 +166,7 @@ export function AdminUserList({ data }: AdminUserListProps) {
               </div>
 
               <div className="flex flex-wrap justify-end gap-1.5">
-                <AdminUserModal user={user} />
+                <AdminUserModal user={user} moderatorScopeOptions={data.moderatorScopeOptions} />
                 <AdminUserStatusModal userId={user.id} username={user.username} action="mute" />
                 <AdminUserStatusModal userId={user.id} username={user.username} action="ban" />
                 <AdminUserActionButton userId={user.id} action="user.activate" label="恢复" className="h-7 rounded-full px-2.5 text-xs" />

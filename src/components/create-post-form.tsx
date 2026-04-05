@@ -3,7 +3,7 @@
 import { ChevronDown, Info } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { ChangeEvent, FormEvent } from "react"
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react"
 
 import {
   clearPostDraftFromStorage,
@@ -191,6 +191,34 @@ export function CreatePostForm({
 
     return () => window.clearTimeout(timer)
   }, [draft, initialDraftData, postId, storageMode])
+
+  const handleManualDraftSaveEffect = useEffectEvent(() => {
+    handleManualDraftSave()
+  })
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
+        return
+      }
+
+      if (event.key.toLowerCase() !== "s") {
+        return
+      }
+
+      event.preventDefault()
+      handleManualDraftSaveEffect()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [])
 
   function restoreDraft(nextDraft: LocalPostDraft) {
     setDraft(normalizeDraftData(nextDraft, pointName, initialDraftData.boardSlug))
@@ -724,7 +752,7 @@ export function CreatePostForm({
           <div>
             <PostDraftNotice
               title={pendingDraftToRestore ? "检测到本地草稿" : lastSavedDraftAt ? (draftRestored ? "已恢复草稿" : "本地草稿") : "草稿状态"}
-              description={pendingDraftToRestore ? `你在${isEditMode ? "编辑帖子" : "发帖"}页有一份未提交内容，可直接恢复继续编辑。` : "当前内容会自动暂存到本地。"}
+              description={pendingDraftToRestore ? `你在${isEditMode ? "编辑帖子" : "发帖"}页有一份未提交内容，可直接恢复继续编辑。支持 Ctrl/Cmd+S 快速保存草稿。` : "当前内容会自动暂存到本地。支持 Ctrl/Cmd+S 快速保存草稿，Ctrl/Cmd+Z 使用原生撤销。"}
               meta={draftMetaTimestamp ? `保存于 ${new Date(draftMetaTimestamp).toLocaleString()}` : undefined}
               tone={pendingDraftToRestore ? "warning" : "info"}
               size="dense"

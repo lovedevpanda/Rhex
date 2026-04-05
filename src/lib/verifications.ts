@@ -1,19 +1,15 @@
-import { prisma } from "@/db/client"
+import {
+  createUserVerificationApplication,
+  findApprovedUserVerification,
+  findLatestUserVerificationApplication,
+  findVerificationTypeById,
+  listActiveVerificationTypes,
+  listUserVerificationApplications,
+  updateUserVerificationById,
+} from "@/db/verification-queries"
 import { getCurrentUser } from "@/lib/auth"
-
-
-
-export type VerificationFieldType = "text" | "textarea" | "number" | "url"
-
-export type VerificationFormField = {
-  id: string
-  label: string
-  type: VerificationFieldType
-  placeholder?: string
-  required: boolean
-  helpText?: string
-  sortOrder: number
-}
+import { parseVerificationFormSchema, type VerificationFormField } from "@/lib/verification-form-schema"
+export type { VerificationFieldType, VerificationFormField } from "@/lib/verification-form-schema"
 
 export type VerificationBadgeView = {
   id: string
@@ -56,46 +52,6 @@ export type CurrentUserVerificationData = {
   approvedVerification: VerificationBadgeView | null
 }
 
-function parseFormSchemaJson(input?: string | null): VerificationFormField[] {
-  if (!input?.trim()) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(input) as Array<Record<string, unknown>>
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed
-      .map((item, index) => {
-        const type = String(item.type ?? "text") as VerificationFieldType
-        if (!["text", "textarea", "number", "url"].includes(type)) {
-          return null
-        }
-
-        const label = String(item.label ?? "").trim()
-        if (!label) {
-          return null
-        }
-
-        return {
-          id: String(item.id ?? `field_${index + 1}`).trim() || `field_${index + 1}`,
-          label,
-          type,
-          placeholder: String(item.placeholder ?? "").trim() || undefined,
-          required: item.required === true,
-          helpText: String(item.helpText ?? "").trim() || undefined,
-          sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
-        }
-      })
-      .filter(Boolean)
-      .sort((left, right) => (left as VerificationFormField).sortOrder - (right as VerificationFormField).sortOrder) as VerificationFormField[]
-  } catch {
-    return []
-  }
-}
-
 function parseFormResponseJson(input?: string | null) {
   if (!input?.trim()) {
     return {}
@@ -129,7 +85,7 @@ function mapVerificationType(type: {
     description: type.description,
     iconText: type.iconText?.trim() || "✔️",
     color: type.color,
-    formFields: parseFormSchemaJson(type.formSchemaJson),
+    formFields: parseVerificationFormSchema(type.formSchemaJson),
     sortOrder: type.sortOrder,
     status: type.status,
     userLimit: type.userLimit,
@@ -178,43 +134,12 @@ export async function getCurrentUserVerificationData(): Promise<CurrentUserVerif
   const currentUserId = currentUser?.id ?? null
 
   const [types, applications, approvedVerification] = await Promise.all([
-    prisma.verificationType.findMany({
-      where: { status: true },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    }),
+    listActiveVerificationTypes(),
     currentUserId
-      ? prisma.userVerification.findMany({
-          where: { userId: currentUserId },
-          orderBy: [{ submittedAt: "desc" }],
-          include: {
-            type: {
-              select: {
-                id: true,
-                name: true,
-                iconText: true,
-                color: true,
-                description: true,
-              },
-            },
-          },
-        })
+      ? listUserVerificationApplications(currentUserId)
       : Promise.resolve([]),
     currentUserId
-      ? prisma.userVerification.findFirst({
-          where: { userId: currentUserId, status: "APPROVED" },
-          orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }],
-          include: {
-            type: {
-              select: {
-                id: true,
-                name: true,
-                iconText: true,
-                color: true,
-                description: true,
-              },
-            },
-          },
-        })
+      ? findApprovedUserVerification(currentUserId)
       : Promise.resolve(null),
   ])
 
@@ -260,35 +185,19 @@ export async function submitVerificationApplication(input: {
   content?: string
   formResponse?: Record<string, string>
 }) {
-  const verificationType = await prisma.verificationType.findUnique({
-    where: { id: input.verificationTypeId },
-  })
+  const verificationType = await findVerificationTypeById(input.verificationTypeId)
 
   if (!verificationType || !verificationType.status) {
     throw new Error("认证类型不存在或已停用")
   }
 
-  const existingApproved = await prisma.userVerification.findFirst({
-    where: {
-      userId: input.userId,
-      status: "APPROVED",
-    },
-    include: {
-      type: true,
-    },
-  })
+  const existingApproved = await findApprovedUserVerification(input.userId)
 
   if (existingApproved && existingApproved.typeId !== input.verificationTypeId) {
     throw new Error(`你已通过 ${existingApproved.type.name}，暂不支持重复申请其它认证`)
   }
 
-  const latestApplication = await prisma.userVerification.findFirst({
-    where: {
-      userId: input.userId,
-      typeId: input.verificationTypeId,
-    },
-    orderBy: [{ submittedAt: "desc" }],
-  })
+  const latestApplication = await findLatestUserVerificationApplication(input.userId, input.verificationTypeId)
 
   if (latestApplication?.status === "PENDING") {
     throw new Error("该认证已在审核中，请等待后台审核")
@@ -302,7 +211,7 @@ export async function submitVerificationApplication(input: {
     throw new Error("该认证当前不允许被拒后再次提交，请联系管理员")
   }
 
-  const formFields = parseFormSchemaJson(verificationType.formSchemaJson)
+  const formFields = parseVerificationFormSchema(verificationType.formSchemaJson)
   const rawFormResponse = input.formResponse ?? {}
   const normalizedFormResponse = Object.fromEntries(Object.entries(rawFormResponse).map(([key, value]) => [key, String(value ?? "").trim()]))
 
@@ -320,48 +229,25 @@ export async function submitVerificationApplication(input: {
     throw new Error(formFields.length > 0 ? "请完善认证申请表单" : "请填写申请说明")
   }
 
-  return prisma.userVerification.create({
-    data: {
-      userId: input.userId,
-      typeId: input.verificationTypeId,
-      content,
-      formResponseJson: formFields.length > 0 ? JSON.stringify(normalizedFormResponse) : null,
-      status: "PENDING",
-    },
-    include: {
-      type: {
-        select: {
-          id: true,
-          name: true,
-          iconText: true,
-          color: true,
-          description: true,
-        },
-      },
-    },
+  return createUserVerificationApplication({
+    userId: input.userId,
+    verificationTypeId: input.verificationTypeId,
+    content,
+    formResponseJson: formFields.length > 0 ? JSON.stringify(normalizedFormResponse) : null,
   })
 }
 
 export async function unbindCurrentUserVerification(userId: number) {
-  const approvedApplication = await prisma.userVerification.findFirst({
-    where: {
-      userId,
-      status: "APPROVED",
-    },
-    orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }],
-  })
+  const approvedApplication = await findApprovedUserVerification(userId)
 
   if (!approvedApplication) {
     throw new Error("当前没有已绑定的认证")
   }
 
-  await prisma.userVerification.update({
-    where: { id: approvedApplication.id },
-    data: {
-      status: "CANCELLED",
-      note: "用户主动解除认证绑定",
-      reviewedAt: new Date(),
-    },
+  await updateUserVerificationById(approvedApplication.id, {
+    status: "CANCELLED",
+    note: "用户主动解除认证绑定",
+    reviewedAt: new Date(),
   })
 }
 
@@ -370,24 +256,7 @@ export async function getUserApprovedVerificationBadge(userId: number | null | u
     return null
   }
 
-  const application = await prisma.userVerification.findFirst({
-    where: {
-      userId,
-      status: "APPROVED",
-    },
-    orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }],
-    include: {
-      type: {
-        select: {
-          id: true,
-          name: true,
-          iconText: true,
-          color: true,
-          description: true,
-        },
-      },
-    },
-  })
+  const application = await findApprovedUserVerification(userId)
 
   if (!application) {
     return null

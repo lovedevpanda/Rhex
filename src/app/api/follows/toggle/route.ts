@@ -64,5 +64,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "关注操作失败",
   logPrefix: "[api/follows/toggle] unexpected error",
   unauthorizedMessage: "请先登录后再关注",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

@@ -1,4 +1,4 @@
-import { prisma } from "@/db/client"
+import { findPostUpdateContext, runPostUpdateTransaction } from "@/db/post-update-queries"
 
 import { apiError } from "@/lib/api-route"
 import { extractSummaryFromContent } from "@/lib/content"
@@ -44,32 +44,13 @@ export async function updatePostFlow(input: {
 
   const settings = await getSiteSettings()
 
-  const post = await prisma.post.findUnique({
-    where: { id: input.postId },
-    select: {
-      id: true,
-      slug: true,
-      authorId: true,
-      content: true,
-      createdAt: true,
-      lastAppendedAt: true,
-      appendices: {
-        select: {
-          sortOrder: true,
-        },
-        orderBy: {
-          sortOrder: "desc",
-        },
-        take: 1,
-      },
-    },
-  })
+  const post = await findPostUpdateContext(input.postId)
 
   if (!post) {
     apiError(404, "帖子不存在")
   }
 
-  const isAdmin = input.currentUser.role === "ADMIN" || input.currentUser.role === "MODERATOR"
+  const isAdmin = input.currentUser.role === "ADMIN"
   const existingContentMeta = getPostContentMeta(post.content)
   const canEditFull = isAdmin || input.currentUser.id === post.authorId
   if (!canEditFull) {
@@ -107,7 +88,7 @@ export async function updatePostFlow(input: {
 
     let finalContent = serializedContent
 
-    await prisma.$transaction(async (tx) => {
+    await runPostUpdateTransaction(async (tx) => {
       const activityAt = new Date()
       let nextContent = serializedContent
       let nextSummary = summary
@@ -166,7 +147,7 @@ export async function updatePostFlow(input: {
   const appendSafety = await enforceSensitiveText({ scene: "post.content", text: appendedContent })
   const nextSortOrder = (post.appendices[0]?.sortOrder ?? -1) + 1
 
-  await prisma.$transaction(async (tx) => {
+  await runPostUpdateTransaction(async (tx) => {
     const activityAt = new Date()
     let nextAppendedContent = appendSafety.sanitizedText
 

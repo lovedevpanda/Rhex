@@ -56,5 +56,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "修改密码失败",
   logPrefix: "[api/profile/password] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

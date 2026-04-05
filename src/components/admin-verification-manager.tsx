@@ -7,17 +7,10 @@ import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
 import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/button"
 import { showConfirm } from "@/components/ui/confirm-dialog"
+import type { VerificationFormField } from "@/lib/verification-form-schema"
 
 
-export type AdminVerificationFieldItem = {
-  id: string
-  label: string
-  type: "text" | "textarea" | "number" | "url"
-  placeholder?: string
-  required: boolean
-  helpText?: string
-  sortOrder: number
-}
+export type AdminVerificationFieldItem = VerificationFormField
 
 export type AdminVerificationTypeItem = {
   id?: string

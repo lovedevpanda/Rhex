@@ -3,12 +3,8 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 interface NotificationsPaginationProps {
-  currentPage: number
-  totalPages: number
-}
-
-function buildPageHref(page: number) {
-  return page <= 1 ? "/notifications" : `/notifications?page=${page}`
+  prevHref?: string | null
+  nextHref?: string | null
 }
 
 function paginationLinkClassName(disabled?: boolean) {
@@ -18,21 +14,19 @@ function paginationLinkClassName(disabled?: boolean) {
   )
 }
 
-export function NotificationsPagination({ currentPage, totalPages }: NotificationsPaginationProps) {
-  if (totalPages <= 1) {
+export function NotificationsPagination({ prevHref, nextHref }: NotificationsPaginationProps) {
+  if (!prevHref && !nextHref) {
     return null
   }
 
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-muted-foreground">
-        第 {currentPage} / {totalPages} 页
-      </p>
+      <p className="text-sm text-muted-foreground">使用游标分页加载较新的通知与更早的通知。</p>
       <div className="flex items-center gap-3">
-        <Link href={buildPageHref(currentPage - 1)} aria-disabled={currentPage <= 1} className={paginationLinkClassName(currentPage <= 1)}>
+        <Link href={prevHref ?? "#"} aria-disabled={!prevHref} className={paginationLinkClassName(!prevHref)}>
           上一页
         </Link>
-        <Link href={buildPageHref(currentPage + 1)} aria-disabled={currentPage >= totalPages} className={paginationLinkClassName(currentPage >= totalPages)}>
+        <Link href={nextHref ?? "#"} aria-disabled={!nextHref} className={paginationLinkClassName(!nextHref)}>
           下一页
         </Link>
       </div>

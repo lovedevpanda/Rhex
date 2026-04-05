@@ -33,13 +33,85 @@ export function findAdminUsersPage(where: Prisma.UserWhereInput, orderBy: Prisma
           checkInDays: true,
         },
       },
-      favorites: true,
-      loginLogs: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
+      _count: {
+        select: {
+          favorites: true,
+        },
+      },
+      moderatedZoneScopes: {
+        orderBy: [{ zone: { sortOrder: "asc" } }, { createdAt: "asc" }],
+        include: {
+          zone: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      },
+      moderatedBoardScopes: {
+        orderBy: [{ board: { sortOrder: "asc" } }, { createdAt: "asc" }],
+        include: {
+          board: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              zoneId: true,
+              zone: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
       },
     },
     skip,
     take,
   })
+}
+
+export async function findModeratorScopeOptions() {
+  const [zones, boards] = await prisma.$transaction(async (tx) => {
+    return Promise.all([
+      tx.zone.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      }),
+      tx.board.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          zoneId: true,
+          zone: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+    ])
+  })
+
+  return {
+    zones,
+    boards: boards.map((board) => ({
+      id: board.id,
+      name: board.name,
+      slug: board.slug,
+      zoneId: board.zoneId ?? null,
+      zoneName: board.zone?.name ?? null,
+    })),
+  }
 }

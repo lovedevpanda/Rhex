@@ -1,3 +1,5 @@
+import { type Prisma } from "@prisma/client"
+
 import { prisma } from "@/db/client"
 
 export type LevelDefinitionRecord = {
@@ -25,7 +27,7 @@ export type UserLevelProgressRecord = {
   updatedAt: Date
 }
 
-type ExtendedPrismaClient = typeof prisma & {
+type ExtendedPrismaClient = {
   levelDefinition: {
     count: () => Promise<number>
     createMany: (args: { data: Array<Omit<LevelDefinitionRecord, "id" | "createdAt" | "updatedAt">> }) => Promise<unknown>
@@ -45,7 +47,7 @@ type ExtendedPrismaClient = typeof prisma & {
   }
 }
 
-const extendedPrisma = prisma as ExtendedPrismaClient
+const extendedPrisma = prisma as typeof prisma & ExtendedPrismaClient
 
 export function countLevelDefinitions() {
   return extendedPrisma.levelDefinition.count()
@@ -87,8 +89,8 @@ export function findUserLevelProgressByUserId(userId: number) {
   })
 }
 
-export function updateUserLevel(userId: number, level: number) {
-  return prisma.user.update({
+export function updateUserLevel(userId: number, level: number, client?: Prisma.TransactionClient) {
+  return (client ?? prisma).user.update({
     where: { id: userId },
     data: { level },
   })
@@ -135,12 +137,14 @@ export async function syncUserReceivedLikesInTransaction(userId: number, postLik
   const totalLikes = postLikes + commentLikes
 
   await prisma.$transaction(async (tx) => {
+    const db = tx as Prisma.TransactionClient & ExtendedPrismaClient
+
     await tx.user.update({
       where: { id: userId },
       data: { likeReceivedCount: totalLikes },
     })
 
-    await extendedPrisma.userLevelProgress.upsert({
+    await db.userLevelProgress.upsert({
       where: { userId },
       update: {
         receivedPostLikes: postLikes,
@@ -168,13 +172,14 @@ export async function saveLevelDefinitionsInTransaction(input: Array<{
   requireCommentCount: number
   requireLikeCount: number
 }>) {
-  await prisma.$transaction(async () => {
-    const existing = await extendedPrisma.levelDefinition.findMany({ select: { id: true } }) as Array<{ id: string }>
+  await prisma.$transaction(async (tx) => {
+    const db = tx as Prisma.TransactionClient & ExtendedPrismaClient
+    const existing = await db.levelDefinition.findMany({ select: { id: true } }) as Array<{ id: string }>
     const keepIds = input.map((item) => item.id).filter(Boolean) as string[]
     const deleteIds = existing.map((item) => item.id).filter((id) => !keepIds.includes(id))
 
     if (deleteIds.length > 0) {
-      await extendedPrisma.levelDefinition.deleteMany({
+      await db.levelDefinition.deleteMany({
         where: {
           id: {
             in: deleteIds,
@@ -185,7 +190,7 @@ export async function saveLevelDefinitionsInTransaction(input: Array<{
 
     for (const item of input) {
       if (item.id) {
-        await extendedPrisma.levelDefinition.update({
+        await db.levelDefinition.update({
           where: { id: item.id },
           data: {
             level: item.level,
@@ -201,7 +206,7 @@ export async function saveLevelDefinitionsInTransaction(input: Array<{
         continue
       }
 
-      await extendedPrisma.levelDefinition.create({
+      await db.levelDefinition.create({
         data: {
           level: item.level,
           name: item.name,

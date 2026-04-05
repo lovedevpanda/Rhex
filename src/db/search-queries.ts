@@ -1,5 +1,6 @@
 import { prisma } from "@/db/client"
 import type { Prisma } from "@/db/types"
+import type { PinnedTimestampCursorPayload } from "@/lib/cursor-pagination"
 import { pinnedPostOrderBy } from "@/db/queries"
 
 const searchPostListSelect = {
@@ -66,18 +67,61 @@ export function countSearchPosts(where: ReturnType<typeof buildPostSearchWhere>)
   return prisma.post.count({ where })
 }
 
-export function findSearchPosts(params: {
+function buildSearchCursorWhere(cursor: PinnedTimestampCursorPayload, direction: "after" | "before"): Prisma.PostWhereInput {
+  const createdAt = new Date(cursor.createdAt)
+
+  if (direction === "after") {
+    return {
+      OR: [
+        ...(cursor.isPinned ? [{ isPinned: false }] : []),
+        { isPinned: cursor.isPinned, createdAt: { lt: createdAt } },
+        { isPinned: cursor.isPinned, createdAt, id: { lt: cursor.id } },
+      ],
+    }
+  }
+
+  return {
+    OR: [
+      ...(!cursor.isPinned ? [{ isPinned: true }] : []),
+      { isPinned: cursor.isPinned, createdAt: { gt: createdAt } },
+      { isPinned: cursor.isPinned, createdAt, id: { gt: cursor.id } },
+    ],
+  }
+}
+
+export async function findSearchPostsCursor(params: {
   where: ReturnType<typeof buildPostSearchWhere>
-  page: number
   pageSize: number
+  after?: PinnedTimestampCursorPayload | null
+  before?: PinnedTimestampCursorPayload | null
 }) {
   const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+  const pagingDirection = params.before ? "before" : "after"
+  const cursor = params.before ?? params.after
 
-  return prisma.post.findMany({
-    where: params.where,
+  const rows = await prisma.post.findMany({
+    where: cursor
+      ? {
+          AND: [
+            params.where,
+            buildSearchCursorWhere(cursor, pagingDirection),
+          ],
+        }
+      : params.where,
     select: searchPostListSelect,
-    orderBy: pinnedPostOrderBy,
-    skip: (params.page - 1) * normalizedPageSize,
-    take: normalizedPageSize,
+    orderBy: pagingDirection === "before"
+      ? [{ isPinned: "asc" }, { createdAt: "asc" }, { id: "asc" }]
+      : [...pinnedPostOrderBy, { id: "desc" }],
+    take: normalizedPageSize + 1,
   })
+
+  const hasExtra = rows.length > normalizedPageSize
+  const slicedRows = hasExtra ? rows.slice(0, normalizedPageSize) : rows
+  const items = pagingDirection === "before" ? [...slicedRows].reverse() : slicedRows
+
+  return {
+    items,
+    hasPrevPage: params.before ? hasExtra : Boolean(params.after),
+    hasNextPage: params.before ? true : hasExtra,
+  }
 }

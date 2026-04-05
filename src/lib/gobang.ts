@@ -3,9 +3,7 @@ import { randomUUID } from "node:crypto"
 export { GobangPage } from "@/components/gobang-page"
 export { GobangAdminPage } from "@/components/gobang-admin-page"
 
-import { prisma } from "@/db/client"
-
-import { countGobangMatchesInRange, createGobangMatchRecord, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
+import { countGobangMatchesInRange, createGobangMatchRecord, findGobangUserPoints, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, runGobangTransaction, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
 
 
 import { getGobangAppConfig } from "@/lib/app-config"
@@ -354,33 +352,30 @@ async function creditUserPoints(userId: number, amount: number, reason: string) 
     return
   }
 
-  const [settings, preparedReward, user] = await Promise.all([
+  const [settings, preparedReward] = await Promise.all([
     getSiteSettings(),
     prepareScopedPointDelta({
       scopeKey: "GOBANG_WAGER_INCOMING",
       baseDelta: amount,
       userId,
     }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        points: true,
-      },
-    }),
   ])
 
-  if (!user) {
-    throw new Error("用户不存在")
-  }
+  await runGobangTransaction(async (tx) => {
+    const user = await findGobangUserPoints(userId, tx)
 
-  await applyPointDelta({
-    tx: prisma,
-    userId,
-    beforeBalance: user.points,
-    prepared: preparedReward,
-    pointName: settings.pointName,
-    reason,
+    if (!user) {
+      throw new Error("用户不存在")
+    }
+
+    await applyPointDelta({
+      tx,
+      userId,
+      beforeBalance: user.points,
+      prepared: preparedReward,
+      pointName: settings.pointName,
+      reason,
+    })
   })
 }
 
@@ -401,14 +396,8 @@ export async function createGobangMatch(user: CurrentUser) {
   const id = randomUUID()
   const playerFirst = Math.random() >= 0.5
 
-  await prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true,
-        points: true,
-      },
-    })
+  await runGobangTransaction(async (tx) => {
+    const latestUser = await findGobangUserPoints(user.id, tx)
 
     if (!latestUser) {
       throw new Error("用户不存在")
@@ -431,6 +420,7 @@ export async function createGobangMatch(user: CurrentUser) {
       creatorId: user.id,
       ticketCost: policy.ticketCost,
       winReward: policy.winReward,
+      client: tx,
     })
 
     if (!playerFirst) {
@@ -442,6 +432,7 @@ export async function createGobangMatch(user: CurrentUser) {
         step: 1,
         x: center.x,
         y: center.y,
+        client: tx,
       })
     }
   })

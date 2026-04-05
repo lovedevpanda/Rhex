@@ -1,19 +1,19 @@
 import { randomBytes } from "crypto"
 
-import { prisma } from "@/db/client"
-
 import {
 
+  countRedeemedCodesByUserCategoryWithTx,
   createRedeemCodeRecords,
   findRedeemCodeByCode,
   findRedeemCodeByCodeWithTx,
   findUserBaseById,
+  findUserPointsByIdWithTx,
   listRedeemCodes,
   listRedeemCodesByCodes,
-  listRedeemedCodesByUserWithTx,
   markRedeemCodeUsedWithTx,
   type RedeemCodeCoreRow,
   type RedeemCodeListRow,
+  runRedeemCodeTransaction,
 } from "@/db/redeem-code-queries"
 
 
@@ -215,7 +215,7 @@ export async function redeemPointsCode(input: { userId: number; code: string }) 
     throwRedeemCodeError("兑换码已过期")
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runRedeemCodeTransaction(async (tx) => {
     const latestRedeemCode = await findRedeemCodeByCodeWithTx(tx, normalizedCode)
 
     if (!latestRedeemCode) {
@@ -237,18 +237,17 @@ export async function redeemPointsCode(input: { userId: number; code: string }) 
     const latestCategoryUserLimit = getCategoryUserLimit(activeRedeemCode)
 
     if (latestCategoryUserLimit !== null) {
-      const redeemedRows = await listRedeemedCodesByUserWithTx(tx, input.userId)
-      const redeemedCount = redeemedRows.filter((row) => getRedeemCodeCategory(row) === latestCodeCategory).length
+      const redeemedCount = await countRedeemedCodesByUserCategoryWithTx(tx, {
+        userId: input.userId,
+        codeCategory: latestCodeCategory,
+      })
       if (redeemedCount >= latestCategoryUserLimit) {
         throwRedeemCodeError(`当前分类兑换码每个用户最多可使用 ${latestCategoryUserLimit} 个`)
       }
     }
 
     await markRedeemCodeUsedWithTx(tx, activeRedeemCode.id, input.userId)
-    const latestUser = await tx.user.findUnique({
-      where: { id: input.userId },
-      select: { id: true, points: true },
-    })
+    const latestUser = await findUserPointsByIdWithTx(tx, input.userId)
 
     if (!latestUser) {
       throwRedeemCodeError("用户不存在")

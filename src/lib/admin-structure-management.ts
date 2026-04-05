@@ -25,6 +25,7 @@ export interface ZoneItem {
   minPostVipLevel: number
   minReplyVipLevel: number
   postListDisplayMode: string | null
+  canEditSettings: boolean
 }
 
 export interface BoardItem {
@@ -58,11 +59,18 @@ export interface BoardItem {
   minPostVipLevel: number | null
   minReplyVipLevel: number | null
   postListDisplayMode: string | null
+  canEditSettings: boolean
 }
 
 export interface StructureManagerData {
   zones: ZoneItem[]
   boards: BoardItem[]
+  permissions: {
+    canCreateZone: boolean
+    canCreateBoard: boolean
+    canDeleteZone: boolean
+    canDeleteBoard: boolean
+  }
   filters: {
     keyword: string
     zoneId: string

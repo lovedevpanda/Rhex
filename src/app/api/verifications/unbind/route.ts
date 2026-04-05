@@ -18,5 +18,5 @@ export const POST = createUserRouteHandler(async ({ currentUser }) => {
   errorMessage: "解除绑定失败",
   logPrefix: "[api/verifications/unbind] unexpected error",
   unauthorizedMessage: "请先登录后再操作",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })

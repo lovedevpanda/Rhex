@@ -73,5 +73,5 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   errorMessage: "绑定 Passkey 失败",
   logPrefix: "[api/profile/account-bindings/passkey/verify] unexpected error",
   unauthorizedMessage: "请先登录",
-  allowStatuses: ["ACTIVE", "MUTED", "BANNED", "INACTIVE"],
+  allowStatuses: ["ACTIVE", "MUTED"],
 })
