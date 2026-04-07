@@ -598,15 +598,11 @@ html.dark .sidebar-user-card-header {
 
 @media (min-width: 1024px) {
   .forum-page-shell {
-    --forum-left-column-width: 175px;
-    --forum-right-column-width: 274px;
-    grid-template-columns: var(--forum-left-column-width) minmax(0, 1fr) var(--forum-right-column-width);
-    transform: translateX(calc((var(--forum-right-column-width) - var(--forum-left-column-width)) / 2));
+    grid-template-columns: 175px minmax(0, 1fr) 274px;
   }
 
   html[data-sidebar-collapsed="true"] .forum-page-shell {
-    --forum-left-column-width: 52px;
-    grid-template-columns: var(--forum-left-column-width) minmax(0, 1fr) var(--forum-right-column-width);
+    grid-template-columns: 52px minmax(0, 1fr) 274px;
     column-gap: 0.2rem;
   }
 
