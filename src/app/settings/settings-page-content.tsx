@@ -1,9 +1,10 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Sparkles } from "lucide-react"
+import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Receipt, Sparkles } from "lucide-react"
 
 import { ChangeType } from "@/db/types"
 import { BadgeCenter } from "@/components/badge-center"
+import { BoardApplicationPanel } from "@/components/board-application-panel"
 import { BrowsingSettingsPanel } from "@/components/browsing-settings-panel"
 import { InviteCodePurchaseCard } from "@/components/invite-code-purchase-card"
 import { InviteLinkCopyButton } from "@/components/invite-link-copy-button"
@@ -23,33 +24,6 @@ import { formatNumber } from "@/lib/formatters"
 import { getPostPath } from "@/lib/post-links"
 import type { SettingsPageData } from "@/app/settings/settings-page-loader"
 import { followTabs, postManagementTabs, profileTabs } from "@/app/settings/settings-page-loader"
-
-function parsePointEffectSummaryToken(token: string) {
-  const normalized = token.trim()
-  if (!normalized) {
-    return null
-  }
-
-  const match = normalized.match(/^(.*?)([+-]\d+(?:\.\d+)?)$/)
-  const rawLabel = (match?.[1] ?? normalized).trim()
-  const adjustmentValue = match?.[2] ?? ""
-  const [badgeName, effectName] = rawLabel.includes(".")
-    ? rawLabel.split(/\.(.+)/, 2)
-    : [null, rawLabel]
-
-  return {
-    badgeName: badgeName?.trim() || null,
-    effectName: effectName.trim(),
-    adjustmentValue,
-  }
-}
-
-function parsePointEffectSummary(summary: string | null | undefined) {
-  return String(summary ?? "")
-    .split("|")
-    .map((token) => parsePointEffectSummaryToken(token))
-    .filter((item): item is NonNullable<ReturnType<typeof parsePointEffectSummaryToken>> => Boolean(item))
-}
 
 function buildCursorHref(basePath: string, queryKey: string, cursor: string | null) {
   return cursor ? `${basePath}&${queryKey}=${encodeURIComponent(cursor)}` : "#"
@@ -99,6 +73,25 @@ export function SettingsPageContent({ data }: { data: SettingsPageData }) {
           favoritePosts={data.favoritePosts}
           likedPosts={data.likedPosts}
           postLinkDisplayMode={settings.postLinkDisplayMode}
+        />
+      ) : null}
+
+      {route.currentTab === "board-applications" ? (
+        <BoardApplicationPanel
+          pointName={settings.pointName}
+          currentUser={{
+            id: data.currentUser.id,
+            username: data.currentUser.username,
+            displayName: data.profile.displayName,
+            status: data.currentUser.status,
+          }}
+          zones={data.boardApplicationZones.map((zone) => ({
+            id: zone.id,
+            name: zone.name,
+            slug: zone.slug,
+          }))}
+          items={data.boardApplicationData.items}
+          pendingCount={data.boardApplicationData.pendingCount}
         />
       ) : null}
 
@@ -249,7 +242,7 @@ function ProfilePanel({
   const panelDescription = currentTab === "browsing"
     ? "在这里维护当前浏览器的浏览偏好。"
     : currentTab === "privacy"
-      ? "在这里控制个人主页活动轨迹的公开范围。"
+      ? "在这里控制个人主页活动轨迹与介绍的公开范围。"
       : currentTab === "notifications"
         ? "在这里配置站外通知开关、Webhook 地址与测试投递。"
         : currentTab === "accounts"
@@ -277,7 +270,8 @@ function ProfilePanel({
             initialAvatarPath={profile.avatarPath}
             initialEmail={dbUser?.email ?? null}
             initialEmailVerified={Boolean(dbUser?.emailVerifiedAt)}
-            initialActivityVisibilityPublic={dbUser?.activityVisibilityPublic ?? true}
+            initialActivityVisibility={dbUser?.activityVisibility ?? "PUBLIC"}
+            initialIntroductionVisibility={dbUser?.introductionVisibility ?? "PUBLIC"}
             nicknameChangePointCost={nicknameChangePointCost}
             nicknameChangePriceDescription={nicknameChangePriceDescription}
             introductionChangePointCost={introductionChangePointCost}
@@ -934,12 +928,19 @@ function PointsPanel({ pointLogs, currentPoints, pointName }: { pointLogs: Setti
           {pointLogs.items.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有任何积分变动记录。</p> : null}
           {pointLogs.items.map((log) => {
             const positive = log.changeType === ChangeType.INCREASE
-            const effectItems = parsePointEffectSummary(log.pointEffect?.ruleSummary)
+            const effectItems = log.pointEffect?.rules ?? []
             return (
               <div key={log.id} className="rounded-[20px] border border-border px-4 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium">{log.displayReason}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{log.displayReason}</p>
+                      {log.pointTax ? (
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-100 text-sky-700" title="该条记录含节点税" aria-label="该条记录含节点税">
+                          <Receipt className="h-3.5 w-3.5" />
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</p>
                     {typeof log.beforeBalance === "number" && typeof log.afterBalance === "number" ? (
                       <p className="mt-2 text-xs text-muted-foreground">
@@ -959,9 +960,9 @@ function PointsPanel({ pointLogs, currentPoints, pointName }: { pointLogs: Setti
                         <Sparkles className="h-3.5 w-3.5" />
                         勋章特效
                       </span>
-                      <span className="text-muted-foreground">初始：{formatNumber(Number(log.pointEffect.baseValue) || 0)}</span>
-                      <span className={String(log.pointEffect.deltaValue).startsWith("-") ? "text-rose-700" : "text-emerald-700"}>
-                        特效：{String(log.pointEffect.deltaValue).startsWith("-") ? "-" : "+"}{formatNumber(Math.abs(Number(log.pointEffect.deltaValue) || 0))}
+                      <span className="text-muted-foreground">初始：{formatNumber(log.pointEffect.baseValue || 0)}</span>
+                      <span className={log.pointEffect.deltaValue < 0 ? "text-rose-700" : "text-emerald-700"}>
+                        特效：{log.pointEffect.deltaValue < 0 ? "-" : "+"}{formatNumber(Math.abs(log.pointEffect.deltaValue || 0))}
                       </span>
                     </div>
                     {effectItems.length > 0 ? (
@@ -971,8 +972,8 @@ function PointsPanel({ pointLogs, currentPoints, pointName }: { pointLogs: Setti
                             {item.badgeName ? <span className="text-muted-foreground">{item.badgeName}</span> : null}
                             <span>{item.effectName}</span>
                             {item.adjustmentValue ? (
-                              <span className={item.adjustmentValue.startsWith("-") ? "text-rose-700" : "text-emerald-700"}>
-                                {item.adjustmentValue}
+                              <span className={item.adjustmentValue < 0 ? "text-rose-700" : "text-emerald-700"}>
+                                {item.adjustmentValue > 0 ? "+" : ""}{formatNumber(item.adjustmentValue)}
                               </span>
                             ) : null}
                           </span>

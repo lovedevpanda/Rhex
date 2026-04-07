@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
-import { createPortal } from "react-dom"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Lightbox, { type Slide } from "yet-another-react-lightbox"
+import { Counter, Zoom,Fullscreen  } from "yet-another-react-lightbox/plugins"
 
 import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
 import { bindBase64Inspector, bindBrokenImagePlaceholders, bindImageLightbox, enhanceMarkdown, type LightboxImage } from "@/lib/markdown/enhance"
@@ -18,6 +18,12 @@ interface MarkdownContentProps {
   markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
+interface MarkdownBodyProps {
+  html: string
+  className?: string
+  onOpenLightbox: (images: LightboxImage[], index: number) => void
+}
+
 interface LightboxState {
   images: LightboxImage[]
   index: number
@@ -26,98 +32,70 @@ interface LightboxState {
 interface LightboxPortalProps {
   lightbox: LightboxState
   onClose: () => void
-  onPrev: () => void
-  onNext: () => void
+  onChange: (index: number) => void
 }
 
-function LightboxPortal({ lightbox, onClose, onPrev, onNext }: LightboxPortalProps) {
-  const touchStartX = useRef<number | null>(null)
-  const current = lightbox.images[lightbox.index]!
-  const hasPrev = lightbox.index > 0
-  const hasNext = lightbox.index < lightbox.images.length - 1
-  const isMultiple = lightbox.images.length > 1
-
-  const handleTouchStart = (event: React.TouchEvent) => {
-    touchStartX.current = event.touches[0]?.clientX ?? null
-  }
-
-  const handleTouchEnd = (event: React.TouchEvent) => {
-    if (touchStartX.current === null) return
-    const delta = (event.changedTouches[0]?.clientX ?? 0) - touchStartX.current
-    touchStartX.current = null
-    if (Math.abs(delta) < 50) return
-    if (delta > 0 && hasPrev) onPrev()
-    else if (delta < 0 && hasNext) onNext()
-  }
+function LightboxPortal({ lightbox, onClose, onChange }: LightboxPortalProps) {
+  const slides = useMemo<Slide[]>(
+    () => lightbox.images.map((item) => ({ src: item.src, alt: item.alt })),
+    [lightbox.images],
+  )
+  const render = useMemo(
+    () => ({
+      iconPrev: () => (
+        <span className="markdown-lightbox-nav-icon" aria-hidden="true">
+          <ChevronLeft size={20} strokeWidth={2.25} />
+        </span>
+      ),
+      iconNext: () => (
+        <span className="markdown-lightbox-nav-icon" aria-hidden="true">
+          <ChevronRight size={20} strokeWidth={2.25} />
+        </span>
+      ),
+    }),
+    [],
+  )
 
   return (
-    <div
-      key={current.src}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85"
-      onClick={onClose}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      <button
-        type="button"
-        className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:right-4 sm:top-4 sm:h-10 sm:w-10"
-        onClick={(event) => { event.stopPropagation(); onClose() }}
-        aria-label="关闭图片预览"
-      >
-        <X className="h-4 w-4 sm:h-5 sm:w-5" />
-      </button>
-
-      {hasPrev && (
-        <button
-          type="button"
-          className="absolute bottom-4 left-4 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:bottom-auto sm:left-4 sm:top-1/2 sm:h-10 sm:w-10 sm:-translate-y-1/2"
-          onClick={(event) => { event.stopPropagation(); onPrev() }}
-          aria-label="上一张"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-      )}
-
-      {hasNext && (
-        <button
-          type="button"
-          className="absolute bottom-4 right-4 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:opacity-80 sm:bottom-auto sm:right-4 sm:top-1/2 sm:h-10 sm:w-10 sm:-translate-y-1/2"
-          onClick={(event) => { event.stopPropagation(); onNext() }}
-          aria-label="下一张"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      )}
-
-      <div
-        className="relative h-full w-full sm:h-[90vh] sm:w-[90vw] sm:max-w-[1400px]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <Image
-          src={current.src}
-          alt={current.alt}
-          fill
-          unoptimized
-          className="object-contain sm:rounded-2xl sm:shadow-2xl"
-          sizes="100vw"
-        />
-      </div>
-
-      {isMultiple && (
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs text-white/80 backdrop-blur-sm sm:bottom-4 sm:text-sm">
-          {lightbox.index + 1} / {lightbox.images.length}
-        </div>
-      )}
-    </div>
+    <Lightbox
+      className="markdown-lightbox-viewer"
+      open
+      close={onClose}
+      index={lightbox.index}
+      slides={slides}
+      plugins={[Counter, Zoom,Fullscreen]}
+      counter={{
+        container: {
+          className: "markdown-lightbox-counter",
+        },
+        separator: " / ",
+      }}
+      controller={{
+        closeOnBackdropClick: true,
+      }}
+      carousel={{
+        padding: 0,
+        spacing: "12px",
+      }}
+      zoom={{
+        maxZoomPixelRatio: 4,
+        scrollToZoom: true,
+      }}
+      render={render}
+      labels={{
+        Previous: "上一张",
+        Next: "下一张",
+        Close: "关闭",
+      }}
+      on={{
+        view: ({ index }) => onChange(index),
+      }}
+    />
   )
 }
 
-export function MarkdownContent({ content, className, emptyText, markdownEmojiMap }: MarkdownContentProps) {
+const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbox }: MarkdownBodyProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
-  const normalized = content.replace(/\r\n/g, "\n").trim()
-  const resolvedMarkdownEmojiMap = useMarkdownEmojiMap(markdownEmojiMap)
-  const html = useMemo(() => (normalized ? renderMarkdown(normalized, resolvedMarkdownEmojiMap) : ""), [normalized, resolvedMarkdownEmojiMap])
 
   useEffect(() => {
     const container = containerRef.current
@@ -135,9 +113,7 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
         return
       }
 
-      removeImageLightbox = bindImageLightbox(container, (images, index) => {
-        setLightbox({ images, index })
-      })
+      removeImageLightbox = bindImageLightbox(container, onOpenLightbox)
     })
 
     return () => {
@@ -146,33 +122,25 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
       removeBrokenImagePlaceholders()
       removeImageLightbox()
     }
-  }, [html])
+  }, [html, onOpenLightbox])
 
-  useEffect(() => {
-    if (!lightbox) {
-      return
-    }
+  return (
+    <div
+      ref={containerRef}
+      className={cn("markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1", className)}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+})
 
-    const originalOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setLightbox(null)
-      } else if (event.key === "ArrowLeft") {
-        setLightbox((previous) => previous && previous.index > 0 ? { ...previous, index: previous.index - 1 } : previous)
-      } else if (event.key === "ArrowRight") {
-        setLightbox((previous) => previous && previous.index < previous.images.length - 1 ? { ...previous, index: previous.index + 1 } : previous)
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      document.body.style.overflow = originalOverflow
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [lightbox])
+export function MarkdownContent({ content, className, emptyText, markdownEmojiMap }: MarkdownContentProps) {
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
+  const normalized = content.replace(/\r\n/g, "\n").trim()
+  const resolvedMarkdownEmojiMap = useMarkdownEmojiMap(markdownEmojiMap)
+  const html = useMemo(() => (normalized ? renderMarkdown(normalized, resolvedMarkdownEmojiMap) : ""), [normalized, resolvedMarkdownEmojiMap])
+  const handleOpenLightbox = useCallback((images: LightboxImage[], index: number) => {
+    setLightbox({ images, index })
+  }, [])
 
   if (!normalized) {
     return emptyText ? <p className="text-sm text-muted-foreground">{emptyText}</p> : null
@@ -180,19 +148,13 @@ export function MarkdownContent({ content, className, emptyText, markdownEmojiMa
 
   return (
     <>
-      <div
-        ref={containerRef}
-        className={cn("markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1", className)}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      {lightbox ? createPortal(
+      <MarkdownBody html={html} className={className} onOpenLightbox={handleOpenLightbox} />
+      {lightbox ? (
         <LightboxPortal
           lightbox={lightbox}
           onClose={() => setLightbox(null)}
-          onPrev={() => setLightbox((previous) => previous && previous.index > 0 ? { ...previous, index: previous.index - 1 } : previous)}
-          onNext={() => setLightbox((previous) => previous && previous.index < previous.images.length - 1 ? { ...previous, index: previous.index + 1 } : previous)}
-        />,
-        document.body,
+          onChange={(index) => setLightbox((previous) => previous ? { ...previous, index } : previous)}
+        />
       ) : null}
     </>
   )

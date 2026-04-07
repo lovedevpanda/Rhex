@@ -16,6 +16,9 @@ import {
   type PostTipSupportSenderRecord,
   runPostTipTransaction,
 } from "@/db/post-tip-queries"
+import { incrementBoardTreasuryPoints } from "@/db/board-treasury-queries"
+import { buildPreparedPointDeltaFromFinalInteger, splitBoardTreasuryTaxFromGross } from "@/lib/board-treasury"
+import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { getBusinessDayRange } from "@/lib/formatters"
 import { createSystemNotification } from "@/lib/notification-writes"
@@ -56,10 +59,10 @@ type PostSupportTx = Prisma.TransactionClient
 
 function buildTipReason(postId: string, amount: number, pointName: string, gift?: SiteTippingGiftItem | null) {
   if (gift) {
-    return `[post-tip] 赠送礼物（${gift.name} / ${amount}${pointName}） post=${postId}`
+    return `赠送礼物（${gift.name} / ${amount}${pointName}）`
   }
 
-  return `[post-tip] 打赏帖子（${amount}${pointName}） post=${postId}`
+  return `打赏帖子（${amount}${pointName}）`
 }
 
 function getTodayRange() {
@@ -143,6 +146,8 @@ async function createPostSupportBaseTransaction(params: {
   senderId: number
   amount: number
   pointName: string
+  tipGiftTaxEnabled: boolean
+  tipGiftTaxRateBps: number
   dailyLimit: number
   perPostLimit: number
   gift?: SiteTippingGiftItem | null
@@ -202,6 +207,19 @@ async function createPostSupportBaseTransaction(params: {
       baseDelta: params.amount,
       userId: post.authorId,
     })
+    const taxSplit = params.tipGiftTaxEnabled
+      ? splitBoardTreasuryTaxFromGross(recipientPreparedDelta.finalDelta, params.tipGiftTaxRateBps)
+      : {
+          gross: recipientPreparedDelta.finalDelta,
+          net: recipientPreparedDelta.finalDelta,
+          tax: 0,
+        }
+    const recipientAppliedPreparedDelta = taxSplit.tax > 0
+      ? buildPreparedPointDeltaFromFinalInteger(recipientPreparedDelta, taxSplit.net)
+      : recipientPreparedDelta
+    const recipientBaseReason = params.gift
+      ? `帖子收到礼物 ${params.gift.name}`
+      : "帖子被打赏"
 
     await incrementPostTipTotals(tx, {
       postId: post.id,
@@ -222,6 +240,22 @@ async function createPostSupportBaseTransaction(params: {
       pointName: params.pointName,
       insufficientMessage: `${params.pointName}不足，无法完成打赏`,
       reason: buildTipReason(post.id, params.amount, params.pointName, params.gift),
+      eventType: params.gift ? POINT_LOG_EVENT_TYPES.POST_GIFT_SENT : POINT_LOG_EVENT_TYPES.POST_TIP_SENT,
+      eventData: {
+        postId: post.id,
+        boardId: post.boardId,
+        senderId: sender.id,
+        recipientId: post.authorId,
+        configuredAmount: params.amount,
+        appliedFinalDelta: senderPreparedDelta.finalDelta,
+        gift: params.gift
+          ? {
+              id: params.gift.id,
+              name: params.gift.name,
+              price: params.gift.price,
+            }
+          : null,
+      },
       relatedType: "POST",
       relatedId: post.id,
     })
@@ -230,14 +264,36 @@ async function createPostSupportBaseTransaction(params: {
       tx,
       userId: post.authorId,
       beforeBalance: recipient.points,
-      prepared: recipientPreparedDelta,
+      prepared: recipientAppliedPreparedDelta,
       pointName: params.pointName,
-      reason: params.gift
-        ? `帖子收到礼物 ${params.gift.name}`
-        : "帖子被打赏",
+      reason: recipientBaseReason,
+      eventType: params.gift ? POINT_LOG_EVENT_TYPES.POST_GIFT_RECEIVED : POINT_LOG_EVENT_TYPES.POST_TIP_RECEIVED,
+      eventData: {
+        postId: post.id,
+        boardId: post.boardId,
+        senderId: sender.id,
+        recipientId: post.authorId,
+        configuredAmount: params.amount,
+        grossFinalDelta: recipientPreparedDelta.finalDelta,
+        netFinalDelta: recipientAppliedPreparedDelta.finalDelta,
+        taxAmount: taxSplit.tax,
+        gift: params.gift
+          ? {
+              id: params.gift.id,
+              name: params.gift.name,
+              price: params.gift.price,
+            }
+          : null,
+      },
+      taxAmount: taxSplit.tax,
+      effectPrepared: recipientPreparedDelta,
       relatedType: "POST",
       relatedId: post.id,
     })
+
+    if (taxSplit.tax > 0 && post.boardId) {
+      await incrementBoardTreasuryPoints(tx, post.boardId, taxSplit.tax)
+    }
 
     await createSystemNotification({
       client: tx,
@@ -247,8 +303,8 @@ async function createPostSupportBaseTransaction(params: {
       relatedId: post.id,
       title: "你的帖子收到了打赏",
       content: params.gift
-        ? `${sender.username} 送出了 ${params.gift.name} 给你的帖子《${post.title}》，你已收到 ${Math.abs(recipientPreparedDelta.finalDelta)} ${params.pointName}。`
-        : `${sender.username} 打赏了你的帖子《${post.title}》，你已收到 ${Math.abs(recipientPreparedDelta.finalDelta)} ${params.pointName}。`,
+        ? `${sender.username} 送出了 ${params.gift.name} 给你的帖子《${post.title}》，你已收到 ${Math.abs(recipientAppliedPreparedDelta.finalDelta)} ${params.pointName}。`
+        : `${sender.username} 打赏了你的帖子《${post.title}》，你已收到 ${Math.abs(recipientAppliedPreparedDelta.finalDelta)} ${params.pointName}。`,
     })
 
     return {
@@ -383,6 +439,8 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
       senderId: input.senderId,
       amount: input.amount,
       pointName: settings.pointName,
+      tipGiftTaxEnabled: settings.tipGiftTaxEnabled,
+      tipGiftTaxRateBps: settings.tipGiftTaxRateBps,
       dailyLimit: settings.tippingDailyLimit,
       perPostLimit: settings.tippingPerPostLimit,
       gift: matchedGift,
@@ -404,6 +462,8 @@ export async function tipPost(input: { postId: string; senderId: number; amount:
     senderId: input.senderId,
     amount: input.amount,
     pointName: settings.pointName,
+    tipGiftTaxEnabled: settings.tipGiftTaxEnabled,
+    tipGiftTaxRateBps: settings.tipGiftTaxRateBps,
     dailyLimit: settings.tippingDailyLimit,
     perPostLimit: settings.tippingPerPostLimit,
     onPersist: async ({ tx, post }) => {

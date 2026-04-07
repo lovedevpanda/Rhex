@@ -18,10 +18,11 @@ interface SettingsShellProps {
     inviteCount: number
   }
   pointName: string
+  boardApplicationEnabled: boolean
   children: ReactNode
 }
 
-export function SettingsShell({ children, pointName }: SettingsShellProps) {
+export function SettingsShell({ children, pointName, boardApplicationEnabled }: SettingsShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") ?? "profile"
@@ -31,12 +32,13 @@ export function SettingsShell({ children, pointName }: SettingsShellProps) {
     { key: "profile", label: "基础设置", description: "维护基础资料、头像、邮箱与密码。" },
     { key: "invite", label: "邀请中心", description: "查看邀请数据并管理邀请入口。" },
     { key: "post-management", label: "帖子管理", description: "查看我的帖子、回复、收藏与点赞。" },
+    ...(boardApplicationEnabled ? [{ key: "board-applications", label: "节点申请", description: "申请新建节点并查看自己的审核记录。" }] : []),
     { key: "level", label: "我的等级", description: "查看成长进度、升级条件与当前等级。" },
     { key: "badges", label: "勋章中心", description: "查看已达成状态并手动领取勋章。" },
     { key: "verifications", label: "账号认证", description: "提交个人认证、商家认证等身份申请。" },
     { key: "points", label: `${pointName}明细`, description: `查看当前${pointName}余额与全部变动记录。` },
     { key: "follows", label: "我的关注", description: "查看你关注的节点、用户、标签与帖子。" },
-  ]
+  ] satisfies SettingsNavItem[]
   const currentItem = navItems.find((item) => item.key === currentTab) ?? navItems[0]
 
   return (

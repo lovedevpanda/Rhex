@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ChevronDown, ChevronRight, Eye } from "lucide-react"
 
+import { AnonymousUserIndicator } from "@/components/anonymous-user-indicator"
 import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { LevelIcon } from "@/components/level-icon"
 import { TimeTooltip } from "@/components/time-tooltip"
@@ -21,6 +22,7 @@ interface PostDetailHeaderProps {
     boardIcon?: string
     author: string
     authorUsername?: string
+    isAnonymous?: boolean
     authorAvatarPath?: string | null
     authorStatus?: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
     authorIsVip?: boolean
@@ -166,9 +168,12 @@ export function PostDetailHeader({ post, isFollowingPost, isRestrictedAuthor, zo
           <div className="min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] text-muted-foreground sm:text-[12px]">
             <UserVerificationBadge verification={post.authorVerification ?? null} compact appearance="plain" />
             <VipNameTooltip isVip={post.authorIsVip} level={post.authorVipLevel}>
-              <Link href={authorHref} className={cn("truncate", getVipNameClass(post.authorIsVip, post.authorVipLevel, { emphasize: true }))}>
-                {post.author}
-              </Link>
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <Link href={authorHref} className={cn("truncate", getVipNameClass(post.authorIsVip, post.authorVipLevel, { emphasize: true }))}>
+                  {post.author}
+                </Link>
+                {post.isAnonymous ? <AnonymousUserIndicator /> : null}
+              </span>
             </VipNameTooltip>
             <UserDisplayedBadges badges={post.authorDisplayedBadges} compact appearance="plain" spacing="tight" />
             {isRestrictedAuthor ? <UserStatusBadge status={post.authorStatus} compact /> : null}

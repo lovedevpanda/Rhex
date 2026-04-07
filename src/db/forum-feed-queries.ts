@@ -7,7 +7,17 @@ const feedPostInclude = {
   board: {
     select: { name: true, slug: true, iconPath: true },
   },
-  author: true,
+  author: {
+    select: {
+      id: true,
+      username: true,
+      nickname: true,
+      avatarPath: true,
+      status: true,
+      vipLevel: true,
+      vipExpiresAt: true,
+    },
+  },
   redPacket: {
     select: {
       id: true,
@@ -92,6 +102,7 @@ function buildFeedWhere(
       authorId: {
         in: filters.authorIds,
       },
+      isAnonymous: false,
     })
   }
 
@@ -248,7 +259,7 @@ export function findLatestTopicPosts(limit: number) {
     orderBy: { createdAt: "desc" },
     take: limit,
     include: {
-      author: { select: { username: true, nickname: true } },
+      author: { select: { id: true, username: true, nickname: true } },
       board: { select: { name: true } },
     },
   })

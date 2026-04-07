@@ -366,7 +366,7 @@ export function LotterySettingsSection({
 
 interface PostEnhancementsSectionProps {
   pointName: string
-  postRedPacketEnabled: boolean
+  rewardPoolEnabled: boolean
   settings: {
     finalTags: string[]
     autoExtractedTags: string[]
@@ -413,7 +413,7 @@ interface PostEnhancementsSectionProps {
   }
 }
 
-export function PostEnhancementsSection({ pointName, postRedPacketEnabled, settings, actions }: PostEnhancementsSectionProps) {
+export function PostEnhancementsSection({ pointName, rewardPoolEnabled, settings, actions }: PostEnhancementsSectionProps) {
   const {
     finalTags,
     autoExtractedTags,
@@ -445,7 +445,7 @@ export function PostEnhancementsSection({ pointName, postRedPacketEnabled, setti
           <span className={finalTags.length > 0 ? "ml-2 rounded-full bg-foreground px-2 py-0.5 text-[11px] text-background" : "ml-2 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground"}>{finalTags.length > 0 ? finalTags.length : autoExtractedTags.length}</span>
         </Button>
 
-        {postRedPacketEnabled ? (
+        {rewardPoolEnabled ? (
           <HiddenConfigChip
             icon={<Sparkles className="h-4 w-4" />}
             title="帖子激励池"

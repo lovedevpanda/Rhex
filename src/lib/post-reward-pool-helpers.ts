@@ -255,19 +255,19 @@ export function allocateRedPacketAmount(packet: { grantMode: PostRedPacketGrantM
 }
 
 export function buildRedPacketClaimReason(params: { amount: number; pointName: string; postId: string; triggerType: PostRedPacketTriggerType }) {
-  return `[post-red-packet] 领取帖子红包（${getPostRedPacketTriggerLabel(params.triggerType)}，${params.amount}${params.pointName}） post=${params.postId}`
+  return `领取帖子红包(${getPostRedPacketTriggerLabel(params.triggerType)}，${params.amount}${params.pointName})`
 }
 
 export function buildRedPacketSendReason(params: { amount: number; pointName: string; postId: string }) {
-  return `[post-red-packet] 发布帖子红包（${params.amount}${params.pointName}） post=${params.postId}`
+  return `发布帖子红包(${params.amount}${params.pointName})`
 }
 
 export function buildJackpotSendReason(params: { amount: number; pointName: string; postId: string }) {
-  return `[post-jackpot] 发布聚宝盆（初始 ${params.amount}${params.pointName}） post=${params.postId}`
+  return `发布聚宝盆（初始 ${params.amount}${params.pointName})`
 }
 
 export function buildJackpotClaimReason(params: { amount: number; pointName: string; postId: string }) {
-  return `[post-jackpot] 命中聚宝盆（${params.amount}${params.pointName}） post=${params.postId}`
+  return `命中聚宝盆(${params.amount}${params.pointName})`
 }
 
 export function shouldHitJackpot(probability: number) {

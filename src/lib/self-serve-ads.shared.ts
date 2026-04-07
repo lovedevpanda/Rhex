@@ -88,16 +88,12 @@ export const SELF_SERVE_AD_DURATION_OPTIONS: SelfServeAdDurationOption[] = [
 export const SELF_SERVE_AD_TEXT_COLORS = ["#0f172a", "#1d4ed8", "#0f766e", "#be123c", "#854d0e", "#ffffff"] as const
 export const SELF_SERVE_AD_BACKGROUND_COLORS = ["#f8fafc", "#dbeafe", "#dcfce7", "#fce7f3", "#fef3c7", "#111827"] as const
 
-import { normalizeNonNegativeInteger } from "@/lib/shared/normalizers"
+import { normalizeNonNegativeInteger, normalizeTrimmedText } from "@/lib/shared/normalizers"
 
 const SELF_SERVE_AD_TITLE_MAX_LENGTH = 30
 const SELF_SERVE_AD_IMAGE_URL_MAX_LENGTH = 500
 const SELF_SERVE_AD_LINK_URL_MAX_LENGTH = 500
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/
-
-function normalizeSelfServeAdText(value: unknown, maxLength: number) {
-  return String(value ?? "").trim().slice(0, maxLength)
-}
 
 function normalizeSelfServeAdUrl(value: unknown, fieldLabel: string) {
   const url = String(value ?? "").trim()
@@ -125,10 +121,10 @@ function normalizeSelfServeAdColor(value: unknown, fallback: string) {
 
 export function validateSelfServeAdPurchaseDraft(input: SelfServeAdPurchaseDraft): SelfServeAdPurchaseValidationResult {
   const slotType = input.slotType === "IMAGE" ? "IMAGE" : "TEXT"
-  const title = normalizeSelfServeAdText(input.title, SELF_SERVE_AD_TITLE_MAX_LENGTH)
+  const title = normalizeTrimmedText(input.title, SELF_SERVE_AD_TITLE_MAX_LENGTH)
   const linkResult = normalizeSelfServeAdUrl(input.linkUrl, "广告链接")
   const imageResult = slotType === "IMAGE"
-    ? normalizeSelfServeAdUrl(String(input.imageUrl ?? "").trim().slice(0, SELF_SERVE_AD_IMAGE_URL_MAX_LENGTH), "广告图片地址")
+    ? normalizeSelfServeAdUrl(normalizeTrimmedText(input.imageUrl, SELF_SERVE_AD_IMAGE_URL_MAX_LENGTH), "广告图片地址")
     : { value: "" }
   const textColor = slotType === "TEXT" ? normalizeSelfServeAdColor(input.textColor, "#0f172a") : "#0f172a"
   const backgroundColor = slotType === "TEXT" ? normalizeSelfServeAdColor(input.backgroundColor, "#f8fafc") : "#f8fafc"

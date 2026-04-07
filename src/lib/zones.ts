@@ -3,6 +3,7 @@ import { cache } from "react"
 import { resolvePagination } from "@/db/helpers"
 import { countZoneNormalPosts, findAllZonesWithBoards, findGlobalPinnedPosts, findZoneBoardIdsBySlug, findZoneBoardListBySlug, findZoneNormalPosts, findZonePinnedPosts, findZoneWithBoardsBySlug } from "@/db/taxonomy-queries"
 import { dedupeAndMapPinnedPosts, extractPinnedPostIds } from "@/lib/pinned-posts"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { mapListPost } from "@/lib/post-map"
 import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
@@ -16,6 +17,7 @@ export interface SiteZoneItem {
   name: string
   description: string
   icon: string
+  hiddenFromSidebar: boolean
   boardSlugs: string[]
   count: number
   requirePostReview?: boolean
@@ -38,6 +40,7 @@ const getCachedZones = cache(async (): Promise<SiteZoneItem[]> => {
     name: zone.name,
     description: zone.description ?? `${zone.name} 分区`,
     icon: zone.icon ?? "📚",
+    hiddenFromSidebar: zone.hiddenFromSidebar ?? false,
     boardSlugs: zone.boards.map((board) => board.slug),
     count: zone.boards.reduce((total, board) => total + board._count.posts, 0),
     requirePostReview: zone.requirePostReview ?? false,
@@ -68,6 +71,7 @@ const getCachedZoneBySlug = cache(async (slug: string) => {
     name: zone.name,
     description: zone.description ?? `${zone.name} 分区`,
     icon: zone.icon ?? "📚",
+    hiddenFromSidebar: zone.hiddenFromSidebar ?? false,
     boardSlugs: zone.boards.map((board: (typeof zone.boards)[number]) => board.slug),
     count: zone.boards.reduce((total: number, board: (typeof zone.boards)[number]) => total + board._count.posts, 0),
     requirePostReview: zone.requirePostReview ?? false,
@@ -130,6 +134,7 @@ export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promi
     }
   }
 
+  const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
   const boardIds = zone.boards.map((item: (typeof zone.boards)[number]) => item.id)
   const [globalPinnedPosts, zonePinnedPosts] = await Promise.all([
     findGlobalPinnedPosts(),
@@ -141,11 +146,11 @@ export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promi
   const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
 
   if (pagination.page === 1) {
-    const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts)
+    const { pinnedItems, pinnedPostIds } = dedupeAndMapPinnedPosts(pinnedPosts, (post) => mapListPost(post, anonymousMaskIdentity))
     const normalPosts = await findZoneNormalPosts(boardIds, pinnedPostIds, 1, pagination.pageSize)
 
     return {
-      items: [...pinnedItems, ...normalPosts.map((post) => mapListPost(post))],
+      items: [...pinnedItems, ...normalPosts.map((post) => mapListPost(post, anonymousMaskIdentity))],
       page: pagination.page,
       pageSize: pagination.pageSize,
       total: pagination.total,
@@ -158,7 +163,7 @@ export async function getZonePosts(slug: string, page = 1, pageSize = 10): Promi
   const normalPosts = await findZoneNormalPosts(boardIds, excludedPostIds, pagination.page, pagination.pageSize)
 
   return {
-    items: normalPosts.map((post) => mapListPost(post)),
+    items: normalPosts.map((post) => mapListPost(post, anonymousMaskIdentity)),
     page: pagination.page,
     pageSize: pagination.pageSize,
     total: pagination.total,

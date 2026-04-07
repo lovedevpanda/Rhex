@@ -1,6 +1,7 @@
 export interface BrowsingPreferencesSnapshot {
   dimReadPostTitles: boolean
   openPostLinksInNewTab: boolean
+  commentThreadDisplayMode: "tree" | "flat"
   rewardPoolIntroAnimationMode: "always" | "once-per-tab" | "never"
 }
 
@@ -9,6 +10,7 @@ export const BROWSING_PREFERENCES_CHANGE_EVENT = "rhex:browsing-preferences-chan
 export const DEFAULT_BROWSING_PREFERENCES: BrowsingPreferencesSnapshot = {
   dimReadPostTitles: false,
   openPostLinksInNewTab: false,
+  commentThreadDisplayMode: "tree",
   rewardPoolIntroAnimationMode: "always",
 }
 
@@ -29,6 +31,7 @@ function normalizeBrowsingPreferences(value: unknown): BrowsingPreferencesSnapsh
   return {
     dimReadPostTitles: Boolean(candidate.dimReadPostTitles),
     openPostLinksInNewTab: Boolean(candidate.openPostLinksInNewTab),
+    commentThreadDisplayMode: candidate.commentThreadDisplayMode === "flat" ? "flat" : "tree",
     rewardPoolIntroAnimationMode: candidate.rewardPoolIntroAnimationMode === "never"
       ? "never"
       : candidate.rewardPoolIntroAnimationMode === "once-per-tab"

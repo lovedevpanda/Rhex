@@ -31,6 +31,26 @@ export function AdminInviteCodeManager({ initialInviteCodes }: AdminInviteCodeMa
     manual: inviteCodes.filter((item) => item.createdByUsername).length,
   }), [inviteCodes])
 
+  function handleGenerateInviteCodes() {
+    setFeedback("")
+    startTransition(async () => {
+      const response = await fetch("/api/admin/invite-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: Number(count), note }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        setFeedback(result.message ?? "生成失败")
+        return
+      }
+      const listResponse = await fetch("/api/admin/invite-codes", { cache: "no-store" })
+      const listResult = await listResponse.json()
+      setInviteCodes(Array.isArray(listResult.data) ? listResult.data : [])
+      setFeedback(result.message ?? "生成成功")
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -40,29 +60,7 @@ export function AdminInviteCodeManager({ initialInviteCodes }: AdminInviteCodeMa
         <Stat title="人工生成" value={summary.manual} />
       </div>
 
-      <form
-        className="rounded-[22px] border border-border bg-card p-4 space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          setFeedback("")
-          startTransition(async () => {
-            const response = await fetch("/api/admin/invite-codes", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ count: Number(count), note }),
-            })
-            const result = await response.json()
-            if (!response.ok) {
-              setFeedback(result.message ?? "生成失败")
-              return
-            }
-            const listResponse = await fetch("/api/admin/invite-codes", { cache: "no-store" })
-            const listResult = await listResponse.json()
-            setInviteCodes(Array.isArray(listResult.data) ? listResult.data : [])
-            setFeedback(result.message ?? "生成成功")
-          })
-        }}
-      >
+      <div className="rounded-[22px] border border-border bg-card p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold">邀请码批量生成</h3>
           <p className="mt-1 text-xs text-muted-foreground">运营活动、人审发放、邀新链路都统一收口到这里。</p>
@@ -71,11 +69,11 @@ export function AdminInviteCodeManager({ initialInviteCodes }: AdminInviteCodeMa
           <TextField label="生成数量" value={count} onChange={setCount} placeholder="1-100" inputClassName="h-10" />
           <TextField label="备注" value={note} onChange={setNote} placeholder="如 活动赠送 / 人工发放" inputClassName="h-10" />
           <div className="flex items-end">
-            <Button disabled={isPending} className="h-10 rounded-full px-4 text-xs">{isPending ? "生成中..." : "生成邀请码"}</Button>
+            <Button type="button" onClick={handleGenerateInviteCodes} disabled={isPending} className="h-10 rounded-full px-4 text-xs">{isPending ? "生成中..." : "生成邀请码"}</Button>
           </div>
         </div>
         {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
-      </form>
+      </div>
 
       <div className="overflow-hidden rounded-[22px] border border-border bg-card">
         <div className="grid items-center gap-3 border-b border-border bg-secondary/40 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:grid-cols-[minmax(0,1.2fr)_140px_180px_minmax(0,1fr)]">

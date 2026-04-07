@@ -1,5 +1,6 @@
 import { buildPostSearchWhere, countSearchPosts, findSearchPostsCursor } from "@/db/search-queries"
 import { decodePinnedTimestampCursor, encodePinnedTimestampCursor } from "@/lib/cursor-pagination"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { getPostPath } from "@/lib/post-links"
 import { getSiteSettings } from "@/lib/site-settings"
 
@@ -78,7 +79,7 @@ export async function searchPosts(
     const beforeCursor = decodePinnedTimestampCursor(options.before)
     const includeTotal = options.includeTotal ?? (!options.after && !options.before)
 
-    const [{ items: posts, hasPrevPage, hasNextPage }, total] = await Promise.all([
+    const [{ items: posts, hasPrevPage, hasNextPage }, total, anonymousMaskIdentity] = await Promise.all([
       findSearchPostsCursor({
         where,
         pageSize: options.pageSize ?? 10,
@@ -86,13 +87,14 @@ export async function searchPosts(
         before: beforeCursor,
       }),
       includeTotal ? countSearchPosts(where) : Promise.resolve(null),
+      getAnonymousMaskDisplayIdentity(),
     ] as const)
 
     return {
       keyword: normalizedKeyword,
       total,
       items: posts.map((post: (typeof posts)[number]) => ({
-        ...mapListPost(post),
+        ...mapListPost(post, anonymousMaskIdentity),
         href: getPostPath(post, { mode: postLinkDisplayMode }),
       })),
       hasPrevPage,

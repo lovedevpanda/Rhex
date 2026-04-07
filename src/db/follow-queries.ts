@@ -662,6 +662,7 @@ export function findPostFollowNotificationContext(postId: string) {
       id: true,
       title: true,
       status: true,
+      isAnonymous: true,
       board: {
         select: {
           id: true,
@@ -697,6 +698,7 @@ export function findCommentFollowNotificationContext(commentId: string) {
       content: true,
       status: true,
       userId: true,
+      useAnonymousIdentity: true,
       user: {
         select: {
           username: true,
@@ -708,6 +710,8 @@ export function findCommentFollowNotificationContext(commentId: string) {
           id: true,
           title: true,
           status: true,
+          isAnonymous: true,
+          authorId: true,
         },
       },
     },

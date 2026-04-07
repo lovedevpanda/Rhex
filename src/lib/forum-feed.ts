@@ -3,6 +3,7 @@ import { findFollowFeedTargetIds } from "@/db/follow-queries"
 import { countFollowingFeedPosts, countLatestFeedPosts, findFollowingFeedPosts, findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
 import { findGlobalPinnedPosts } from "@/db/taxonomy-queries"
 import { formatRelativeTime } from "@/lib/formatters"
+import { applyAnonymousIdentityToPost, getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { extractPinnedPostIds } from "@/lib/pinned-posts"
 
 import { resolvePostCoverImage } from "@/lib/post-cover"
@@ -65,6 +66,7 @@ type FeedPostRecord = Awaited<ReturnType<typeof findLatestFeedPosts>>[number]
 type PinnedFeedPostRecord = Awaited<ReturnType<typeof findGlobalPinnedPosts>>[number]
 
 type FeedPost = {
+  isAnonymous?: boolean
   isPinned: boolean
   id: string
   slug: string
@@ -87,6 +89,7 @@ type FeedPost = {
   createdAt: Date
   board: { name: string; slug: string; iconPath: string | null }
   author: {
+    id?: number
     username: string
     nickname: string | null
     avatarPath: string | null
@@ -94,15 +97,27 @@ type FeedPost = {
     vipLevel: number | null
     vipExpiresAt: Date | string | null
   }
-  comments?: Array<{ content: string; user: { username: string; nickname: string | null } }>
+  comments?: Array<{ content: string; userId?: number; useAnonymousIdentity?: boolean; user: { username: string; nickname: string | null } }>
   redPacket: { id: string } | null
 }
 
-function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord): ForumFeedItem {
+function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord, anonymousMaskIdentity: Awaited<ReturnType<typeof getAnonymousMaskDisplayIdentity>> = null): ForumFeedItem {
   const feedPost = post as unknown as FeedPost
   const latestReply = feedPost.comments?.[0]
   const postType = (feedPost.type ?? "NORMAL") as LocalPostType
   const rewardPoolConfig = feedPost.redPacket ? parsePostRewardPoolConfigFromContent(feedPost.content) : null
+  const maskedAuthor = applyAnonymousIdentityToPost({
+    isAnonymous: Boolean(feedPost.isAnonymous),
+    author: feedPost.author.nickname ?? feedPost.author.username,
+    authorUsername: feedPost.author.username,
+    authorAvatarPath: feedPost.author.avatarPath,
+    authorStatus: feedPost.author.status ?? "ACTIVE",
+    authorVipLevel: feedPost.author.vipLevel,
+    authorIsVip: Boolean(feedPost.author.vipExpiresAt && new Date(feedPost.author.vipExpiresAt).getTime() > Date.now()),
+  }, anonymousMaskIdentity)
+  const latestReplyAuthorName = feedPost.isAnonymous && latestReply?.userId === feedPost.author.id && latestReply?.useAnonymousIdentity
+    ? (anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? "匿名用户")
+    : (latestReply ? latestReply.user.nickname ?? latestReply.user.username : null)
 
   return {
     id: feedPost.id,
@@ -113,17 +128,17 @@ function mapFeedPost(post: FeedPostRecord | PinnedFeedPostRecord): ForumFeedItem
     boardName: feedPost.board.name,
     boardSlug: feedPost.board.slug,
     boardIcon: feedPost.board.iconPath ?? "💬",
-    authorName: feedPost.author.nickname ?? feedPost.author.username,
-    authorUsername: feedPost.author.username,
-    authorAvatarPath: feedPost.author.avatarPath,
-    authorStatus: feedPost.author.status ?? "ACTIVE",
-    authorVipLevel: feedPost.author.vipLevel,
-    authorVipExpiresAt: feedPost.author.vipExpiresAt ? new Date(feedPost.author.vipExpiresAt).toISOString() : null,
+    authorName: maskedAuthor.author,
+    authorUsername: maskedAuthor.authorUsername ?? maskedAuthor.author,
+    authorAvatarPath: maskedAuthor.authorAvatarPath ?? null,
+    authorStatus: maskedAuthor.authorStatus ?? "ACTIVE",
+    authorVipLevel: maskedAuthor.authorVipLevel ?? null,
+    authorVipExpiresAt: maskedAuthor.authorIsVip ? (feedPost.author.vipExpiresAt ? new Date(feedPost.author.vipExpiresAt).toISOString() : null) : null,
     publishedAt: formatRelativeTime(feedPost.publishedAt ?? feedPost.createdAt),
     publishedAtRaw: (feedPost.publishedAt ?? feedPost.createdAt).toISOString(),
     lastRepliedAt: formatRelativeTime(feedPost.lastCommentedAt ?? feedPost.publishedAt ?? feedPost.createdAt),
     lastRepliedAtRaw: (feedPost.lastCommentedAt ?? feedPost.publishedAt ?? feedPost.createdAt).toISOString(),
-    latestReplyAuthorName: latestReply ? latestReply.user.nickname ?? latestReply.user.username : null,
+    latestReplyAuthorName,
     latestReplyExcerpt: latestReply ? latestReply.content.slice(0, 42) : null,
     commentCount: feedPost.commentCount,
     viewCount: feedPost.viewCount,
@@ -177,12 +192,13 @@ export async function getLatestFeed(
       }
     }
 
+    const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
     const total = await countFollowingFeedPosts({ boardIds, authorIds })
     const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
     const posts = await findFollowingFeedPosts(pagination.page, pagination.pageSize, sort, { boardIds, authorIds }, hotRecentWindowHours)
 
     return {
-      items: posts.map((post) => mapFeedPost(post)),
+      items: posts.map((post) => mapFeedPost(post, anonymousMaskIdentity)),
       page: pagination.page,
       pageSize: pagination.pageSize,
       total: pagination.total,
@@ -192,6 +208,7 @@ export async function getLatestFeed(
     }
   }
 
+  const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
   const globalPinnedPosts = await findGlobalPinnedPosts()
   const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
   const total = await countLatestFeedPosts(pinnedPostIds)
@@ -200,8 +217,8 @@ export async function getLatestFeed(
 
   return {
     items: pagination.page === 1
-      ? [...globalPinnedPosts.map((post) => mapFeedPost(post)), ...normalPosts.map((post) => mapFeedPost(post))]
-      : normalPosts.map((post) => mapFeedPost(post)),
+      ? [...globalPinnedPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)), ...normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity))]
+      : normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)),
     page: pagination.page,
     pageSize: pagination.pageSize,
     total: pagination.total,
@@ -212,17 +229,25 @@ export async function getLatestFeed(
 }
 
 export async function getLatestTopics(limit = 10) {
-  const posts = await findLatestTopicPosts(limit)
+  const [posts, anonymousMaskIdentity] = await Promise.all([
+    findLatestTopicPosts(limit),
+    getAnonymousMaskDisplayIdentity(),
+  ])
 
   return posts.map((post) => {
     const postType = ((post.type ?? "NORMAL") as LocalPostType)
+    const maskedAuthor = applyAnonymousIdentityToPost({
+      isAnonymous: Boolean(post.isAnonymous),
+      author: post.author.nickname ?? post.author.username,
+      authorUsername: post.author.username,
+    }, anonymousMaskIdentity)
 
     return {
       id: post.id,
       slug: post.slug,
       title: post.title,
       createdAt: formatRelativeTime(post.createdAt),
-      authorName: post.author.nickname ?? post.author.username,
+      authorName: maskedAuthor.author,
       boardName: post.board.name,
       typeLabel: getPostTypeLabel(postType),
     }

@@ -1,6 +1,7 @@
 import type { SidebarUserCardData } from "@/components/sidebar-user-card"
 import { countSidebarUserBoardFollows, countSidebarUserFavorites, findHomeSidebarHotTopics, findSidebarCurrentUser, findSidebarUserCheckInRecord } from "@/db/home-sidebar-queries"
 import type { getCurrentUser } from "@/lib/auth"
+import { applyAnonymousIdentityToPost, getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { getUserCheckInStreakSummary } from "@/lib/check-in-streak-service"
 import { getLocalDateKey } from "@/lib/date-key"
 import { formatMonthDayTime } from "@/lib/formatters"
@@ -27,15 +28,32 @@ function hasPersistedCheckInStreakSummary(progress: {
 }
 
 export async function getHomeSidebarHotTopics(limit = 5) {
-  const posts = await findHomeSidebarHotTopics(limit)
+  const [posts, anonymousMaskIdentity] = await Promise.all([
+    findHomeSidebarHotTopics(limit),
+    getAnonymousMaskDisplayIdentity(),
+  ])
 
   return posts.map((post) => ({
+    ...(function () {
+      const maskedAuthor = applyAnonymousIdentityToPost({
+        isAnonymous: Boolean(post.isAnonymous),
+        author: getUserDisplayName(post.author),
+        authorUsername: post.author.username,
+        authorAvatarPath: post.author.avatarPath,
+      }, anonymousMaskIdentity)
+      const latestReply = post.comments[0]
+      const latestReplyAuthorName = post.isAnonymous && latestReply?.userId === post.author.id && latestReply.useAnonymousIdentity
+        ? (anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? "匿名用户")
+        : getUserDisplayName(latestReply?.user ?? post.author)
+      return {
+        authorName: maskedAuthor.author,
+        authorAvatarPath: maskedAuthor.authorAvatarPath,
+        lastReplyAuthorName: latestReplyAuthorName,
+      }
+    })(),
     id: post.id,
     slug: post.slug,
     title: post.title,
-    authorName: getUserDisplayName(post.author),
-    authorAvatarPath: post.author.avatarPath,
-    lastReplyAuthorName: getUserDisplayName(post.comments[0]?.user ?? post.author),
     lastRepliedAt: formatMonthDayTime(post.lastCommentedAt ?? post.createdAt),
   }))
 }

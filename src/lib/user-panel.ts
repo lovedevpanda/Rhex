@@ -22,6 +22,7 @@ import {
   findUserRepliesByIdCursor,
 } from "@/db/user-queries"
 import { decodeTimestampCursor, encodeTimestampCursor } from "@/lib/cursor-pagination"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { mapListPost } from "@/lib/post-map"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
 import { getUserDisplayName } from "@/lib/users"
@@ -162,16 +163,19 @@ export async function getUserPosts(userId: number, options: { pageSize?: number;
   try {
     const afterCursor = decodeTimestampCursor(options.after)
     const beforeCursor = decodeTimestampCursor(options.before)
-    const total = await countUserPosts(userId)
-    const { items: posts, hasPrevPage, hasNextPage } = await findUserPostsByIdCursor({
-      userId,
-      pageSize,
-      after: beforeCursor ? null : afterCursor,
-      before: beforeCursor,
-    })
+    const [total, anonymousMaskIdentity, { items: posts, hasPrevPage, hasNextPage }] = await Promise.all([
+      countUserPosts(userId),
+      getAnonymousMaskDisplayIdentity(),
+      findUserPostsByIdCursor({
+        userId,
+        pageSize,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
+      }),
+    ])
 
     return {
-      items: posts.map(mapListPost),
+      items: posts.map((post) => mapListPost(post, anonymousMaskIdentity)),
       ...createCursorPageResult(total, pageSize, {
         hasPrevPage,
         hasNextPage,
@@ -194,16 +198,19 @@ export async function getUserFavoritePosts(userId: number, options: { pageSize?:
   try {
     const afterCursor = decodeTimestampCursor(options.after)
     const beforeCursor = decodeTimestampCursor(options.before)
-    const total = await countUserFavorites(userId)
-    const { items: favorites, hasPrevPage, hasNextPage } = await findUserFavoritePostsByIdCursor({
-      userId,
-      pageSize,
-      after: beforeCursor ? null : afterCursor,
-      before: beforeCursor,
-    })
+    const [total, anonymousMaskIdentity, { items: favorites, hasPrevPage, hasNextPage }] = await Promise.all([
+      countUserFavorites(userId),
+      getAnonymousMaskDisplayIdentity(),
+      findUserFavoritePostsByIdCursor({
+        userId,
+        pageSize,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
+      }),
+    ])
 
     return {
-      items: favorites.map((favorite) => mapListPost(favorite.post)),
+      items: favorites.map((favorite) => mapListPost(favorite.post, anonymousMaskIdentity)),
       ...createCursorPageResult(total, pageSize, {
         hasPrevPage,
         hasNextPage,
@@ -268,16 +275,19 @@ export async function getUserLikedPosts(userId: number, options: { pageSize?: nu
   try {
     const afterCursor = decodeTimestampCursor(options.after)
     const beforeCursor = decodeTimestampCursor(options.before)
-    const total = await countUserLikedPosts(userId)
-    const { items: likes, hasPrevPage, hasNextPage } = await findUserLikedPostsByIdCursor({
-      userId,
-      pageSize,
-      after: beforeCursor ? null : afterCursor,
-      before: beforeCursor,
-    })
+    const [total, anonymousMaskIdentity, { items: likes, hasPrevPage, hasNextPage }] = await Promise.all([
+      countUserLikedPosts(userId),
+      getAnonymousMaskDisplayIdentity(),
+      findUserLikedPostsByIdCursor({
+        userId,
+        pageSize,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
+      }),
+    ])
 
     return {
-      items: likes.flatMap((like) => (like.post ? [mapListPost(like.post)] : [])),
+      items: likes.flatMap((like) => (like.post ? [mapListPost(like.post, anonymousMaskIdentity)] : [])),
       ...createCursorPageResult(total, pageSize, {
         hasPrevPage,
         hasNextPage,
@@ -468,16 +478,19 @@ export async function getUserPostFollows(userId: number, options: { pageSize?: n
   try {
     const afterCursor = decodeTimestampCursor(options.after)
     const beforeCursor = decodeTimestampCursor(options.before)
-    const total = await countUserPostFollows(userId)
-    const { items: follows, hasPrevPage, hasNextPage } = await findUserPostFollowsByIdCursor({
-      userId,
-      pageSize,
-      after: beforeCursor ? null : afterCursor,
-      before: beforeCursor,
-    })
+    const [total, anonymousMaskIdentity, { items: follows, hasPrevPage, hasNextPage }] = await Promise.all([
+      countUserPostFollows(userId),
+      getAnonymousMaskDisplayIdentity(),
+      findUserPostFollowsByIdCursor({
+        userId,
+        pageSize,
+        after: beforeCursor ? null : afterCursor,
+        before: beforeCursor,
+      }),
+    ])
 
     return {
-      items: follows.map((follow) => mapListPost(follow.post)),
+      items: follows.map((follow) => mapListPost(follow.post, anonymousMaskIdentity)),
       ...createCursorPageResult(total, pageSize, {
         hasPrevPage,
         hasNextPage,

@@ -3,6 +3,7 @@ export {
   BadgeGrantSource,
   BadgeRuleOperator,
   BadgeRuleType,
+  BoardApplicationStatus,
   BoardStatus,
   ChangeType,
   CommentStatus,
@@ -29,10 +30,11 @@ export {
   UserRole,
   UserStatus,
   VerificationChannel,
-} from "@prisma/client"
+} from "@prisma/client/index"
 
 export type {
   Board,
+  BoardApplication,
   Comment,
   Favorite,
   Like,
@@ -46,4 +48,4 @@ export type {
   PostAppendix,
   User,
   Zone,
-} from "@prisma/client"
+} from "@prisma/client/index"

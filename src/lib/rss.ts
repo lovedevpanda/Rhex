@@ -1,4 +1,5 @@
 import { findBoardRssPosts, findRssPosts, RSS_POST_LIMIT, type RssPostRecord, findTagRssPosts, findUserRssPosts, findZoneRssPosts } from "@/db/rss-queries"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { getCanonicalPostPath } from "@/lib/post-links"
 import { getPublicPostContentText } from "@/lib/post-content"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -64,8 +65,12 @@ function formatRssDate(value: Date | string) {
 }
 
 async function buildRssItems(posts: RssPostRecord[]): Promise<RssFeedItem[]> {
+  const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
+
   return Promise.all(posts.map(async (post) => {
-    const author = getUserDisplayName(post.author)
+    const author = post.isAnonymous
+      ? (anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? "匿名用户")
+      : getUserDisplayName(post.author)
     const link = await toAbsoluteSiteUrl(getCanonicalPostPath(post))
     const publishedAt = post.publishedAt ?? post.createdAt
 

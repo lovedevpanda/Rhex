@@ -5,6 +5,9 @@ import { apiError } from "@/lib/api-route"
 import { findDisplayedBadgeEffectRules } from "@/db/badge-queries"
 import { getBusinessMinuteOfDay } from "@/lib/formatters"
 import { getPointEffectAllScopeKeyByTargetType, isPointEffectScopeMatchableForBadgeEffects, type PointEffectScopeKey } from "@/lib/point-effect-definitions"
+import { buildPointLogEffectMetadata, buildPointLogTaxMetadata, mergePointLogMetadataIntoEventData } from "@/lib/point-log-audit"
+import type { PointLogEventDataInput, PointLogEventType } from "@/lib/point-log-events"
+import { addSafeIntegers, subtractSafeIntegers } from "@/lib/shared/safe-integer"
 
 type PointEffectClient = Prisma.TransactionClient
 const POINT_EFFECT_RULE_CACHE_TTL_MS = 5_000
@@ -65,44 +68,8 @@ export interface PreparedProbabilityValue {
   appliedRules: AppliedPointEffectTrace[]
 }
 
-const POINT_EFFECT_TRAIL_PATTERN = /\s*\[(?:勋章特效|积分特效):[^\]]+\]\s*$/
-
 function getCurrentMinuteOfDay(date = new Date()) {
   return getBusinessMinuteOfDay(date)
-}
-
-function formatSignedNumber(value: number) {
-  if (value > 0) {
-    return `+${value}`
-  }
-
-  return String(value)
-}
-
-function sanitizeEffectTrailToken(value: string) {
-  return value.replace(/[:\[\]\|]/g, "_").trim()
-}
-
-function stripPointEffectTrail(reason: string) {
-  return reason.replace(POINT_EFFECT_TRAIL_PATTERN, "").trimEnd()
-}
-
-function appendPointEffectTrail(reason: string, prepared: PreparedPointDelta) {
-  if (prepared.appliedRules.length === 0 || prepared.finalDelta === prepared.baseDelta) {
-    return stripPointEffectTrail(reason)
-  }
-
-  const ruleSummary = prepared.appliedRules
-    .map((rule) => {
-      const effectName = rule.badgeName
-        ? `${sanitizeEffectTrailToken(rule.badgeName)}.${sanitizeEffectTrailToken(rule.ruleName)}`
-        : sanitizeEffectTrailToken(rule.ruleName)
-      return `${effectName}${formatSignedNumber(rule.adjustmentValue)}`
-    })
-    .join("|")
-  const deltaValue = prepared.finalDelta - prepared.baseDelta
-
-  return `${stripPointEffectTrail(reason)} [勋章特效:${prepared.baseDelta}:${ruleSummary}:${formatSignedNumber(deltaValue)}]`
 }
 
 function clampProbability(value: number) {
@@ -436,6 +403,10 @@ export async function applyPointDelta(params: {
   prepared: PreparedPointDelta
   reason: string
   pointName: string
+  eventType?: PointLogEventType | null
+  eventData?: PointLogEventDataInput
+  taxAmount?: number
+  effectPrepared?: PreparedPointDelta
   relatedType?: RelatedType | null
   relatedId?: string | null
   insufficientMessage?: string
@@ -443,35 +414,107 @@ export async function applyPointDelta(params: {
   const { prepared, beforeBalance } = params
   const finalDelta = prepared.finalDelta
 
-  if (finalDelta < 0 && beforeBalance < Math.abs(finalDelta)) {
-    apiError(409, params.insufficientMessage ?? `${params.pointName}不足，无法完成当前操作`)
-  }
-
   if (finalDelta !== 0) {
-    await params.tx.user.update({
-      where: { id: params.userId },
-      data: finalDelta > 0
-        ? {
-            points: {
-              increment: finalDelta,
-            },
-          }
-        : {
-            points: {
-              decrement: Math.abs(finalDelta),
-            },
+    const changeValue = Math.abs(finalDelta)
+    let actualBeforeBalance = beforeBalance
+    let actualAfterBalance = addSafeIntegers(beforeBalance, finalDelta)
+
+    if (actualAfterBalance === null) {
+      apiError(500, "积分结算结果溢出")
+    }
+
+    if (finalDelta > 0) {
+      const updatedUser = await params.tx.user.update({
+        where: { id: params.userId },
+        data: {
+          points: {
+            increment: finalDelta,
           },
-    })
+        },
+        select: {
+          points: true,
+        },
+      })
+
+      actualAfterBalance = updatedUser.points
+      const resolvedBeforeBalance = subtractSafeIntegers(updatedUser.points, finalDelta)
+
+      if (resolvedBeforeBalance === null) {
+        apiError(500, "积分结算前余额计算失败")
+      }
+
+      actualBeforeBalance = resolvedBeforeBalance
+    } else {
+      const deducted = await params.tx.user.updateMany({
+        where: {
+          id: params.userId,
+          points: {
+            gte: changeValue,
+          },
+        },
+        data: {
+          points: {
+            decrement: changeValue,
+          },
+        },
+      })
+
+      if (deducted.count === 0) {
+        const currentUser = await params.tx.user.findUnique({
+          where: { id: params.userId },
+          select: {
+            id: true,
+            points: true,
+          },
+        })
+
+        if (!currentUser) {
+          apiError(404, "用户不存在")
+        }
+
+        apiError(409, params.insufficientMessage ?? `${params.pointName}不足，无法完成当前操作`)
+      }
+
+      const updatedUser = await params.tx.user.findUnique({
+        where: { id: params.userId },
+        select: {
+          points: true,
+        },
+      })
+
+      if (!updatedUser) {
+        apiError(404, "用户不存在")
+      }
+
+      actualAfterBalance = updatedUser.points
+      const resolvedBeforeBalance = addSafeIntegers(updatedUser.points, changeValue)
+
+      if (resolvedBeforeBalance === null) {
+        apiError(500, "积分结算前余额计算失败")
+      }
+
+      actualBeforeBalance = resolvedBeforeBalance
+    }
 
     await createPointLogWithAudit(params.tx, {
       userId: params.userId,
       changeType: finalDelta > 0 ? ChangeType.INCREASE : ChangeType.DECREASE,
-      changeValue: Math.abs(finalDelta),
-      reason: appendPointEffectTrail(params.reason, prepared),
-      beforeBalance,
+      changeValue,
+      reason: params.reason.trimEnd(),
+      beforeBalance: actualBeforeBalance,
+      eventType: params.eventType ?? null,
+      eventData: mergePointLogMetadataIntoEventData(params.eventData, {
+        effect: buildPointLogEffectMetadata(params.effectPrepared ?? prepared) ?? undefined,
+        tax: buildPointLogTaxMetadata(params.taxAmount ?? 0) ?? undefined,
+      }),
       relatedType: params.relatedType ?? null,
       relatedId: params.relatedId ?? null,
     })
+
+    return {
+      finalDelta,
+      afterBalance: actualAfterBalance,
+    }
   }
 
   return {

@@ -19,12 +19,20 @@ export async function updatePostFlow(input: {
     role?: string | null
   }
 }) {
+  const settings = await getSiteSettings()
+  const fallbackTitle = "占".repeat(settings.postTitleMinLength)
+  const fallbackContent = "文".repeat(settings.postContentMinLength)
   const validated = validatePostPayload({
     boardSlug: "__edit__",
     postType: "NORMAL",
     ...((input.body as Record<string, unknown> | null) ?? {}),
-    title: typeof (input.body as Record<string, unknown> | null)?.title === "string" ? (input.body as Record<string, unknown>).title : "临时编辑标题占位符",
-    content: typeof (input.body as Record<string, unknown> | null)?.content === "string" ? (input.body as Record<string, unknown>).content : "临时编辑正文内容占位符不少于十个字",
+    title: typeof (input.body as Record<string, unknown> | null)?.title === "string" ? (input.body as Record<string, unknown>).title : fallbackTitle,
+    content: typeof (input.body as Record<string, unknown> | null)?.content === "string" ? (input.body as Record<string, unknown>).content : fallbackContent,
+  }, {
+    titleMinLength: settings.postTitleMinLength,
+    titleMaxLength: settings.postTitleMaxLength,
+    contentMinLength: settings.postContentMinLength,
+    contentMaxLength: settings.postContentMaxLength,
   })
 
   if (!validated.success || !validated.data) {
@@ -41,8 +49,6 @@ export async function updatePostFlow(input: {
     ? rawBody.manualTags.filter((item): item is string => typeof item === "string")
     : [])
   const sanitizedManualTags = normalizeManualTags(manualTags)
-
-  const settings = await getSiteSettings()
 
   const post = await findPostUpdateContext(input.postId)
 

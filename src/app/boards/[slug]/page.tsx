@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
+import { BoardSidebarPanels } from "@/components/board-sidebar-panels"
 import { BoardFollowButton } from "@/components/board-follow-button"
 import { CollapsibleInfoCard } from "@/components/collapsible-info-card"
 import { ForumPageShell } from "@/components/forum-page-shell"
@@ -9,15 +10,12 @@ import { ForumPostStream } from "@/components/forum-post-stream"
 import { InfiniteForumPostStream } from "@/components/infinite-forum-post-stream"
 import { PageNumberPagination } from "@/components/page-number-pagination"
 import { RssSubscribeButton } from "@/components/rss-subscribe-button"
-
-import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
-
 import { SiteHeader } from "@/components/site-header"
 
 
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission } from "@/lib/board-access"
-import { getBoardBySlug, getBoardPosts, getBoards, isUserFollowingBoard } from "@/lib/boards"
+import { getBoardBySlug, getBoardModerators, getBoardPosts, getBoards, isUserFollowingBoard } from "@/lib/boards"
 import { mapSitePostsToDisplayItems } from "@/lib/forum-post-stream-display"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 import { POST_LIST_LOAD_MODE_INFINITE } from "@/lib/post-list-load-mode"
@@ -97,13 +95,14 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
 
   const rawPage = readSearchParam(searchParams?.page)
   const currentPage = Math.max(1, Number(rawPage ?? "1") || 1)
-  const [postsPage, boards, zones, hotTopics] = await Promise.all([
+  const [postsPage, boards, zones, hotTopics, moderators] = await Promise.all([
     permission.allowed
       ? getBoardPosts(params.slug, currentPage, settings.boardPostPageSize)
       : Promise.resolve({ items: [], page: 1, pageSize: settings.boardPostPageSize, total: 0, totalPages: 1, hasPrevPage: false, hasNextPage: false }),
     getBoards(),
     getZones(),
     settingsPromise.then((settings) => getHomeSidebarHotTopics(settings.homeSidebarHotTopicsCount)),
+    getBoardModerators(board.id),
   ])
   const { items: posts, page, totalPages, hasPrevPage, hasNextPage } = postsPage
 
@@ -114,8 +113,6 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
   if (currentPage !== page) {
     redirect(buildBoardPageHref(params.slug, page))
   }
-  const zoneBoards = board.zoneId ? boards.filter((item) => item.zoneId === board.zoneId) : []
-  const parentZone = board.zoneId ? zones.find((item) => item.id === board.zoneId) ?? null : null
   const isFollowingBoard = currentUser
     ? await isUserFollowingBoard(currentUser.id, board.id)
     : false
@@ -134,7 +131,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
           boards={boards}
           activeBoardSlug={board.slug}
           main={(
-            <main className="pb-12 py-1">
+            <main className="pb-12 py-1 mt-5">
             <div className="space-y-3">
 
               <CollapsibleInfoCard
@@ -144,24 +141,10 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
                 description={board.description}
                 summary={`当前共收录 ${board.count} 篇内容`}
                 summaryActions={<RssSubscribeButton href={`/boards/${board.slug}/rss.xml`} label="订阅节点 RSS" />}
-                actions={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} />}
-
-                pills={[
-                  {
-                    id: `zone-${parentZone?.id ?? board.id}`,
-                    label: "全部",
-                    icon: parentZone?.icon ?? "📚",
-                    href: parentZone ? `/zones/${parentZone.slug}` : "/funs",
-                    active: false,
-                  },
-                  ...zoneBoards.map((item) => ({
-                    id: item.id,
-                    label: item.name,
-                    icon: item.icon,
-                    href: `/boards/${item.slug}`,
-                    active: item.slug === board.slug,
-                  })),
-                ]}
+                detailAction={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} showLabel className="border border-border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent" />}
+                alwaysOpen
+                hidePills
+                pills={[]}
               />
 
 
@@ -207,7 +190,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} postLinkDisplayMode={settings.postLinkDisplayMode} createPostHref={`/write?board=${board.slug}`} siteName={settings.siteName} siteDescription={settings.siteDescription} />
+              <BoardSidebarPanels user={sidebarUser} hotTopics={hotTopics} board={board} moderators={moderators} postLinkDisplayMode={settings.postLinkDisplayMode} createPostHref={`/write?board=${board.slug}`} siteName={settings.siteName} siteDescription={settings.siteDescription} />
             </aside>
           )}
         />

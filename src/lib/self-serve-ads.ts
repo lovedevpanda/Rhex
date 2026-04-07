@@ -13,17 +13,13 @@ import { getSelfServeAdsAppConfig as loadSelfServeAdsAppConfig } from "@/lib/app
 import { serializeDateTime } from "@/lib/formatters"
 import { buildSelfServeAdPriceMap, getSelfServeAdPrice, toSelfServeAdConfig, validateSelfServeAdPurchaseDraft } from "@/lib/self-serve-ads.shared"
 
-import { normalizeNonNegativeInteger, normalizePositiveInteger } from "@/lib/shared/normalizers"
+import { normalizeNonNegativeInteger, normalizePositiveInteger, normalizeTrimmedText } from "@/lib/shared/normalizers"
 
 import type { SelfServeAdItem, SelfServeAdPurchaseDraft, SelfServeAdSlotType, SelfServeAdsPanelData } from "@/lib/self-serve-ads.shared"
 import { getSiteSettings } from "@/lib/site-settings"
 
 
 
-
-function normalizeText(value: unknown, maxLength: number) {
-  return String(value ?? "").trim().slice(0, maxLength)
-}
 
 function buildPlaceholder(slotType: SelfServeAdSlotType, slotIndex: number): SelfServeAdItem {
 
@@ -163,7 +159,7 @@ export async function reviewSelfServeAdOrder(input: {
   const slotIndex = normalizeNonNegativeInteger(input.slotIndex ?? existing.slotIndex, 0)
   const durationMonths = normalizePositiveInteger(input.durationMonths ?? existing.durationMonths, existing.durationMonths ?? 1)
 
-  const reviewNote = normalizeText(input.reviewNote ?? existing.reviewNote, 300) || null
+  const reviewNote = normalizeTrimmedText(input.reviewNote ?? existing.reviewNote, 300) || null
   const adminDraftValidation = validateSelfServeAdPurchaseDraft({
     slotType: existing.slotType,
     slotIndex,

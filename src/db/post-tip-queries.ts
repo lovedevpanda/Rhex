@@ -14,6 +14,7 @@ export interface PostTipSupportPostRecord {
   status: string
   authorId: number
   title: string
+  boardId: string | null
 }
 
 export interface PostTipSupportSenderRecord {
@@ -119,6 +120,7 @@ export function findPostTipSupportPost(postId: string, client: Prisma.Transactio
       status: true,
       authorId: true,
       title: true,
+      boardId: true,
     },
   })
 }

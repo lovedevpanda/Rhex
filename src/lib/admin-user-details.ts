@@ -13,7 +13,7 @@ import {
 } from "@/db/admin-user-detail-queries"
 import { apiError } from "@/lib/api-route"
 import type { AdminUserDetailLogItem, AdminUserDetailLogSection, AdminUserDetailResult } from "@/lib/admin-user-management"
-import { parsePointLogAuditTrail } from "@/lib/point-log-audit"
+import { resolvePointLogAuditPresentation } from "@/lib/point-log-audit"
 import { requireSiteAdminActor } from "@/lib/moderator-permissions"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
 
@@ -110,7 +110,7 @@ export async function getAdminUserDetail(userId: number): Promise<AdminUserDetai
       href: buildAdminUserLogHref("points", user.username),
       emptyText: "暂无积分日志",
       items: pointLogs.map<AdminUserDetailLogItem>((log) => {
-        const parsed = parsePointLogAuditTrail(log.reason)
+        const parsed = resolvePointLogAuditPresentation(log.reason, log.eventData)
         return {
           id: log.id,
           occurredAt: log.createdAt.toISOString(),

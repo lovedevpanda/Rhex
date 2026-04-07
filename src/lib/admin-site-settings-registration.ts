@@ -132,4 +132,3 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
     message: "注册与邀请设置已保存",
   })
 }
-

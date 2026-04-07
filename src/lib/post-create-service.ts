@@ -1,26 +1,34 @@
 import { getCurrentUserRecord } from "@/db/current-user"
 import {
+  countAnonymousPostsByAuthorInRange,
+  findAnonymousMaskUserById,
+} from "@/db/anonymous-post-queries"
+import {
   createPostRecord,
   incrementBoardPostCount,
   runPostCreateTransaction,
   updateAuthorAfterPostCreated,
   updatePostContentAndSummary,
 } from "@/db/post-create-queries"
+import { incrementBoardTreasuryPoints } from "@/db/board-treasury-queries"
 import { type Prisma } from "@/db/types"
 
 import { apiError } from "@/lib/api-route"
 import { checkBoardPermission, getBoardAccessContextBySlug } from "@/lib/board-access"
 import { extractSummaryFromContent } from "@/lib/content"
 import { enforceSensitiveText } from "@/lib/content-safety"
-import { parseBusinessDateTime } from "@/lib/formatters"
+import { getBusinessDayRange, parseBusinessDateTime } from "@/lib/formatters"
 import { determineLotteryTriggerMode, normalizeLotteryConfig } from "@/lib/lottery"
 import { enforceInteractionGate } from "@/lib/interaction-gates"
 import { createPostMentionNotifications, stripPostContentUserLinks } from "@/lib/post-mentions"
+import type { PreparedPointDelta } from "@/lib/point-center"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import { buildPostContentDocument, getAllPostContentText, serializePostContentDocument } from "@/lib/post-content"
 import { createPostRedPacketAfterPostCreated, normalizePostRedPacketConfig } from "@/lib/post-red-packets"
 import type { StoredPostRewardPoolConfig } from "@/lib/post-reward-pool-config"
 import { normalizeManualTags, syncPostTaxonomy } from "@/lib/post-editor"
+import { getBoardTreasuryCreditFromConfiguredCharge } from "@/lib/board-treasury"
+import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validatePostPayload } from "@/lib/validators"
 
@@ -36,13 +44,19 @@ function createPostSlug(title: string) {
 }
 
 export async function createPostFlow(body: unknown) {
-  const validated = validatePostPayload(body)
+  const settings = await getSiteSettings()
+  const validated = validatePostPayload(body, {
+    titleMinLength: settings.postTitleMinLength,
+    titleMaxLength: settings.postTitleMaxLength,
+    contentMinLength: settings.postContentMinLength,
+    contentMaxLength: settings.postContentMaxLength,
+  })
 
   if (!validated.success || !validated.data) {
     apiError(400, validated.message ?? "参数错误")
   }
 
-  const { title, content, coverPath, boardSlug, postType, bountyPoints, pollOptions, commentsVisibleToAuthorOnly, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, minViewVipLevel, lotteryConfig } = validated.data
+  const { title, content, isAnonymous, coverPath, boardSlug, postType, bountyPoints, pollOptions, commentsVisibleToAuthorOnly, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, minViewVipLevel, lotteryConfig } = validated.data
 
   const rawBody = body as Record<string, unknown>
   const manualTags = normalizeManualTags(Array.isArray(rawBody?.manualTags)
@@ -71,6 +85,10 @@ export async function createPostFlow(body: unknown) {
     apiError(400, normalizedRedPacket.message ?? "红包配置不合法")
   }
 
+  if (isAnonymous && normalizedRedPacket.data?.enabled && normalizedRedPacket.data.mode === "RED_PACKET") {
+    apiError(400, "匿名发布暂不支持帖子红包")
+  }
+
   const titleSafety = await enforceSensitiveText({ scene: "post.title", text: title })
   const contentSafety = await enforceSensitiveText({ scene: "post.content", text: content })
   const replyUnlockSafety = replyUnlockContent ? await enforceSensitiveText({ scene: "post.content", text: replyUnlockContent }) : null
@@ -92,14 +110,47 @@ export async function createPostFlow(body: unknown) {
   const serializedContent = serializePostContentDocument(contentDocument)
   const summary = extractSummaryFromContent(getAllPostContentText(serializedContent))
 
-  const [boardContext, author, settings] = await Promise.all([
+  const [boardContext, author] = await Promise.all([
     getBoardAccessContextBySlug(boardSlug),
     getCurrentUserRecord(),
-    getSiteSettings(),
   ])
 
   if (!boardContext || !author) {
     apiError(404, "节点或作者不存在")
+  }
+
+  let anonymousMaskUser = null
+
+  if (isAnonymous) {
+    if (!settings.anonymousPostEnabled) {
+      apiError(403, "当前站点未开启匿名发帖")
+    }
+
+    if (postType !== "NORMAL" && postType !== "POLL") {
+      apiError(400, "匿名发布当前只支持普通帖和投票帖")
+    }
+
+    if (!settings.anonymousPostMaskUserId) {
+      apiError(400, "后台未配置匿名账号")
+    }
+
+    anonymousMaskUser = await findAnonymousMaskUserById(settings.anonymousPostMaskUserId)
+    if (!anonymousMaskUser) {
+      apiError(400, "匿名账号不存在，请先检查后台配置")
+    }
+
+    if (settings.anonymousPostDailyLimit > 0) {
+      const { start, end } = getBusinessDayRange()
+      const todayAnonymousPostCount = await countAnonymousPostsByAuthorInRange({
+        authorId: author.id,
+        start,
+        end,
+      })
+
+      if (todayAnonymousPostCount >= settings.anonymousPostDailyLimit) {
+        apiError(400, `你今天可匿名发帖 ${settings.anonymousPostDailyLimit} 次，已达上限`)
+      }
+    }
   }
 
   if (boardContext.board.status !== "ACTIVE" || !boardContext.board.allowPost) {
@@ -143,6 +194,7 @@ export async function createPostFlow(body: unknown) {
     : null
   const totalRequiredPointCost = Math.max(0, -preparedPostDelta.finalDelta)
     + Math.max(0, -(preparedBountyDelta?.finalDelta ?? 0))
+    + (isAnonymous ? settings.anonymousPostPrice : 0)
     + redPacketTotalPoints
 
   if (author.points < totalRequiredPointCost) {
@@ -161,6 +213,7 @@ export async function createPostFlow(body: unknown) {
       summary: summary || titleSafety.sanitizedText,
       boardId: boardContext.board.id,
       authorId: author.id,
+      isAnonymous,
       type: postType,
       status: shouldPending ? "PENDING" : "NORMAL",
       commentsVisibleToAuthorOnly,
@@ -196,10 +249,25 @@ export async function createPostFlow(body: unknown) {
         prepared: preparedPostDelta,
         pointName: settings.pointName,
         reason: "在指定节点发帖",
+        eventType: POINT_LOG_EVENT_TYPES.BOARD_POST_CHARGE,
+        eventData: {
+          boardId: boardContext.board.id,
+          postId: createdPost.id,
+          configuredCharge: boardContext.settings.postPointDelta,
+          appliedFinalDelta: preparedPostDelta.finalDelta,
+        },
         relatedType: "POST",
         relatedId: createdPost.id,
       })
       authorPointBalanceCursor = postDeltaResult.afterBalance
+
+      const treasuryCredit = getBoardTreasuryCreditFromConfiguredCharge(
+        boardContext.settings.postPointDelta,
+        postDeltaResult.finalDelta,
+      )
+      if (treasuryCredit > 0) {
+        await incrementBoardTreasuryPoints(tx, boardContext.board.id, treasuryCredit)
+      }
     }
 
     if (preparedBountyDelta) {
@@ -214,6 +282,26 @@ export async function createPostFlow(body: unknown) {
         relatedId: createdPost.id,
       })
       authorPointBalanceCursor = bountyResult.afterBalance
+    }
+
+    if (isAnonymous && settings.anonymousPostPrice > 0) {
+      const anonymousPreparedDelta: PreparedPointDelta = {
+        scopeKey: "POST_CREATE",
+        baseDelta: -settings.anonymousPostPrice,
+        finalDelta: -settings.anonymousPostPrice,
+        appliedRules: [],
+      }
+      const anonymousResult = await applyPointDelta({
+        tx,
+        userId: author.id,
+        beforeBalance: authorPointBalanceCursor,
+        prepared: anonymousPreparedDelta,
+        pointName: settings.pointName,
+        reason: "匿名发布帖子",
+        relatedType: "POST",
+        relatedId: createdPost.id,
+      })
+      authorPointBalanceCursor = anonymousResult.afterBalance
     }
 
     await createPostRedPacketAfterPostCreated({
@@ -232,7 +320,9 @@ export async function createPostFlow(body: unknown) {
         tx,
         postId: createdPost.id,
         senderId: author.id,
-        senderName: author.nickname ?? author.username,
+        senderName: isAnonymous && anonymousMaskUser
+          ? (anonymousMaskUser.nickname ?? anonymousMaskUser.username)
+          : (author.nickname ?? author.username),
         rawPostContent: serializedContent,
       })
 

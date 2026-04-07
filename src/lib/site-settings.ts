@@ -1,5 +1,4 @@
 import { unstable_cache } from "next/cache"
-import { cache } from "react"
 
 import { listActiveGiftDefinitions } from "@/db/post-gift-queries"
 import { createSiteSettingsRecord, findSensitiveWordsPage, findSiteSettingsRecord, getSensitiveWordStats } from "@/db/site-settings-queries"
@@ -15,7 +14,7 @@ import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
 import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
-import { resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolveRegistrationRewardSettings, resolveVipLevelIconSettings, type InteractionGateSettings } from "@/lib/site-settings-app-state"
+import { resolveAnonymousPostSettings, resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveBoardApplicationSettings, resolveBoardTreasurySettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostContentLengthSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolveRegistrationRewardSettings, resolveVipLevelIconSettings, type InteractionGateSettings } from "@/lib/site-settings-app-state"
 import { resolveAuthProviderSensitiveConfig, resolveCaptchaSensitiveConfig } from "@/lib/site-settings-sensitive-state"
 import { resolveSiteSearchSettings, type SiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
@@ -44,6 +43,13 @@ export interface SiteSettingsData {
   homeFeedPostPageSize: number
   zonePostPageSize: number
   boardPostPageSize: number
+  commentPageSize: number
+  postTitleMinLength: number
+  postTitleMaxLength: number
+  postContentMinLength: number
+  postContentMaxLength: number
+  commentContentMinLength: number
+  commentContentMaxLength: number
   homeSidebarHotTopicsCount: number
   postSidebarRelatedTopicsCount: number
   homeHotRecentWindowHours: number
@@ -80,6 +86,7 @@ export interface SiteSettingsData {
   registrationRequireInviteCode: boolean
   registerInviteCodeEnabled: boolean
   inviteCodePurchaseEnabled: boolean
+  boardApplicationEnabled: boolean
   inviteCodePrice: number
   inviteCodeVip1Price: number
   inviteCodeVip2Price: number
@@ -102,12 +109,21 @@ export interface SiteSettingsData {
   postEditableMinutes: number
   commentEditableMinutes: number
   guestCanViewComments: boolean
+  commentInitialVisibleReplies: number
+  anonymousPostEnabled: boolean
+  anonymousPostPrice: number
+  anonymousPostDailyLimit: number
+  anonymousPostMaskUserId: number | null
+  anonymousPostAllowReplySwitch: boolean
+  anonymousPostDefaultReplyAnonymous: boolean
   interactionGates: InteractionGateSettings
   tippingEnabled: boolean
   tippingDailyLimit: number
   tippingPerPostLimit: number
   tippingAmounts: number[]
   tippingGifts: SiteTippingGiftItem[]
+  tipGiftTaxEnabled: boolean
+  tipGiftTaxRateBps: number
   postRedPacketEnabled: boolean
   postRedPacketMaxPoints: number
   postRedPacketDailyLimit: number
@@ -343,9 +359,19 @@ function mapSiteSettings(record: {
   const commentAccessSettings = resolveCommentAccessSettings({
     appStateJson: record.appStateJson,
     guestCanViewFallback: true,
+    initialVisibleRepliesFallback: 10,
   })
   const interactionGateSettings = resolveInteractionGateSettings({
     appStateJson: record.appStateJson,
+  })
+  const postContentLengthSettings = resolvePostContentLengthSettings({
+    appStateJson: record.appStateJson,
+    postTitleMinLengthFallback: 5,
+    postTitleMaxLengthFallback: 100,
+    postContentMinLengthFallback: 10,
+    postContentMaxLengthFallback: 50000,
+    commentContentMinLengthFallback: 2,
+    commentContentMaxLengthFallback: 2000,
   })
   const authProviderSettings = resolveAuthProviderSettings({
     appStateJson: record.appStateJson,
@@ -366,13 +392,32 @@ function mapSiteSettings(record: {
     appStateJson: record.appStateJson,
     randomClaimProbabilityFallback: 0,
   })
+  const anonymousPostSettings = resolveAnonymousPostSettings({
+    appStateJson: record.appStateJson,
+    enabledFallback: false,
+    priceFallback: 0,
+    dailyLimitFallback: 0,
+    maskUserIdFallback: null,
+    allowReplySwitchFallback: true,
+    defaultReplyAnonymousFallback: true,
+  })
   const postPageSizeSettings = resolvePostPageSizeSettings({
     appStateJson: record.appStateJson,
     homeFeedFallback: 35,
     zonePostsFallback: 20,
     boardPostsFallback: 20,
+    commentsFallback: 15,
     hotTopicsFallback: 5,
     postRelatedTopicsFallback: 5,
+  })
+  const boardTreasurySettings = resolveBoardTreasurySettings({
+    appStateJson: record.appStateJson,
+    tipGiftTaxEnabledFallback: false,
+    tipGiftTaxRateBpsFallback: 0,
+  })
+  const boardApplicationSettings = resolveBoardApplicationSettings({
+    appStateJson: record.appStateJson,
+    enabledFallback: true,
   })
   const authProviderSensitiveConfig = resolveAuthProviderSensitiveConfig(record.sensitiveStateJson)
   const captchaSensitiveConfig = resolveCaptchaSensitiveConfig(record.sensitiveStateJson)
@@ -391,6 +436,13 @@ function mapSiteSettings(record: {
     homeFeedPostPageSize: postPageSizeSettings.homeFeed,
     zonePostPageSize: postPageSizeSettings.zonePosts,
     boardPostPageSize: postPageSizeSettings.boardPosts,
+    commentPageSize: postPageSizeSettings.comments,
+    postTitleMinLength: postContentLengthSettings.postTitleMinLength,
+    postTitleMaxLength: postContentLengthSettings.postTitleMaxLength,
+    postContentMinLength: postContentLengthSettings.postContentMinLength,
+    postContentMaxLength: postContentLengthSettings.postContentMaxLength,
+    commentContentMinLength: postContentLengthSettings.commentContentMinLength,
+    commentContentMaxLength: postContentLengthSettings.commentContentMaxLength,
     homeSidebarHotTopicsCount: postPageSizeSettings.hotTopics,
     postSidebarRelatedTopicsCount: postPageSizeSettings.postRelatedTopics,
     homeHotRecentWindowHours: homeHotFeedSettings.recentWindowHours,
@@ -427,6 +479,7 @@ function mapSiteSettings(record: {
     registrationRequireInviteCode: record.registrationRequireInviteCode,
     registerInviteCodeEnabled: record.registerInviteCodeEnabled,
     inviteCodePurchaseEnabled: record.inviteCodePurchaseEnabled,
+    boardApplicationEnabled: boardApplicationSettings.enabled,
     inviteCodePrice: inviteCodePurchasePrices.normal,
     inviteCodeVip1Price: inviteCodePurchasePrices.vip1,
     inviteCodeVip2Price: inviteCodePurchasePrices.vip2,
@@ -449,12 +502,21 @@ function mapSiteSettings(record: {
     postEditableMinutes: normalizePositiveInteger(record.postEditableMinutes, 10),
     commentEditableMinutes: normalizePositiveInteger(record.commentEditableMinutes, 5),
     guestCanViewComments: commentAccessSettings.guestCanView,
+    commentInitialVisibleReplies: commentAccessSettings.initialVisibleReplies,
+    anonymousPostEnabled: anonymousPostSettings.enabled,
+    anonymousPostPrice: anonymousPostSettings.price,
+    anonymousPostDailyLimit: anonymousPostSettings.dailyLimit,
+    anonymousPostMaskUserId: anonymousPostSettings.maskUserId,
+    anonymousPostAllowReplySwitch: anonymousPostSettings.allowReplySwitch,
+    anonymousPostDefaultReplyAnonymous: anonymousPostSettings.defaultReplyAnonymous,
     interactionGates: interactionGateSettings,
     tippingEnabled: record.tippingEnabled,
     tippingDailyLimit: record.tippingDailyLimit,
     tippingPerPostLimit: record.tippingPerPostLimit,
     tippingAmounts,
     tippingGifts,
+    tipGiftTaxEnabled: boardTreasurySettings.tipGiftTaxEnabled,
+    tipGiftTaxRateBps: boardTreasurySettings.tipGiftTaxRateBps,
     postRedPacketEnabled: record.postRedPacketEnabled,
     postRedPacketMaxPoints: record.postRedPacketMaxPoints,
     postRedPacketDailyLimit: record.postRedPacketDailyLimit,
@@ -572,17 +634,13 @@ const getPersistentSiteSettings = unstable_cache(
   { tags: [SITE_SETTINGS_CACHE_TAG] },
 )
 
-const getCachedSiteSettings = cache(async (): Promise<ServerSiteSettingsData> => {
-  return getPersistentSiteSettings()
-})
-
 export async function getSiteSettings(): Promise<SiteSettingsData> {
-  return toPublicSiteSettings(await getCachedSiteSettings())
+  return toPublicSiteSettings(await getPersistentSiteSettings())
 }
 
 /** 仅服务端内部使用（mailer、lottery 等），包含 smtp 等敏感字段，禁止序列化到客户端 */
 export async function getServerSiteSettings(): Promise<ServerSiteSettingsData> {
-  return getCachedSiteSettings()
+  return getPersistentSiteSettings()
 }
 
 export async function getSensitiveWordPage(options: { page?: number; pageSize?: number } = {}) {

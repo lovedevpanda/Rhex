@@ -36,6 +36,8 @@ export function getUploadMimeType(fileName: string) {
       return "image/webp"
     case "avif":
       return "image/avif"
+    case "svg":
+      return "image/svg+xml"
     default:
       return "application/octet-stream"
   }

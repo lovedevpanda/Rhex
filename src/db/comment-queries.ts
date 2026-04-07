@@ -1,8 +1,11 @@
 import type { Prisma } from "@/db/types"
 import { CommentStatus, NotificationType } from "@/db/types"
+import { incrementBoardTreasuryPoints } from "@/db/board-treasury-queries"
 import { prisma } from "@/db/client"
 import { applyPointDelta, type PreparedPointDelta } from "@/lib/point-center"
+import { getBoardTreasuryCreditFromConfiguredCharge } from "@/lib/board-treasury"
 import { createNotifications } from "@/lib/notification-writes"
+import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 
 
 const commentViewerLikeSelect = {
@@ -24,6 +27,7 @@ const commentDisplayedBadgesInclude = {
 } satisfies Prisma.User$userBadgesArgs
 
 const commentUserSelect = {
+  id: true,
   username: true,
   nickname: true,
   avatarPath: true,
@@ -59,6 +63,7 @@ export function findCommentParentById(parentId: string) {
       status: true,
       parentId: true,
       userId: true,
+      useAnonymousIdentity: true,
       user: {
         select: {
           username: true,
@@ -110,6 +115,54 @@ export function buildCommentReplyInclude(viewerUserId?: number) {
     user: {
       select: commentUserSelect,
     },
+    replyToComment: {
+      select: {
+        id: true,
+        status: true,
+        userId: true,
+        useAnonymousIdentity: true,
+        content: true,
+        createdAt: true,
+        user: {
+          select: commentUserSelect,
+        },
+      },
+    },
+    replyToUser: {
+      select: commentUserSelect,
+    },
+    likes: buildCommentViewerLikesInclude(viewerUserId),
+  }
+}
+
+export function buildFlatCommentInclude(viewerUserId?: number) {
+  return {
+    user: {
+      select: commentUserSelect,
+    },
+    parent: {
+      select: {
+        id: true,
+        status: true,
+        userId: true,
+        useAnonymousIdentity: true,
+        content: true,
+        createdAt: true,
+      },
+    },
+    replyToComment: {
+      select: {
+        id: true,
+        status: true,
+        userId: true,
+        useAnonymousIdentity: true,
+        content: true,
+        createdAt: true,
+        user: {
+          select: commentUserSelect,
+        },
+      },
+    },
     replyToUser: {
       select: commentUserSelect,
     },
@@ -150,6 +203,18 @@ export function countRootCommentsByPostId(postId: string, viewerUserId?: number,
         in: buildVisibleCommentStatuses(includeHidden),
       },
       parentId: null,
+      ...buildCommentBlockVisibilityWhere(viewerUserId),
+    },
+  })
+}
+
+export function countVisibleCommentsByPostId(postId: string, viewerUserId?: number, includeHidden = false) {
+  return prisma.comment.count({
+    where: {
+      postId,
+      status: {
+        in: buildVisibleCommentStatuses(includeHidden),
+      },
       ...buildCommentBlockVisibilityWhere(viewerUserId),
     },
   })
@@ -240,6 +305,79 @@ export function findRootCommentsByPostId(params: {
   })
 }
 
+export function findAllRootCommentIdsByPostId(params: {
+  postId: string
+  viewerUserId?: number
+  includeHidden?: boolean
+}) {
+  return prisma.comment.findMany({
+    where: {
+      postId: params.postId,
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
+      parentId: null,
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
+    },
+    select: {
+      id: true,
+    },
+    orderBy: [
+      { isPinnedByAuthor: "desc" },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
+  })
+}
+
+export function findAllVisibleCommentIdsByPostId(params: {
+  postId: string
+  viewerUserId?: number
+  includeHidden?: boolean
+}) {
+  return prisma.comment.findMany({
+    where: {
+      postId: params.postId,
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
+    },
+    select: {
+      id: true,
+    },
+    orderBy: [
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
+  })
+}
+
+export function findAllFlatCommentIdsByPostId(params: {
+  postId: string
+  sort: "oldest" | "newest"
+  viewerUserId?: number
+  includeHidden?: boolean
+}) {
+  return prisma.comment.findMany({
+    where: {
+      postId: params.postId,
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
+    },
+    select: {
+      id: true,
+    },
+    orderBy: [
+      { isPinnedByAuthor: "desc" },
+      { createdAt: params.sort === "newest" ? "desc" : "asc" },
+      { id: params.sort === "newest" ? "desc" : "asc" },
+    ],
+  })
+}
+
 export function findRepliesByParentIds(params: {
   postId: string
   parentIds: string[]
@@ -262,6 +400,58 @@ export function findRepliesByParentIds(params: {
     },
     include: buildCommentReplyInclude(params.viewerUserId),
     orderBy: [{ createdAt: params.sort === "newest" ? "desc" : "asc" }],
+  })
+}
+
+export function findFlatCommentsByPostId(params: {
+  postId: string
+  sort: "oldest" | "newest"
+  page: number
+  pageSize: number
+  viewerUserId?: number
+  includeHidden?: boolean
+}) {
+  const normalizedPageSize = Math.min(Math.max(1, params.pageSize), 50)
+
+  return prisma.comment.findMany({
+    where: {
+      postId: params.postId,
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
+    },
+    include: buildFlatCommentInclude(params.viewerUserId),
+    orderBy: [
+      { isPinnedByAuthor: "desc" },
+      { createdAt: params.sort === "newest" ? "desc" : "asc" },
+      { id: params.sort === "newest" ? "desc" : "asc" },
+    ],
+    skip: (params.page - 1) * normalizedPageSize,
+    take: normalizedPageSize,
+  })
+}
+
+export function findCommentsByIds(params: {
+  commentIds: string[]
+  viewerUserId?: number
+  includeHidden?: boolean
+}) {
+  if (params.commentIds.length === 0) {
+    return Promise.resolve([])
+  }
+
+  return prisma.comment.findMany({
+    where: {
+      id: {
+        in: params.commentIds,
+      },
+      status: {
+        in: buildVisibleCommentStatuses(params.includeHidden),
+      },
+      ...buildCommentBlockVisibilityWhere(params.viewerUserId),
+    },
+    include: buildCommentListInclude(params.viewerUserId),
   })
 }
 
@@ -348,8 +538,10 @@ export async function createCommentWithRelations(params: {
   userId: number
   content: string
   status: "PENDING" | "NORMAL"
+  useAnonymousIdentity?: boolean
   parentId?: string
   replyToUserId?: number
+  replyToCommentId?: string
   replyPointDelta: number
   replyPointDeltaPrepared: PreparedPointDelta
   pointName: string
@@ -358,6 +550,7 @@ export async function createCommentWithRelations(params: {
   mentionUsers: Array<{ id: number }>
   normalizedParentId?: string
   normalizedReplyToUserId?: number | null
+  boardId: string
 }) {
   return prisma.$transaction(async (tx) => {
     const comment = await tx.comment.create({
@@ -365,8 +558,10 @@ export async function createCommentWithRelations(params: {
         postId: params.postId,
         userId: params.userId,
         content: params.content,
+        useAnonymousIdentity: Boolean(params.useAnonymousIdentity),
         parentId: params.parentId || undefined,
         replyToUserId: params.replyToUserId ?? undefined,
+        replyToCommentId: params.replyToCommentId ?? undefined,
         status: params.status,
       },
     })
@@ -385,16 +580,32 @@ export async function createCommentWithRelations(params: {
     })
 
     if (params.replyPointDeltaPrepared.finalDelta !== 0) {
-      await applyPointDelta({
+      const replyPointDeltaResult = await applyPointDelta({
         tx,
         userId: params.userId,
         beforeBalance: updatedUser.points,
         prepared: params.replyPointDeltaPrepared,
         pointName: params.pointName,
         reason: "在指定节点回复",
+        eventType: POINT_LOG_EVENT_TYPES.BOARD_REPLY_CHARGE,
+        eventData: {
+          boardId: params.boardId,
+          postId: params.postId,
+          commentId: comment.id,
+          configuredCharge: params.replyPointDelta,
+          appliedFinalDelta: params.replyPointDeltaPrepared.finalDelta,
+        },
         relatedType: "COMMENT",
         relatedId: comment.id,
       })
+
+      const treasuryCredit = getBoardTreasuryCreditFromConfiguredCharge(
+        params.replyPointDelta,
+        replyPointDeltaResult.finalDelta,
+      )
+      if (treasuryCredit > 0) {
+        await incrementBoardTreasuryPoints(tx, params.boardId, treasuryCredit)
+      }
     }
 
     const commentedAt = new Date()

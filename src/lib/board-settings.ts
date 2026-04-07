@@ -19,6 +19,7 @@ export interface EffectiveBoardSettings {
   minViewVipLevel: number
   minPostVipLevel: number
   minReplyVipLevel: number
+  moderatorsCanWithdrawBoardTreasury?: boolean
 }
 
 
@@ -36,6 +37,13 @@ export function resolveBoardSettings(zone?: Partial<Zone> | null, board?: Partia
     minReplyPoints?: number | null
     minReplyLevel?: number | null
   }) | null | undefined
+  const boardConfig = board as (Partial<Board> & {
+    configJson?: unknown
+  }) | null | undefined
+  const configJson = boardConfig?.configJson
+  const boardTreasury = configJson && typeof configJson === "object" && !Array.isArray(configJson)
+    ? (configJson as { boardTreasury?: unknown }).boardTreasury
+    : null
 
 
   return {
@@ -55,6 +63,12 @@ export function resolveBoardSettings(zone?: Partial<Zone> | null, board?: Partia
     minViewVipLevel: board?.minViewVipLevel ?? zone?.minViewVipLevel ?? 0,
     minPostVipLevel: board?.minPostVipLevel ?? zone?.minPostVipLevel ?? 0,
     minReplyVipLevel: board?.minReplyVipLevel ?? zone?.minReplyVipLevel ?? 0,
+    moderatorsCanWithdrawBoardTreasury: Boolean(
+      boardTreasury
+      && typeof boardTreasury === "object"
+      && !Array.isArray(boardTreasury)
+      && (boardTreasury as { moderatorsCanWithdrawTreasury?: unknown }).moderatorsCanWithdrawTreasury === true,
+    ),
 
   }
 }

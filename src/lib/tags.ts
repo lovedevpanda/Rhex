@@ -1,4 +1,5 @@
 import { countTags, findAllTags, findTagBySlugOrName, findTagListPage, findTagPostsBySlugOrName } from "@/db/taxonomy-queries"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { mapListPost } from "@/lib/post-map"
 
 export interface SiteTagItem {
@@ -131,9 +132,12 @@ export async function getTagBySlug(slug: string): Promise<SiteTagItem | null> {
 export async function getTagPosts(slug: string) {
   try {
     const normalized = normalizeTagParam(slug)
-    const posts = await findTagPostsBySlugOrName(normalized)
+    const [posts, anonymousMaskIdentity] = await Promise.all([
+      findTagPostsBySlugOrName(normalized),
+      getAnonymousMaskDisplayIdentity(),
+    ])
 
-    return posts.map((post) => mapListPost(post))
+    return posts.map((post) => mapListPost(post, anonymousMaskIdentity))
   } catch (error) {
     console.error(error)
     return []

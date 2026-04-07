@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { CircleHelp } from "lucide-react"
 
 import { useAdminMutation } from "@/hooks/use-admin-mutation"
+import { AdminBooleanSelectField } from "@/components/admin-boolean-select-field"
+import { AdminPillTabs } from "@/components/admin-pill-tabs"
 import { AdminModal } from "@/components/admin-modal"
 import { Button } from "@/components/ui/button"
 import { TextField } from "@/components/ui/text-field"
@@ -19,6 +21,7 @@ import {
   type AdminBasicSettingsDraft,
 } from "@/components/admin-site-settings.shared"
 import { PickerPopover, PickerTriggerField, normalizeHexColor } from "@/components/admin-picker-popover"
+import { AdminInviteCodeManager } from "@/components/admin-invite-code-manager"
 import { AdminTippingGiftListEditor } from "@/components/admin-tipping-gift-list-editor"
 import { adminPost } from "@/lib/admin-client"
 import { calculatePostHeatScore, resolvePostHeatStyle } from "@/lib/post-heat"
@@ -29,6 +32,15 @@ interface AdminBasicSettingsFormProps {
   initialSettings: AdminBasicSettingsInitialSettings
   mode?: AdminBasicSettingsMode
   initialSubTab?: string
+  initialInviteCodes?: Array<{
+    id: string
+    code: string
+    createdAt: string
+    createdByUsername: string | null
+    usedAt: string | null
+    usedByUsername: string | null
+    note: string | null
+  }>
 }
 
 const HEAT_COLOR_PRESETS = ["#4A4A4A", "#808080", "#9B8F7F", "#B87333", "#C4A777", "#E8C547", "#FFA500", "#D96C3B", "#C41E3A", "#6B7280", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981"]
@@ -40,24 +52,32 @@ const INTERNAL_SETTING_TABS: Record<AdminBasicSettingsMode, Array<{ key: string;
   ],
   registration: [
     { key: "invite", label: "注册与邀请码" },
+    { key: "invite-codes", label: "邀请码管理" },
     { key: "captcha", label: "验证码" },
     { key: "fields", label: "表单字段" },
     { key: "auth", label: "第三方登录" },
     { key: "smtp", label: "SMTP 邮件" },
   ],
   interaction: [
-    { key: "comment-tip", label: "评论与打赏" },
+    { key: "comments", label: "评论展示" },
+    { key: "content-limits", label: "内容限制" },
+    { key: "anonymous-post", label: "匿名发帖" },
+    { key: "tipping", label: "打赏送礼" },
     { key: "gates", label: "发布门槛" },
     { key: "reward-pool", label: "红包与聚宝盆" },
     { key: "heat", label: "热度算法" },
     { key: "preview", label: "热度预览" },
+  ],
+  "board-applications": [
+    { key: "general", label: "基础设置" },
   ],
 }
 
 const INTERNAL_SETTING_TAB_DEFAULT: Record<AdminBasicSettingsMode, string> = {
   profile: "branding",
   registration: "invite",
-  interaction: "comment-tip",
+  interaction: "comments",
+  "board-applications": "general",
 }
 
 function parseNumberList(raw: string) {
@@ -72,7 +92,7 @@ function normalizeHeatThresholdsInput(raw: string) {
   return Array.from(new Set(values)).sort((left, right) => left - right)
 }
 
-export function AdminBasicSettingsForm({ initialSettings, mode = "profile", initialSubTab }: AdminBasicSettingsFormProps) {
+export function AdminBasicSettingsForm({ initialSettings, mode = "profile", initialSubTab, initialInviteCodes = [] }: AdminBasicSettingsFormProps) {
   const [draft, setDraft] = useState(() => createAdminBasicSettingsDraft(initialSettings))
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [editingHeatColorIndex, setEditingHeatColorIndex] = useState<number | null>(null)
@@ -108,6 +128,13 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     homeFeedPostPageSize,
     zonePostPageSize,
     boardPostPageSize,
+    commentPageSize,
+    postTitleMinLength,
+    postTitleMaxLength,
+    postContentMinLength,
+    postContentMaxLength,
+    commentContentMinLength,
+    commentContentMaxLength,
     homeSidebarHotTopicsCount,
     postSidebarRelatedTopicsCount,
     homeSidebarStatsCardEnabled,
@@ -117,6 +144,13 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     postEditableMinutes,
     commentEditableMinutes,
     guestCanViewComments,
+    commentInitialVisibleReplies,
+    anonymousPostEnabled,
+    anonymousPostPrice,
+    anonymousPostDailyLimit,
+    anonymousPostMaskUserId,
+    anonymousPostAllowReplySwitch,
+    anonymousPostDefaultReplyAnonymous,
     postCreateRequireEmailVerified,
     commentCreateRequireEmailVerified,
     postCreateMinRegisteredMinutes,
@@ -128,6 +162,7 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     registrationRequireInviteCode,
     registerInviteCodeEnabled,
     inviteCodePurchaseEnabled,
+    boardApplicationEnabled,
     registerCaptchaMode,
     loginCaptchaMode,
     turnstileSiteKey,
@@ -137,6 +172,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     tippingPerPostLimit,
     tippingAmounts,
     tippingGifts,
+    tipGiftTaxEnabled,
+    tipGiftTaxRateBps,
     postRedPacketEnabled,
     postRedPacketMaxPoints,
     postRedPacketDailyLimit,
@@ -231,7 +268,13 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     }
   }
 
-  const submitText = mode === "profile" ? "保存基础信息" : mode === "registration" ? "保存注册与邀请" : "保存互动与热度"
+  const submitText = mode === "profile"
+    ? "保存基础信息"
+    : mode === "registration"
+      ? "保存注册与邀请"
+      : mode === "board-applications"
+        ? "保存节点申请设置"
+        : "保存互动与热度"
 
   return (
     <form
@@ -251,7 +294,16 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     >
       <div className="rounded-[24px]  space-y-4">
 
-        <InternalSectionTabs tabs={INTERNAL_SETTING_TABS[mode]} activeTab={activeSubTab} onChange={setActiveSubTab} />
+        {INTERNAL_SETTING_TABS[mode].length > 1 ? (
+          <AdminPillTabs
+            items={INTERNAL_SETTING_TABS[mode].map((tab) => ({
+              key: tab.key,
+              label: tab.label,
+              onSelect: () => setActiveSubTab(tab.key),
+            }))}
+            activeKey={activeSubTab}
+          />
+        ) : null}
       </div>
 
       {mode === "profile" && activeSubTab === "branding" ? (
@@ -310,9 +362,9 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
               </select>
               <p className="text-xs leading-6 text-muted-foreground">首页可在传统分页和滚动到底部自动加载之间切换。</p>
             </div>
-            <SwitchField label="首页右侧统计卡片" checked={homeSidebarStatsCardEnabled} onChange={(value) => updateDraftField("homeSidebarStatsCardEnabled", value)} />
-            <SwitchField label="首页右侧站点公告" checked={homeSidebarAnnouncementsEnabled} onChange={(value) => updateDraftField("homeSidebarAnnouncementsEnabled", value)} />
-            <SwitchField label="站内搜索" checked={searchEnabled} onChange={(value) => updateDraftField("searchEnabled", value)} />
+            <AdminBooleanSelectField label="首页右侧统计卡片" checked={homeSidebarStatsCardEnabled} onChange={(value) => updateDraftField("homeSidebarStatsCardEnabled", value)} />
+            <AdminBooleanSelectField label="首页右侧站点公告" checked={homeSidebarAnnouncementsEnabled} onChange={(value) => updateDraftField("homeSidebarAnnouncementsEnabled", value)} />
+            <AdminBooleanSelectField label="站内搜索" checked={searchEnabled} onChange={(value) => updateDraftField("searchEnabled", value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <TextField label="首页帖子显示数量" value={homeFeedPostPageSize} onChange={(value) => updateDraftField("homeFeedPostPageSize", value)} placeholder="如 35" />
@@ -356,10 +408,10 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
               <p className="mt-1 text-xs leading-6 text-muted-foreground">控制注册开关、邀请码策略，以及用户邀请奖励。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <SwitchField label="允许新用户注册" checked={registrationEnabled} onChange={(value) => updateDraftField("registrationEnabled", value)} />
-              <SwitchField label="显示邀请码输入框" checked={registerInviteCodeEnabled} onChange={(value) => updateDraftField("registerInviteCodeEnabled", value)} />
-              <SwitchField label="注册必须邀请码" checked={registrationRequireInviteCode} onChange={(value) => updateDraftField("registrationRequireInviteCode", value)} />
-              <SwitchField label="开启积分购买邀请码" checked={inviteCodePurchaseEnabled} onChange={(value) => updateDraftField("inviteCodePurchaseEnabled", value)} />
+              <AdminBooleanSelectField label="允许新用户注册" checked={registrationEnabled} onChange={(value) => updateDraftField("registrationEnabled", value)} />
+              <AdminBooleanSelectField label="显示邀请码输入框" checked={registerInviteCodeEnabled} onChange={(value) => updateDraftField("registerInviteCodeEnabled", value)} />
+              <AdminBooleanSelectField label="注册必须邀请码" checked={registrationRequireInviteCode} onChange={(value) => updateDraftField("registrationRequireInviteCode", value)} />
+              <AdminBooleanSelectField label="开启积分购买邀请码" checked={inviteCodePurchaseEnabled} onChange={(value) => updateDraftField("inviteCodePurchaseEnabled", value)} />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <TextField label="初始注册赠送积分" value={registerInitialPoints} onChange={(value) => updateDraftField("registerInitialPoints", value)} placeholder="如 0" />
@@ -389,6 +441,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
         </>
       ) : null}
 
+      {mode === "registration" && activeSubTab === "invite-codes" ? <AdminInviteCodeManager initialInviteCodes={initialInviteCodes} /> : null}
+
       {mode === "registration" && activeSubTab === "fields" ? (
         <>
           <div className="rounded-[24px] border border-border p-5 space-y-4">
@@ -398,21 +452,21 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
             </div>
             <div className="grid gap-4 xl:grid-cols-3">
               <FieldGroup title="邮箱">
-                <SwitchField label="显示邮箱输入框" checked={registerEmailEnabled} onChange={(value) => updateDraftField("registerEmailEnabled", value)} />
-                <SwitchField label="邮箱必填" checked={registerEmailRequired} onChange={(value) => updateDraftField("registerEmailRequired", value)} />
-                <SwitchField label="邮箱需要验证" checked={registerEmailVerification} onChange={(value) => updateDraftField("registerEmailVerification", value)} />
+                <AdminBooleanSelectField label="显示邮箱输入框" checked={registerEmailEnabled} onChange={(value) => updateDraftField("registerEmailEnabled", value)} />
+                <AdminBooleanSelectField label="邮箱必填" checked={registerEmailRequired} onChange={(value) => updateDraftField("registerEmailRequired", value)} />
+                <AdminBooleanSelectField label="邮箱需要验证" checked={registerEmailVerification} onChange={(value) => updateDraftField("registerEmailVerification", value)} />
               </FieldGroup>
               <FieldGroup title="手机">
-                <SwitchField label="显示手机输入框" checked={registerPhoneEnabled} onChange={(value) => updateDraftField("registerPhoneEnabled", value)} />
-                <SwitchField label="手机必填" checked={registerPhoneRequired} onChange={(value) => updateDraftField("registerPhoneRequired", value)} />
-                <SwitchField label="手机需要验证" checked={registerPhoneVerification} onChange={(value) => updateDraftField("registerPhoneVerification", value)} />
+                <AdminBooleanSelectField label="显示手机输入框" checked={registerPhoneEnabled} onChange={(value) => updateDraftField("registerPhoneEnabled", value)} />
+                <AdminBooleanSelectField label="手机必填" checked={registerPhoneRequired} onChange={(value) => updateDraftField("registerPhoneRequired", value)} />
+                <AdminBooleanSelectField label="手机需要验证" checked={registerPhoneVerification} onChange={(value) => updateDraftField("registerPhoneVerification", value)} />
               </FieldGroup>
               <FieldGroup title="其它字段">
-                <SwitchField label="显示昵称输入框" checked={registerNicknameEnabled} onChange={(value) => updateDraftField("registerNicknameEnabled", value)} />
-                <SwitchField label="昵称必填" checked={registerNicknameRequired} onChange={(value) => updateDraftField("registerNicknameRequired", value)} />
-                <SwitchField label="显示性别选项" checked={registerGenderEnabled} onChange={(value) => updateDraftField("registerGenderEnabled", value)} />
-                <SwitchField label="性别必填" checked={registerGenderRequired} onChange={(value) => updateDraftField("registerGenderRequired", value)} />
-                <SwitchField label="显示邀请人输入框" checked={registerInviterEnabled} onChange={(value) => updateDraftField("registerInviterEnabled", value)} />
+                <AdminBooleanSelectField label="显示昵称输入框" checked={registerNicknameEnabled} onChange={(value) => updateDraftField("registerNicknameEnabled", value)} />
+                <AdminBooleanSelectField label="昵称必填" checked={registerNicknameRequired} onChange={(value) => updateDraftField("registerNicknameRequired", value)} />
+                <AdminBooleanSelectField label="显示性别选项" checked={registerGenderEnabled} onChange={(value) => updateDraftField("registerGenderEnabled", value)} />
+                <AdminBooleanSelectField label="性别必填" checked={registerGenderRequired} onChange={(value) => updateDraftField("registerGenderRequired", value)} />
+                <AdminBooleanSelectField label="显示邀请人输入框" checked={registerInviterEnabled} onChange={(value) => updateDraftField("registerInviterEnabled", value)} />
               </FieldGroup>
             </div>
           </div>
@@ -438,9 +492,9 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
               <p className="mt-1 text-xs leading-6 text-muted-foreground">这里同时控制登录开关与密钥配置。敏感值会写入站点设置的敏感 JSON，仅服务端读取，不向普通前台接口透出。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <SwitchField label="开启 GitHub 登录" checked={authGithubEnabled} onChange={(value) => updateDraftField("authGithubEnabled", value)} />
-              <SwitchField label="开启 Google 登录" checked={authGoogleEnabled} onChange={(value) => updateDraftField("authGoogleEnabled", value)} />
-              <SwitchField label="开启 Passkey 登录" checked={authPasskeyEnabled} onChange={(value) => updateDraftField("authPasskeyEnabled", value)} />
+              <AdminBooleanSelectField label="开启 GitHub 登录" checked={authGithubEnabled} onChange={(value) => updateDraftField("authGithubEnabled", value)} />
+              <AdminBooleanSelectField label="开启 Google 登录" checked={authGoogleEnabled} onChange={(value) => updateDraftField("authGoogleEnabled", value)} />
+              <AdminBooleanSelectField label="开启 Passkey 登录" checked={authPasskeyEnabled} onChange={(value) => updateDraftField("authPasskeyEnabled", value)} />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <TextField label="GitHub Client ID" value={githubClientId} onChange={(value) => updateDraftField("githubClientId", value)} placeholder="填写 GitHub OAuth App Client ID" />
@@ -525,8 +579,8 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">开启后，邮箱验证码会通过真实邮件发送。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <SwitchField label="启用 SMTP" checked={smtpEnabled} onChange={(value) => updateDraftField("smtpEnabled", value)} />
-              <SwitchField label="启用 SSL/TLS" checked={smtpSecure} onChange={(value) => updateDraftField("smtpSecure", value)} />
+              <AdminBooleanSelectField label="启用 SMTP" checked={smtpEnabled} onChange={(value) => updateDraftField("smtpEnabled", value)} />
+              <AdminBooleanSelectField label="启用 SSL/TLS" checked={smtpSecure} onChange={(value) => updateDraftField("smtpSecure", value)} />
               <TextField label="SMTP 主机" value={smtpHost} onChange={(value) => updateDraftField("smtpHost", value)} placeholder="如 smtp.qq.com" />
               <TextField label="SMTP 端口" value={smtpPort} onChange={(value) => updateDraftField("smtpPort", value)} placeholder="如 465 / 587" />
               <TextField label="SMTP 账号" value={smtpUser} onChange={(value) => updateDraftField("smtpUser", value)} placeholder="邮箱账号" />
@@ -537,23 +591,101 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
         </>
       ) : null}
 
-      {mode === "interaction" && activeSubTab === "comment-tip" ? (
+      {mode === "interaction" && activeSubTab === "comments" ? (
         <>
           <div className="rounded-[24px] border border-border p-5 space-y-4">
             <div>
-              <h3 className="text-sm font-semibold">评论与帖子打赏</h3>
-              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制游客评论可见性，以及帖子打赏开关、次数限制与送礼配置。礼物名称、图标和价格都可在后台维护。</p>
+              <h3 className="text-sm font-semibold">评论展示</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制评论区可见性、楼中楼默认展开数量，以及帖子详情页的评论分页容量。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <SwitchField label="游客可查看评论" checked={guestCanViewComments} onChange={(value) => updateDraftField("guestCanViewComments", value)} />
-              <SwitchField label="开启帖子打赏" checked={tippingEnabled} onChange={(value) => updateDraftField("tippingEnabled", value)} />
+              <AdminBooleanSelectField label="游客可查看评论" checked={guestCanViewComments} onChange={(value) => updateDraftField("guestCanViewComments", value)} />
+              <TextField label="楼中楼默认展开条数" value={commentInitialVisibleReplies} onChange={(value) => updateDraftField("commentInitialVisibleReplies", value)} placeholder="如 10" />
+              <TextField label="评论区一页显示数" value={commentPageSize} onChange={(value) => updateDraftField("commentPageSize", value)} placeholder="如 15" />
+            </div>
+            <p className="text-xs leading-6 text-muted-foreground">楼中楼超过默认展开条数后，前台会显示“展开其余 X 条回复”；评论区一页显示数控制主评论分页容量。</p>
+          </div>
+        </>
+      ) : null}
+
+      {mode === "interaction" && activeSubTab === "content-limits" ? (
+        <>
+          <div className="rounded-[24px] border border-border p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">发帖与回复字数限制</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">分别控制标题、正文、回复的最小字数和最大字数，服务端会按这里的值做校验。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <TextField label="发帖标题最小字数" value={postTitleMinLength} onChange={(value) => updateDraftField("postTitleMinLength", value)} placeholder="默认 5，最小 1" />
+              <TextField label="发帖标题最大字数" value={postTitleMaxLength} onChange={(value) => updateDraftField("postTitleMaxLength", value)} placeholder="默认 100，最大 500" />
+              <TextField label="发帖正文最小字数" value={postContentMinLength} onChange={(value) => updateDraftField("postContentMinLength", value)} placeholder="默认 10，最小 1" />
+              <TextField label="发帖正文最大字数" value={postContentMaxLength} onChange={(value) => updateDraftField("postContentMaxLength", value)} placeholder="默认 50000，最大 100000" />
+              <TextField label="回复正文最小字数" value={commentContentMinLength} onChange={(value) => updateDraftField("commentContentMinLength", value)} placeholder="默认 2，最小 1" />
+              <TextField label="回复正文最大字数" value={commentContentMaxLength} onChange={(value) => updateDraftField("commentContentMaxLength", value)} placeholder="默认 2000，最大 20000" />
+            </div>
+            <p className="text-xs leading-6 text-muted-foreground">保存时若最大值小于最小值，会自动按最小值兜底；发帖、编辑帖子、回复、编辑回复都会使用这组限制。</p>
+          </div>
+        </>
+      ) : null}
+
+      {mode === "interaction" && activeSubTab === "anonymous-post" ? (
+        <>
+          <div className="rounded-[24px] border border-border p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">匿名发帖</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制匿名发帖开关、扣费、每日次数，以及匿名帖下回复时是否允许切换身份。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <AdminBooleanSelectField label="开启匿名发帖" checked={anonymousPostEnabled} onChange={(value) => updateDraftField("anonymousPostEnabled", value)} />
+              <AdminBooleanSelectField label="匿名回复可切换身份" checked={anonymousPostAllowReplySwitch} onChange={(value) => updateDraftField("anonymousPostAllowReplySwitch", value)} />
+              <AdminBooleanSelectField label="匿名帖默认匿名回复" checked={anonymousPostDefaultReplyAnonymous} onChange={(value) => updateDraftField("anonymousPostDefaultReplyAnonymous", value)} />
+              <TextField label="匿名发帖价格" value={anonymousPostPrice} onChange={(value) => updateDraftField("anonymousPostPrice", value)} placeholder="如 20" />
+              <TextField label="每日匿名发帖次数" value={anonymousPostDailyLimit} onChange={(value) => updateDraftField("anonymousPostDailyLimit", value)} placeholder="0 表示不限制" />
+              <TextField label="匿名马甲用户 ID" value={anonymousPostMaskUserId} onChange={(value) => updateDraftField("anonymousPostMaskUserId", value)} placeholder="如 10001" />
+            </div>
+            <p className="text-xs leading-6 text-muted-foreground">匿名发帖当前只用于普通帖和投票帖。启用后会按配置积分扣费，前台展示为指定马甲账号，帖子真实作者仍保留原账号。</p>
+          </div>
+        </>
+      ) : null}
+
+      {mode === "interaction" && activeSubTab === "tipping" ? (
+        <>
+          <div className="rounded-[24px] border border-border p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">帖子打赏与送礼</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">控制帖子打赏开关、次数限制、裸积分档位、礼物配置，以及打赏送礼税。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <AdminBooleanSelectField label="开启帖子打赏" checked={tippingEnabled} onChange={(value) => updateDraftField("tippingEnabled", value)} />
               <TextField label="每日可打赏次数" value={tippingDailyLimit} onChange={(value) => updateDraftField("tippingDailyLimit", value)} placeholder="如 3" />
               <TextField label="单帖可打赏次数" value={tippingPerPostLimit} onChange={(value) => updateDraftField("tippingPerPostLimit", value)} placeholder="如 1" />
+              <AdminBooleanSelectField label="开启打赏送礼税" checked={tipGiftTaxEnabled} onChange={(value) => updateDraftField("tipGiftTaxEnabled", value)} />
+              <InfoTextField
+                label="打赏送礼税率 BPS"
+                value={tipGiftTaxRateBps}
+                onChange={(value) => updateDraftField("tipGiftTaxRateBps", value)}
+                placeholder="0..10000，如 500"
+                helpText="填写 0..10000 的整数。10000 = 100%，500 = 5%，100 = 1%。税额按收款特效后的实际到账 gross 计算，公式是 floor(gross * bps / 10000)。填 0 或关闭税开关都表示不征税。"
+              />
             </div>
+            <p className="text-xs leading-6 text-muted-foreground">打赏送礼税在收款特效结算后按 BPS 向下取整，只对正整数净收款生效；税额会进入帖子所属节点金库。礼物名称、图标和价格都可在后台维护。</p>
             <TextField label="裸积分打赏档位" value={tippingAmounts} onChange={(value) => updateDraftField("tippingAmounts", value)} placeholder="如 10,30,50,100" />
             <AdminTippingGiftListEditor items={tippingGifts} onChange={(value) => updateDraftField("tippingGifts", value)} />
           </div>
         </>
+      ) : null}
+
+      {mode === "board-applications" && activeSubTab === "general" ? (
+        <div className="rounded-[24px] border border-border p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">节点申请</h3>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground">单独控制前台是否展示节点申请入口，以及是否允许用户提交新申请。</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AdminBooleanSelectField label="开启节点申请" checked={boardApplicationEnabled} onChange={(value) => updateDraftField("boardApplicationEnabled", value)} />
+          </div>
+          <p className="text-xs leading-6 text-muted-foreground">关闭后，前台设置导航会隐藏“节点申请”，直接访问对应页面也会被拦回个人资料页，同时新建申请接口会拒绝提交。</p>
+        </div>
       ) : null}
 
       {mode === "interaction" && activeSubTab === "gates" ? (
@@ -565,11 +697,11 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
             </div>
             <div className="grid gap-4 xl:grid-cols-2">
               <FieldGroup title="发帖">
-                <SwitchField label="发帖需已验证邮箱" checked={postCreateRequireEmailVerified} onChange={(value) => updateDraftField("postCreateRequireEmailVerified", value)} />
+                <AdminBooleanSelectField label="发帖需已验证邮箱" checked={postCreateRequireEmailVerified} onChange={(value) => updateDraftField("postCreateRequireEmailVerified", value)} />
                 <TextField label="注册满多少分钟才能发帖" value={postCreateMinRegisteredMinutes} onChange={(value) => updateDraftField("postCreateMinRegisteredMinutes", value)} placeholder="填 0 表示不限制" />
               </FieldGroup>
               <FieldGroup title="回复">
-                <SwitchField label="回复需已验证邮箱" checked={commentCreateRequireEmailVerified} onChange={(value) => updateDraftField("commentCreateRequireEmailVerified", value)} />
+                <AdminBooleanSelectField label="回复需已验证邮箱" checked={commentCreateRequireEmailVerified} onChange={(value) => updateDraftField("commentCreateRequireEmailVerified", value)} />
                 <TextField label="注册满多少分钟才能回复" value={commentCreateMinRegisteredMinutes} onChange={(value) => updateDraftField("commentCreateMinRegisteredMinutes", value)} placeholder="填 0 表示不限制" />
               </FieldGroup>
             </div>
@@ -586,7 +718,7 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">红包用于一次性预存发放；聚宝盆用于回复后给积分池注入积分，并按概率抽中奖励。</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <SwitchField label="开启帖子红包" checked={postRedPacketEnabled} onChange={(value) => updateDraftField("postRedPacketEnabled", value)} />
+              <AdminBooleanSelectField label="开启帖子红包" checked={postRedPacketEnabled} onChange={(value) => updateDraftField("postRedPacketEnabled", value)} />
               <TextField label="单个红包最大积分" value={postRedPacketMaxPoints} onChange={(value) => updateDraftField("postRedPacketMaxPoints", value)} placeholder="如 100" />
               <TextField label="每日发红包积分上限" value={postRedPacketDailyLimit} onChange={(value) => updateDraftField("postRedPacketDailyLimit", value)} placeholder="如 300" />
             </div>
@@ -599,7 +731,7 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
               />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <SwitchField label="开启聚宝盆" checked={postJackpotEnabled} onChange={(value) => updateDraftField("postJackpotEnabled", value)} />
+              <AdminBooleanSelectField label="开启聚宝盆" checked={postJackpotEnabled} onChange={(value) => updateDraftField("postJackpotEnabled", value)} />
               <TextField label="聚宝盆最低初始积分" value={postJackpotMinInitialPoints} onChange={(value) => updateDraftField("postJackpotMinInitialPoints", value)} placeholder="如 100" />
               <TextField label="聚宝盆最高初始积分" value={postJackpotMaxInitialPoints} onChange={(value) => updateDraftField("postJackpotMaxInitialPoints", value)} placeholder="如 1000" />
               <TextField label="每次回复递增积分" value={postJackpotReplyIncrementPoints} onChange={(value) => updateDraftField("postJackpotReplyIncrementPoints", value)} placeholder="如 25" />
@@ -716,40 +848,47 @@ Passkey Origin = ${resolvedPasskeyOrigin}`}</code></pre>
 }
 
 function resolveInternalSettingTab(mode: AdminBasicSettingsMode, initialSubTab?: string) {
+  if (mode === "interaction" && initialSubTab === "comment-tip") {
+    return "comments"
+  }
   const availableTabs = INTERNAL_SETTING_TABS[mode]
   return availableTabs.some((tab) => tab.key === initialSubTab) ? initialSubTab! : INTERNAL_SETTING_TAB_DEFAULT[mode]
 }
 
-function InternalSectionTabs({ tabs, activeTab, onChange }: { tabs: Array<{ key: string; label: string }>; activeTab: string; onChange: (value: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {tabs.map((tab) => {
-        const active = activeTab === tab.key
 
-        return (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => onChange(tab.key)}
-            className={active ? "rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background" : "rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"}
-          >
-            {tab.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+function InfoTextField(props: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  helpText: string
+}) {
+  const { label, value, onChange, placeholder, helpText } = props
 
-
-function SwitchField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      <select value={checked ? "on" : "off"} onChange={(event) => onChange(event.target.value === "on")} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none">
-        <option value="on">开启</option>
-        <option value="off">关闭</option>
-      </select>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium">{label}</p>
+        <div className="group relative inline-flex">
+          <button
+            type="button"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={`${label} 说明`}
+          >
+            <CircleHelp className="h-3.5 w-3.5" />
+          </button>
+          <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-2xl border border-border bg-popover px-3 py-2 text-xs leading-6 text-popover-foreground shadow-lg group-hover:block">
+            {helpText}
+          </div>
+        </div>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none"
+      />
     </div>
   )
 }

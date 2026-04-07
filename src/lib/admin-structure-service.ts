@@ -12,6 +12,7 @@ import {
 } from "@/db/admin-structure-queries"
 
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
+import { normalizeBoardSidebarLinks } from "@/lib/board-sidebar-config"
 import type { AdminActor } from "@/lib/moderator-permissions"
 import { ensureCanEditBoard, ensureCanEditZone, isSiteAdmin } from "@/lib/moderator-permissions"
 
@@ -33,7 +34,90 @@ function parseBoolean(value: unknown) {
   return value === true
 }
 
-function buildBoardAdvancedPayload(body: Record<string, unknown>) {
+interface MutableRecord {
+  [key: string]: unknown
+}
+
+function isRecord(value: unknown): value is MutableRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function buildBoardConfigJson(body: Record<string, unknown>, currentConfig?: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
+  const hasSidebarFields = [
+    "sidebarLinks",
+    "rulesMarkdown",
+    "moderatorsCanWithdrawTreasury",
+  ].some((field) => field in body)
+
+  if (!hasSidebarFields) {
+    return undefined
+  }
+
+  const hasSidebarLinks = "sidebarLinks" in body
+  const hasRulesMarkdown = "rulesMarkdown" in body
+  const hasTreasuryFields = "moderatorsCanWithdrawTreasury" in body
+  const sidebarLinks = hasSidebarLinks ? normalizeBoardSidebarLinks(body.sidebarLinks) : null
+  const rulesMarkdown = hasRulesMarkdown ? readOptionalStringField(body, "rulesMarkdown") : null
+  const nextConfig = isRecord(currentConfig) ? { ...currentConfig } : {}
+  const nextSidebar = isRecord(nextConfig.sidebar) ? { ...nextConfig.sidebar } : {}
+  const nextBoardTreasury = isRecord(nextConfig.boardTreasury) ? { ...nextConfig.boardTreasury } : {}
+
+  if (hasSidebarLinks) {
+    if (sidebarLinks && sidebarLinks.length > 0) {
+      nextSidebar.links = sidebarLinks.map((item) => ({
+        title: item.title,
+        url: item.url,
+        ...(item.icon ? { icon: item.icon } : {}),
+        ...(item.titleColor ? { titleColor: item.titleColor } : {}),
+      }))
+    } else {
+      delete nextSidebar.links
+      delete nextSidebar.link
+    }
+  }
+
+  if (hasRulesMarkdown) {
+    if (rulesMarkdown) {
+      nextSidebar.rulesMarkdown = rulesMarkdown
+    } else {
+      delete nextSidebar.rulesMarkdown
+    }
+  }
+
+  if (hasTreasuryFields) {
+    nextBoardTreasury.moderatorsCanWithdrawTreasury = parseBoolean(body.moderatorsCanWithdrawTreasury)
+  }
+
+  if (Object.keys(nextSidebar).length > 0) {
+    nextConfig.sidebar = nextSidebar
+  } else {
+    delete nextConfig.sidebar
+  }
+
+  if (Object.keys(nextBoardTreasury).length > 0) {
+    nextConfig.boardTreasury = nextBoardTreasury
+  } else {
+    delete nextConfig.boardTreasury
+  }
+
+  return Object.keys(nextConfig).length > 0 ? nextConfig as Prisma.InputJsonValue : Prisma.DbNull
+}
+
+function sanitizeBoardConfigPayloadForActor(
+  actor: AdminActor,
+  body: Record<string, unknown>,
+  currentConfig?: unknown,
+) {
+  if (isSiteAdmin(actor)) {
+    return buildBoardConfigJson(body, currentConfig)
+  }
+
+  const safeBody = { ...body }
+  delete safeBody.moderatorsCanWithdrawTreasury
+  return buildBoardConfigJson(safeBody, currentConfig)
+}
+
+function buildBoardAdvancedPayload(body: Record<string, unknown>, currentConfig?: unknown) {
   return {
     postPointDelta: parseNullableNumber(body.postPointDelta),
     replyPointDelta: parseNullableNumber(body.replyPointDelta),
@@ -52,6 +136,21 @@ function buildBoardAdvancedPayload(body: Record<string, unknown>) {
     requirePostReview: body.requirePostReview === undefined ? undefined : parseBoolean(body.requirePostReview),
     postListDisplayMode: normalizeNullablePostListDisplayMode(body.postListDisplayMode) ?? undefined,
     postListLoadMode: normalizeNullablePostListLoadMode(body.postListLoadMode) ?? undefined,
+    configJson: buildBoardConfigJson(body, currentConfig),
+  }
+}
+
+function ensureModeratorBoardAdvancedLimits(payload: ReturnType<typeof buildBoardAdvancedPayload>) {
+  const limitedFields = [
+    { label: "发帖积分", value: payload.postPointDelta },
+    { label: "回复积分", value: payload.replyPointDelta },
+    { label: "发帖间隔", value: payload.postIntervalSeconds },
+    { label: "回复间隔", value: payload.replyIntervalSeconds },
+  ]
+
+  const invalidField = limitedFields.find((field) => typeof field.value === "number" && field.value > 0)
+  if (invalidField) {
+    apiError(400, `版主编辑节点时，${invalidField.label}只能填写留空、0 或负数`)
   }
 }
 
@@ -62,6 +161,7 @@ function buildZonePayload(body: Record<string, unknown>, sortOrder: number, name
     description: description || undefined,
     icon,
     sortOrder,
+    hiddenFromSidebar: parseBoolean(body.hiddenFromSidebar),
     postPointDelta: parseNullableNumber(body.postPointDelta) ?? 0,
     replyPointDelta: parseNullableNumber(body.replyPointDelta) ?? 0,
     postIntervalSeconds: parseNullableNumber(body.postIntervalSeconds) ?? 120,
@@ -204,8 +304,15 @@ export async function updateStructureItem(params: {
     try {
       const currentBoard = await ensureCanEditBoard(params.actor, id)
       const zoneId = readOptionalStringField(rawBody, "zoneId")
+      const advancedPayload = {
+        ...buildBoardAdvancedPayload(rawBody, currentBoard.configJson),
+        configJson: sanitizeBoardConfigPayloadForActor(params.actor, rawBody, currentBoard.configJson),
+      }
       if (!isSiteAdmin(params.actor) && (zoneId || null) !== currentBoard.zoneId) {
         apiError(403, "版主不能调整节点所属分区")
+      }
+      if (!isSiteAdmin(params.actor)) {
+        ensureModeratorBoardAdvancedLimits(advancedPayload)
       }
       const icon = readOptionalStringField(rawBody, "icon") || "💬"
       await updateBoard(id, {
@@ -217,7 +324,7 @@ export async function updateStructureItem(params: {
         zoneId: zoneId || null,
         status: rawBody.status === "HIDDEN" || rawBody.status === "DISABLED" ? rawBody.status as BoardStatus : BoardStatus.ACTIVE,
         allowPost: rawBody.allowPost === undefined ? undefined : Boolean(rawBody.allowPost),
-        ...buildBoardAdvancedPayload(rawBody),
+        ...advancedPayload,
       })
 
       return { message: "节点已更新", action: "board.update", targetType: "BOARD", targetId: id, detail: `更新节点 ${name}` }

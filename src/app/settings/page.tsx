@@ -9,9 +9,12 @@ import { getSiteSettings } from "@/lib/site-settings"
 export async function generateMetadata(props: PageProps<"/settings">): Promise<Metadata> {
   const [searchParams, settings] = await Promise.all([props.searchParams, getSiteSettings()])
   const route = resolveSettingsRoute(searchParams)
+  const currentTab = !settings.boardApplicationEnabled && route.currentTab === "board-applications"
+    ? "profile"
+    : route.currentTab
 
   return {
-    title: `${settingsTabTitles[route.currentTab]} - ${settings.siteName}`,
+    title: `${settingsTabTitles[currentTab]} - ${settings.siteName}`,
   }
 }
 
@@ -23,7 +26,7 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-[1240px] px-4 py-8 lg:px-6">
-        <SettingsShell profile={data.profile} pointName={data.settings.pointName}>
+        <SettingsShell profile={data.profile} pointName={data.settings.pointName} boardApplicationEnabled={data.settings.boardApplicationEnabled}>
           <SettingsPageContent data={data} />
         </SettingsShell>
       </main>

@@ -68,7 +68,7 @@ export function AdminFooterLinksSettingsForm({ initialLinks }: AdminFooterLinksS
 
         <div className="space-y-3">
           {links.map((item, index) => (
-            <div key={`${index}-${item.label}-${item.href}`} className="grid gap-3 rounded-[20px] border border-border p-4 md:grid-cols-[1fr_1.4fr_auto] md:items-end">
+            <div key={`footer-link-${index}`} className="grid gap-3 rounded-[20px] border border-border p-4 md:grid-cols-[1fr_1.4fr_auto] md:items-end">
               <TextField label="显示名称" value={item.label} onChange={(value) => updateLink(index, "label", value)} placeholder="如 关于我们" />
               <TextField label="跳转地址" value={item.href} onChange={(value) => updateLink(index, "href", value)} placeholder="如 /about 或 https://example.com/about" />
               <Button type="button" variant="outline" onClick={() => removeLink(index)} className="rounded-full">删除</Button>

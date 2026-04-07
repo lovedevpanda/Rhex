@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { Flag } from "lucide-react"
+import { CornerDownRight, Flag } from "lucide-react"
 
+import { AnonymousUserIndicator } from "@/components/anonymous-user-indicator"
 import { CommentForm } from "@/components/comment-form"
 import { CommentLikeButton } from "@/components/comment-like-button"
 import { AdminCommentStatusNotice, buildCommentAdminActions, CommentAuthorIdentityBadges, CommentJackpotDepositBadge, CommentRewardBadge, CommentRewardEffectBadge, CommentUnavailablePlaceholder, copyCommentPermalink, getCommentUnavailableMessage, type CommentAdminAction } from "@/components/comment-thread-shared"
@@ -21,9 +22,8 @@ import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
 import { getVipNameClass } from "@/lib/vip-status"
 
-const INITIAL_VISIBLE_REPLIES = 10
-
 type ThreadEntry = SiteCommentItem | SiteCommentReplyItem
+export type CommentThreadReplyLayout = "tree" | "flat"
 
 interface CommentThreadCommentItemProps {
   comment: SiteCommentItem
@@ -41,7 +41,9 @@ interface CommentThreadCommentItemProps {
   pinningCommentId: string | null
   submittingAnswerId: string | null
   hideFloatingActionButtons: boolean
+  highlightedCommentId?: string | null
   isExpanded: boolean
+  initialVisibleReplies: number
   onToggleReplies: (commentId: string) => void
   onEnableReplyBox: (target: CommentReplyTarget) => void
   onAcceptAnswer: (commentId: string) => Promise<void>
@@ -51,29 +53,16 @@ interface CommentThreadCommentItemProps {
   onStopEdit: () => void
   canEditComment: (comment: ThreadEntry) => boolean
   getEditButtonLabel: (comment: ThreadEntry) => string
+  renderReplies?: boolean
+  isHighlighted?: boolean
 }
 
-function CommentThreadReplyItem({
-  reply,
-  parentCommentId,
-  pointName,
-  canReply,
-  currentUserId,
-  isAdmin,
-  adminRole,
-  markdownEmojiMap,
-  commentEditWindowMinutes,
-  editingCommentId,
-  hideFloatingActionButtons,
-  onEnableReplyBox,
-  onRunAdminAction,
-  onStartEdit,
-  onStopEdit,
-  canEditComment,
-  getEditButtonLabel,
-}: {
+interface CommentThreadReplyItemProps {
   reply: SiteCommentReplyItem
   parentCommentId: string
+  parentCommentFloor?: number
+  referenceCommentId?: string
+  parentCommentHref?: string
   pointName?: string
   canReply: boolean
   currentUserId?: number
@@ -89,11 +78,40 @@ function CommentThreadReplyItem({
   onStopEdit: () => void
   canEditComment: (comment: ThreadEntry) => boolean
   getEditButtonLabel: (comment: ThreadEntry) => string
-}) {
+  layout?: CommentThreadReplyLayout
+  isHighlighted?: boolean
+  onJumpToParentComment?: (commentId: string, href?: string) => void
+}
+
+export function CommentThreadReplyItem({
+  reply,
+  parentCommentId,
+  referenceCommentId,
+  parentCommentHref,
+  pointName,
+  canReply,
+  currentUserId,
+  isAdmin,
+  adminRole,
+  markdownEmojiMap,
+  commentEditWindowMinutes,
+  editingCommentId,
+  hideFloatingActionButtons,
+  onEnableReplyBox,
+  onRunAdminAction,
+  onStartEdit,
+  onStopEdit,
+  canEditComment,
+  getEditButtonLabel,
+  layout = "tree",
+  isHighlighted = false,
+  onJumpToParentComment,
+}: CommentThreadReplyItemProps) {
   const canEditCurrentReply = canEditComment(reply)
   const isRestrictedReplyAuthor = reply.authorStatus === "BANNED" || reply.authorStatus === "MUTED"
   const shouldDimRestrictedReplyAuthor = !isAdmin && isRestrictedReplyAuthor
   const isHiddenReplyForViewer = !isAdmin && reply.status === "HIDDEN"
+  const isFlatLayout = layout === "flat"
   const replyUnavailableMessage = getCommentUnavailableMessage({
     isAdmin,
     status: reply.status,
@@ -108,9 +126,15 @@ function CommentThreadReplyItem({
   return (
     <div
       id={`comment-${reply.id}`}
-      className="group relative rounded-[18px] bg-secondary/[0.22] px-3 py-2.5 transition-[background-color,transform] duration-150 hover:bg-accent/55 sm:px-3.5"
+      className={cn(
+        "group relative scroll-mt-20 sm:scroll-mt-24",
+        isHighlighted && "rounded-[18px] bg-amber-50/70 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-background dark:bg-amber-500/10 dark:ring-amber-400/40",
+        isFlatLayout
+          ? "border-t border-dashed border-border/70 py-3"
+          : "rounded-[18px] bg-secondary/[0.22] px-3 py-2.5 transition-[background-color,transform] duration-150 hover:bg-accent/55 sm:px-3.5",
+      )}
     >
-      <span aria-hidden="true" className="absolute -left-[14px] top-4 h-2 w-2 rounded-full bg-muted-foreground/30 sm:-left-[18px]" />
+      {!isFlatLayout ? <span aria-hidden="true" className="absolute -left-[14px] top-4 h-2 w-2 rounded-full bg-muted-foreground/30 sm:-left-[18px]" /> : null}
       <div className={cn(editingCommentId === reply.id ? "flex flex-col gap-2.5" : "flex items-start justify-between gap-2.5")}>
         <div className="flex min-w-0 flex-1 items-start gap-2.5">
           <Link href={`/users/${reply.authorUsername}`} className={cn("shrink-0", shouldDimRestrictedReplyAuthor && "grayscale")}>
@@ -119,7 +143,10 @@ function CommentThreadReplyItem({
           <div className={cn("min-w-0 flex-1", shouldDimRestrictedReplyAuthor && "grayscale")}>
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
               <VipNameTooltip isVip={reply.authorIsVip} level={reply.authorVipLevel}>
-                <Link href={`/users/${reply.authorUsername}`} className={getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })}>{reply.author}</Link>
+                <span className="inline-flex items-center gap-1">
+                  <Link href={`/users/${reply.authorUsername}`} className={getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })}>{reply.author}</Link>
+                  {reply.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
+                </span>
               </VipNameTooltip>
               <CommentAuthorIdentityBadges isPostAuthor={reply.isPostAuthor} authorRole={reply.authorRole} />
               <UserDisplayedBadges badges={reply.authorDisplayedBadges} compact appearance="plain" />
@@ -150,6 +177,26 @@ function CommentThreadReplyItem({
               ) : (
                 <>
                   {isAdmin ? <AdminCommentStatusNotice status={reply.status} /> : null}
+                  {isFlatLayout && (reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt) ? (
+                    <div className="mb-2.5 flex items-start gap-2">
+                      <CornerDownRight className="mt-3 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                      <div className="min-w-0 flex-1 rounded-2xl border border-border/70 bg-secondary/30 px-3 py-2.5 text-[12px] leading-5 text-muted-foreground">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-foreground/80">{reply.replyToCommentAuthor ?? reply.parentCommentAuthor ? `回复 @${reply.replyToCommentAuthor ?? reply.parentCommentAuthor}` : "回复原评论"}</span>
+                          {referenceCommentId ?? parentCommentId ? (
+                            <button
+                              type="button"
+                              onClick={() => onJumpToParentComment?.(referenceCommentId ?? parentCommentId, parentCommentHref)}
+                              className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              查看原文
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 line-clamp-2">{reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt}</p>
+                      </div>
+                    </div>
+                  ) : null}
                   {replyUnavailableMessage ? (
                     <CommentUnavailablePlaceholder message={replyUnavailableMessage} />
                   ) : (
@@ -175,7 +222,7 @@ function CommentThreadReplyItem({
             {canReply ? (
               <button
                 type="button"
-                onClick={() => onEnableReplyBox({ parentId: parentCommentId, replyToUserName: reply.author })}
+                onClick={() => onEnableReplyBox({ parentId: parentCommentId, replyToUserName: reply.author, replyToCommentId: reply.id })}
                 className="transition-colors hover:text-foreground"
               >
                 回复
@@ -190,6 +237,19 @@ function CommentThreadReplyItem({
                 icon={<Flag className="h-4 w-4" />}
                 buttonClassName="h-auto p-0 text-muted-foreground hover:text-foreground"
               />
+            ) : null}
+            {isFlatLayout && reply.flatFloor ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void copyCommentPermalink(reply.id, reply.flatFloor!)
+                }}
+                className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                title={`复制 #${reply.flatFloor} 楼链接`}
+                aria-label={`复制 #${reply.flatFloor} 楼链接`}
+              >
+                #{reply.flatFloor}
+              </button>
             ) : null}
           </div>
         </div>
@@ -233,7 +293,9 @@ export function CommentThreadCommentItem({
   pinningCommentId,
   submittingAnswerId,
   hideFloatingActionButtons,
+  highlightedCommentId = null,
   isExpanded,
+  initialVisibleReplies,
   onToggleReplies,
   onEnableReplyBox,
   onAcceptAnswer,
@@ -243,8 +305,10 @@ export function CommentThreadCommentItem({
   onStopEdit,
   canEditComment,
   getEditButtonLabel,
+  renderReplies = true,
+  isHighlighted = false,
 }: CommentThreadCommentItemProps) {
-  const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, INITIAL_VISIBLE_REPLIES)
+  const visibleReplies = isExpanded ? comment.replies : comment.replies.slice(0, initialVisibleReplies)
   const canAcceptCurrentComment = canAcceptAnswer && !comment.isAcceptedAnswer && currentUserId !== comment.authorId
   const canEditCurrentComment = canEditComment(comment)
   const isRestrictedCommentAuthor = comment.authorStatus === "BANNED" || comment.authorStatus === "MUTED"
@@ -264,7 +328,13 @@ export function CommentThreadCommentItem({
   })
 
   return (
-    <div id={`comment-${comment.id}`} className={index === 0 ? "group relative py-4" : "group relative border-t border-border/70 py-4"}>
+    <div
+      id={`comment-${comment.id}`}
+      className={cn(
+        index === 0 ? "group relative scroll-mt-20 py-4 sm:scroll-mt-24" : "group relative scroll-mt-20 border-t border-border/70 py-4 sm:scroll-mt-24",
+        isHighlighted && "rounded-[20px] bg-amber-50/70 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-background dark:bg-amber-500/10 dark:ring-amber-400/40",
+      )}
+    >
       <div className={cn("text-sm text-muted-foreground", editingCommentId === comment.id ? "flex flex-col gap-2.5" : "flex items-start justify-between gap-2.5")}>
         <div className="flex min-w-0 flex-1 items-start gap-2.5">
           <Link href={`/users/${comment.authorUsername}`} className={cn("shrink-0", shouldDimRestrictedCommentAuthor && "grayscale")}>
@@ -274,7 +344,10 @@ export function CommentThreadCommentItem({
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
               <UserVerificationBadge verification={comment.authorVerification ?? null} compact appearance="plain" />
               <VipNameTooltip isVip={comment.authorIsVip} level={comment.authorVipLevel}>
-                <Link href={`/users/${comment.authorUsername}`} className={getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })}>{comment.author}</Link>
+                <span className="inline-flex items-center gap-1">
+                  <Link href={`/users/${comment.authorUsername}`} className={getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })}>{comment.author}</Link>
+                  {comment.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
+                </span>
               </VipNameTooltip>
               <CommentAuthorIdentityBadges isPostAuthor={comment.isPostAuthor} authorRole={comment.authorRole} />
               <UserDisplayedBadges badges={comment.authorDisplayedBadges} compact appearance="plain" />
@@ -338,7 +411,7 @@ export function CommentThreadCommentItem({
             {canReply ? (
               <button
                 type="button"
-                onClick={() => onEnableReplyBox({ parentId: comment.id, replyToUserName: comment.author })}
+                onClick={() => onEnableReplyBox({ parentId: comment.id, replyToUserName: comment.author, replyToCommentId: comment.id })}
                 className="transition-colors hover:text-foreground"
               >
                 回复
@@ -364,13 +437,15 @@ export function CommentThreadCommentItem({
         </div>
       </div>
 
-      {comment.replies.length > 0 ? (
+      {renderReplies && comment.replies.length > 0 ? (
         <div className="relative mt-3 space-y-2 pl-3 before:absolute before:bottom-1 before:left-0 before:top-1 before:w-px before:bg-gradient-to-b before:from-border before:via-border/70 before:to-transparent sm:pl-4">
           {visibleReplies.map((reply) => (
             <CommentThreadReplyItem
               key={reply.id}
               reply={reply}
               parentCommentId={comment.id}
+              parentCommentFloor={comment.floor}
+              parentCommentHref={`?sort=oldest&page=1&view=tree#comment-${comment.id}`}
               pointName={pointName}
               canReply={canReply}
               currentUserId={currentUserId}
@@ -380,6 +455,7 @@ export function CommentThreadCommentItem({
               commentEditWindowMinutes={commentEditWindowMinutes}
               editingCommentId={editingCommentId}
               hideFloatingActionButtons={hideFloatingActionButtons}
+              isHighlighted={highlightedCommentId === reply.id}
               onEnableReplyBox={onEnableReplyBox}
               onRunAdminAction={onRunAdminAction}
               onStartEdit={onStartEdit}
@@ -389,9 +465,9 @@ export function CommentThreadCommentItem({
             />
           ))}
 
-          {comment.replies.length > INITIAL_VISIBLE_REPLIES ? (
-            <button type="button" title={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`} aria-label={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`} onClick={() => onToggleReplies(comment.id)} className="px-1 text-[11px] text-primary transition-opacity hover:opacity-80">
-              {isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - INITIAL_VISIBLE_REPLIES} 条回复`}
+          {comment.replies.length > initialVisibleReplies ? (
+            <button type="button" title={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - initialVisibleReplies} 条回复`} aria-label={isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - initialVisibleReplies} 条回复`} onClick={() => onToggleReplies(comment.id)} className="px-1 text-[11px] text-primary transition-opacity hover:opacity-80">
+              {isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - initialVisibleReplies} 条回复`}
             </button>
           ) : null}
         </div>

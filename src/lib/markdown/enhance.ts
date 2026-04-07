@@ -18,12 +18,19 @@ const BASE64_CANDIDATE_PATTERN = /[A-Za-z0-9+/]+={0,2}/g
 const BASE64_MIN_LENGTH = 16
 const BASE64_TEXT_NODE_EXCLUDE_SELECTOR = "a, button, code, pre, input, textarea, script, style, .md-copy-button, .md-base64-token, .md-heading-anchor, .katex, .hljs, .mermaid"
 
-export function bindImageLightbox(container: HTMLElement, onOpen: (images: LightboxImage[], index: number) => void) {
-  const imageEls = Array.from(container.querySelectorAll<HTMLImageElement>("img"))
-    .filter((image) => image.dataset.imageError !== "true")
-  const images: LightboxImage[] = imageEls
+function getLightboxImageElements(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLImageElement>("img"))
+    .filter((image) => image.dataset.imageError !== "true" && !image.closest(".md-emoji-image"))
+}
+
+function getLightboxImages(container: HTMLElement) {
+  return getLightboxImageElements(container)
     .map((img) => ({ src: img.getAttribute("src")?.trim() ?? "", alt: img.getAttribute("alt") ?? "" }))
     .filter((img) => img.src)
+}
+
+export function bindImageLightbox(container: HTMLElement, onOpen: (images: LightboxImage[], index: number) => void) {
+  const imageEls = getLightboxImageElements(container)
 
   for (const image of imageEls) {
     image.classList.add("cursor-zoom-in", "transition-opacity", "hover:opacity-90")
@@ -35,8 +42,11 @@ export function bindImageLightbox(container: HTMLElement, onOpen: (images: Light
   const handleContainerClick = (event: Event) => {
     const target = event.target
     if (!(target instanceof HTMLImageElement)) return
+    if (target.closest(".md-emoji-image")) return
     const src = target.getAttribute("src")?.trim()
     if (!src) return
+    if (target.dataset.imageError === "true") return
+    const images = getLightboxImages(container)
     const index = images.findIndex((img) => img.src === src)
     if (index === -1) return
     onOpen(images, index)
@@ -47,8 +57,11 @@ export function bindImageLightbox(container: HTMLElement, onOpen: (images: Light
     if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return
     const target = keyboardEvent.target
     if (!(target instanceof HTMLImageElement)) return
+    if (target.closest(".md-emoji-image")) return
     const src = target.getAttribute("src")?.trim()
     if (!src) return
+    if (target.dataset.imageError === "true") return
+    const images = getLightboxImages(container)
     const index = images.findIndex((img) => img.src === src)
     if (index === -1) return
     keyboardEvent.preventDefault()

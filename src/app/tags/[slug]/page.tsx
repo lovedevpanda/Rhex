@@ -76,7 +76,7 @@ export default async function TagPage(props: PageProps<"/tags/[slug]">) {
           zones={zones}
           boards={boards}
           main={(
-            <main className="pb-12 py-1">
+            <main className="pb-12 py-1 mt-5">
             <div className="space-y-6">
               <Card className="overflow-hidden border-none bg-gradient-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
                 <CardContent className="p-8">

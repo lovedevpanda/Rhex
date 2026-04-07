@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { AccessDeniedCard } from "@/components/access-denied-card"
+import { AnonymousUserIndicator } from "@/components/anonymous-user-indicator"
 import { ForumPostStream } from "@/components/forum-post-stream"
 import { LevelBadge } from "@/components/level-badge"
 import { MarkdownContent } from "@/components/markdown-content"
@@ -15,6 +16,7 @@ import { UserAvatar } from "@/components/user-avatar"
 import { UserProfileOverviewCard } from "@/components/user-profile-overview-card"
 import { UserStatusBadge } from "@/components/user-status-badge"
 import { UserVerificationBadge } from "@/components/user-verification-badge"
+import { canViewUserProfileVisibility } from "@/lib/user-profile-settings"
 import { VipDisplayName } from "@/components/vip-display-name"
 import { VipBadge } from "@/components/vip-badge"
 import { Button } from "@/components/ui/button"
@@ -83,7 +85,12 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
     )
   }
 
-  const canViewRecentActivity = user.activityVisibilityPublic || currentUser?.id === user.id
+  const visibilityContext = {
+    isOwner: currentUser?.id === user.id,
+    isLoggedIn: Boolean(currentUser),
+  }
+  const canViewRecentActivity = canViewUserProfileVisibility(user.activityVisibility, visibilityContext)
+  const canViewIntroduction = canViewUserProfileVisibility(user.introductionVisibility, visibilityContext)
   const introduction = user.introduction.trim()
 
   const [posts, recentReplies, badgeItems, isFollowingUser] = await Promise.all([
@@ -100,6 +107,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
   ])
 
   const canToggleFollow = (!currentUser || currentUser.id !== user.id) && !profileAccess.relation.isBlocked
+  const isAnonymousMaskUser = settings.anonymousPostMaskUserId === user.id
 
   const vipActive = isVipActive(user)
   const vipLevel = getVipLevel(user)
@@ -123,7 +131,6 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
     user.status === "MUTED" ? { label: "账号禁言中", tone: "warning" as const } : null,
     vipActive ? { label: `VIP${vipLevel}`, tone: "vip" as const } : null,
     user.levelName ? { label: user.levelName, tone: "level" as const } : null,
-    user.inviterUsername ? { label: `邀请人 @${user.inviterUsername}`, tone: "plain" as const } : null,
     user.inviteCount > 0 ? { label: "邀请达人", tone: "orange" as const } : null,
     user.likeReceivedCount >= 50 ? { label: "高赞用户", tone: "level" as const } : null,
     user.postCount >= 10 ? { label: "活跃创作者", tone: "sky" as const } : null,
@@ -150,15 +157,18 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                     <div className="min-w-0 flex-1 pt-0.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <UserVerificationBadge verification={user.verification ?? null} />
-                        <h1 className="min-w-0 truncate text-[22px] font-semibold leading-6 tracking-tight">
-                          <VipDisplayName
-                            name={user.displayName || user.username}
-                            isVip={vipActive}
-                            vipLevel={vipLevel}
-                            emphasize
-                            className="truncate"
-                          />
-                        </h1>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <h1 className="min-w-0 truncate text-[22px] font-semibold leading-6 tracking-tight">
+                            <VipDisplayName
+                              name={user.displayName || user.username}
+                              isVip={vipActive}
+                              vipLevel={vipLevel}
+                              emphasize
+                              className="truncate"
+                            />
+                          </h1>
+                          {isAnonymousMaskUser ? <AnonymousUserIndicator /> : null}
+                        </div>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {user.role === "ADMIN" ? <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-200">管理员</span> : null}
@@ -213,13 +223,16 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
             <UserProfileOverviewCard
               title={(
                 <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <VipDisplayName
-                    name={user.displayName}
-                    isVip={vipActive}
-                    vipLevel={vipLevel}
-                    emphasize
-                    className="min-w-0 truncate"
-                  />
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <VipDisplayName
+                      name={user.displayName}
+                      isVip={vipActive}
+                      vipLevel={vipLevel}
+                      emphasize
+                      className="min-w-0 truncate"
+                    />
+                    {isAnonymousMaskUser ? <AnonymousUserIndicator /> : null}
+                  </span>
                   <span className="shrink-0 text-foreground">的主页</span>
                 </span>
               )}
@@ -234,7 +247,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 activeLabel: "已关注用户",
                 inactiveLabel: "关注用户",
               } : null}
-              blockAction={currentUser && currentUser.id !== user.id ? {
+              blockAction={currentUser && currentUser.id !== user.id && !isAnonymousMaskUser ? {
                 targetId: user.id,
                 initialBlocked: profileAccess.relation.hasBlocked,
                 activeLabel: "已拉黑",
@@ -249,7 +262,11 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 {
                   key: "introduction",
                   label: "介绍",
-                  content: introduction ? (
+                  content: !canViewIntroduction ? (
+                    <div className="rounded-xl border border-dashed border-[#e8e8e8] px-4 py-12 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.02]">
+                      {user.introductionVisibility === "MEMBERS" ? "该用户将介绍设置为登录后可见。" : "该用户未公开介绍。"}
+                    </div>
+                  ) : introduction ? (
                     <div className="rounded-2xl border border-border/70 bg-card px-4 py-4 shadow-sm">
                       <MarkdownContent
                         content={introduction}
@@ -269,7 +286,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                   count: posts.length,
                   content: !canViewRecentActivity ? (
                     <div className="rounded-xl border border-dashed border-[#e8e8e8] px-4 py-12 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.02]">
-                      该用户未公开最近帖子。
+                      {user.activityVisibility === "MEMBERS" ? "该用户将最近帖子设置为登录后可见。" : "该用户未公开最近帖子。"}
                     </div>
                   ) : posts.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-[#e8e8e8] px-4 py-12 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.02]">
@@ -287,7 +304,7 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                     ? <UserRecentRepliesList replies={recentReplies} postLinkDisplayMode={settings.postLinkDisplayMode} />
                     : (
                       <div className="rounded-xl border border-dashed border-[#e8e8e8] px-4 py-12 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.02]">
-                        该用户未公开最近回复。
+                        {user.activityVisibility === "MEMBERS" ? "该用户将最近回复设置为登录后可见。" : "该用户未公开最近回复。"}
                       </div>
                     ),
                 },

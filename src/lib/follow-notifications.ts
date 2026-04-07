@@ -10,6 +10,7 @@ import {
 } from "@/db/follow-queries"
 import { enqueueBackgroundJob, registerBackgroundJobHandler } from "@/lib/background-jobs"
 import { createNotification, createNotifications } from "@/lib/notification-writes"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { getUserDisplayName } from "@/lib/users"
 
 const FOLLOW_NOTIFICATION_BATCH_SIZE = 200
@@ -61,10 +62,12 @@ export async function dispatchNewPostFollowNotifications(postId: string) {
   }
 
   const tagIds = context.tags.map((item) => item.tag.id)
-  const [authorFollowers, boardFollowers, tagFollowers] = await Promise.all([
-    findUserFollowerUserIds(context.author.id),
+  const anonymousMaskIdentityPromise = context.isAnonymous ? getAnonymousMaskDisplayIdentity() : Promise.resolve(null)
+  const [authorFollowers, boardFollowers, tagFollowers, anonymousMaskIdentity] = await Promise.all([
+    context.isAnonymous ? Promise.resolve([]) : findUserFollowerUserIds(context.author.id),
     findBoardFollowerUserIds(context.board.id),
     findTagFollowerUserIds(tagIds),
+    anonymousMaskIdentityPromise,
   ])
 
   const recipients = new Map<number, {
@@ -113,7 +116,9 @@ export async function dispatchNewPostFollowNotifications(postId: string) {
     })
   }
 
-  const authorName = getUserDisplayName(context.author)
+  const authorName = context.isAnonymous
+    ? (anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? "匿名用户")
+    : getUserDisplayName(context.author)
   const notifications = [...recipients.entries()].map(([userId, reason]) => {
     const tagNames = [...reason.tagNames]
     const reasonLabel = createReasonLabel({
@@ -149,7 +154,10 @@ export async function dispatchPostFollowCommentNotifications(params: {
 
   const excludeUserIds = new Set([context.userId, ...(params.excludeUserIds ?? [])])
   const followers = await findPostFollowerUserIds(context.post.id)
-  const senderName = getUserDisplayName(context.user)
+  const anonymousMaskIdentity = context.post.isAnonymous && context.post.authorId === context.userId && context.useAnonymousIdentity
+    ? await getAnonymousMaskDisplayIdentity()
+    : null
+  const senderName = anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? getUserDisplayName(context.user)
   const seenUserIds = new Set<number>()
   const notifications = followers.flatMap((item) => {
     if (excludeUserIds.has(item.userId) || seenUserIds.has(item.userId)) {

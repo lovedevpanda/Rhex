@@ -12,6 +12,7 @@ import {
 import { requireAdminUser } from "@/lib/admin"
 import { apiError } from "@/lib/api-route"
 import { formatMonthDayTime, serializeDateTime } from "@/lib/formatters"
+import { normalizeTrimmedText } from "@/lib/shared/normalizers"
 import {
   buildSiteDocumentHref,
   getSiteDocumentSourceTypeLabel,
@@ -61,10 +62,6 @@ export interface AdminSiteDocumentInput {
   titleBold?: boolean
   status: string
   isPinned?: boolean
-}
-
-function normalizeText(value: unknown, maxLength: number) {
-  return String(value ?? "").trim().slice(0, maxLength)
 }
 
 function normalizeStatus(value: unknown): AnnouncementStatus {
@@ -128,6 +125,38 @@ function mapSiteDocument(item: SiteDocumentRow): AdminSiteDocumentItem {
   }
 }
 
+function buildSiteDocumentUpdatePayload(
+  record: SiteDocumentRow,
+  overrides: Partial<{
+    title: string
+    content: string
+    status: AnnouncementStatus
+    isPinned: boolean
+    publishedAt: Date | null
+    type: SiteDocumentType
+    sourceType: SiteDocumentSourceType
+    slug: string | null
+    linkUrl: string | null
+    titleColor: string | null
+    titleBold: boolean
+  }> = {},
+) {
+  return {
+    title: record.title,
+    content: record.content,
+    status: record.status,
+    isPinned: record.isPinned,
+    publishedAt: record.publishedAt,
+    type: record.type as SiteDocumentType,
+    sourceType: record.sourceType as SiteDocumentSourceType,
+    slug: record.slug,
+    linkUrl: record.linkUrl,
+    titleColor: record.titleColor,
+    titleBold: record.titleBold,
+    ...overrides,
+  }
+}
+
 async function ensureUniqueDocumentSlug(type: SiteDocumentType, inputSlug: string, excludeId?: string) {
   const baseSlug = normalizeSiteDocumentSlug(inputSlug)
   if (!baseSlug) {
@@ -170,7 +199,7 @@ export async function saveAdminSiteDocument(input: AdminSiteDocumentInput) {
     apiError(404, "站点文档不存在")
   }
 
-  const title = normalizeText(input.title, 120)
+  const title = normalizeTrimmedText(input.title, 120)
   const status = normalizeStatus(input.status)
   const type = normalizeType(input.type)
   const sourceType = normalizeSourceType(input.sourceType)
@@ -267,19 +296,7 @@ export async function toggleAdminSiteDocumentPin(id: string, isPinned: boolean) 
     apiError(404, "站点文档不存在")
   }
 
-  const updated = await updateSiteDocumentRecordById(id, {
-    title: currentRecord.title,
-    content: currentRecord.content,
-    status: currentRecord.status,
-    isPinned,
-    publishedAt: currentRecord.publishedAt,
-    type: currentRecord.type as SiteDocumentType,
-    sourceType: currentRecord.sourceType as SiteDocumentSourceType,
-    slug: currentRecord.slug,
-    linkUrl: currentRecord.linkUrl,
-    titleColor: currentRecord.titleColor,
-    titleBold: currentRecord.titleBold,
-  })
+  const updated = await updateSiteDocumentRecordById(id, buildSiteDocumentUpdatePayload(currentRecord, { isPinned }))
 
   return mapSiteDocument(updated)
 }
@@ -306,19 +323,13 @@ export async function updateAdminSiteDocumentStatus(id: string, status: string) 
       ? null
       : currentRecord.publishedAt
 
-  const updated = await updateSiteDocumentRecordById(id, {
-    title: currentRecord.title,
-    content: currentRecord.content,
-    status: normalizedStatus,
-    isPinned: currentRecord.isPinned,
-    publishedAt,
-    type: currentRecord.type as SiteDocumentType,
-    sourceType: currentRecord.sourceType as SiteDocumentSourceType,
-    slug: currentRecord.slug,
-    linkUrl: currentRecord.linkUrl,
-    titleColor: currentRecord.titleColor,
-    titleBold: currentRecord.titleBold,
-  })
+  const updated = await updateSiteDocumentRecordById(
+    id,
+    buildSiteDocumentUpdatePayload(currentRecord, {
+      status: normalizedStatus,
+      publishedAt,
+    }),
+  )
 
   return mapSiteDocument(updated)
 }

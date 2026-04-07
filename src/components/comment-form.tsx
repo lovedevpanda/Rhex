@@ -16,18 +16,23 @@ interface CommentFormProps {
   editWindowMinutes?: number
   parentId?: string
   replyToUserName?: string
+  replyToCommentId?: string
   compact?: boolean
   onCancel?: () => void
   disabledMessage?: string | null
   commentsVisibleToAuthorOnly?: boolean
+  anonymousIdentityEnabled?: boolean
+  anonymousIdentityDefaultChecked?: boolean
+  anonymousIdentitySwitchVisible?: boolean
   markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
-export function CommentForm({ postId, commentId, initialContent = "", mode = "create", editWindowMinutes = 5, parentId, replyToUserName, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false, markdownEmojiMap }: CommentFormProps) {
+export function CommentForm({ postId, commentId, initialContent = "", mode = "create", editWindowMinutes = 5, parentId, replyToUserName, replyToCommentId, compact = false, onCancel, disabledMessage, commentsVisibleToAuthorOnly = false, anonymousIdentityEnabled = false, anonymousIdentityDefaultChecked = false, anonymousIdentitySwitchVisible = false, markdownEmojiMap }: CommentFormProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [content, setContent] = useState(initialContent)
+  const [useAnonymousIdentity, setUseAnonymousIdentity] = useState(anonymousIdentityDefaultChecked)
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState(mode === "edit" || !compact)
@@ -35,6 +40,10 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
   useEffect(() => {
     setContent(initialContent)
   }, [initialContent])
+
+  useEffect(() => {
+    setUseAnonymousIdentity(anonymousIdentityDefaultChecked)
+  }, [anonymousIdentityDefaultChecked])
 
   useEffect(() => {
     if (replyToUserName && mode === "create") {
@@ -60,7 +69,15 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(mode === "edit" ? { postId, commentId, content } : { postId, content, parentId, replyToUserName }),
+      body: JSON.stringify(mode === "edit" ? { postId, commentId, content } : {
+        postId,
+        content,
+        parentId,
+        replyToUserName,
+        replyToCommentId,
+        useAnonymousIdentity,
+        commentView: searchParams.get("view") === "flat" ? "flat" : "tree",
+      }),
     })
 
     const result = await response.json()
@@ -78,7 +95,7 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
     }
 
     const successMessage = mode === "edit" ? "评论修改成功" : parentId ? "回复提交成功" : "评论提交成功"
-    const navigation = result.data?.navigation as { page?: number; sort?: string; anchor?: string } | undefined
+    const navigation = result.data?.navigation as { page?: number; sort?: string; view?: string; anchor?: string } | undefined
     const nextSearchParams = new URLSearchParams(searchParams.toString())
 
     if (navigation?.page) {
@@ -86,6 +103,9 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
     }
     if (navigation?.sort) {
       nextSearchParams.set("sort", navigation.sort)
+    }
+    if (navigation?.view) {
+      nextSearchParams.set("view", navigation.view)
     }
 
     const nextUrl = navigation
@@ -138,6 +158,12 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : <span className="text-xs text-muted-foreground">{commentsVisibleToAuthorOnly ? "当前帖子开启了评论仅楼主可见，你的评论仅楼主、管理员和你自己可见。" : "可使用 @用户名 提及他人"}</span>}
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {mode === "create" && anonymousIdentityEnabled && anonymousIdentitySwitchVisible ? (
+            <label className="mr-auto inline-flex items-center gap-2 text-xs text-muted-foreground sm:mr-0">
+              <input type="checkbox" checked={useAnonymousIdentity} onChange={(event) => setUseAnonymousIdentity(event.target.checked)} className="h-4 w-4" />
+              继续使用匿名身份回复
+            </label>
+          ) : null}
           {(compact || replyToUserName || mode === "edit") ? (
             <Button type="button" variant="ghost" onClick={() => {
               setExpanded(false)

@@ -1,7 +1,9 @@
-import { findUserAccountSettingsById, findUserPostsByUsername, findUserProfileByUsername, findUserRepliesByUsername } from "@/db/user-queries"
+import { countUserPublicPostsByUsername, findUserAccountSettingsById, findUserPostsByUsername, findUserProfileByUsername, findUserRepliesByUsername } from "@/db/user-queries"
 import { getCurrentSessionActor } from "@/lib/auth"
 import { getLevelBadgeData } from "@/lib/level-badge"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { mapListPost } from "@/lib/post-map"
+import type { UserProfileVisibility } from "@/lib/user-profile-settings"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
 import { getUserDisplayName } from "@/lib/user-display"
 import { withRuntimeFallback } from "@/lib/runtime-errors"
@@ -37,7 +39,8 @@ export interface SiteUserProfile {
     color: string
     iconText?: string | null
   } | null
-  activityVisibilityPublic: boolean
+  activityVisibility: UserProfileVisibility
+  introductionVisibility: UserProfileVisibility
   postCount: number
   commentCount: number
   likeReceivedCount: number
@@ -48,7 +51,10 @@ export interface SiteUserProfile {
 
 export async function getUserProfile(username: string): Promise<SiteUserProfile | null> {
   return withRuntimeFallback(async () => {
-    const user = await findUserProfileByUsername(username)
+    const [user, publicPostCount] = await Promise.all([
+      findUserProfileByUsername(username),
+      countUserPublicPostsByUsername(username),
+    ])
 
     if (!user) {
       return null
@@ -85,8 +91,9 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
             iconText: approvedVerification.type.iconText,
           }
         : null,
-      activityVisibilityPublic: profileSettings.activityVisibilityPublic,
-      postCount: user.postCount,
+      activityVisibility: profileSettings.activityVisibility,
+      introductionVisibility: profileSettings.introductionVisibility,
+      postCount: publicPostCount,
       commentCount: user.commentCount,
       likeReceivedCount: user.likeReceivedCount,
       followerCount: user._count.followedByUsers,
@@ -114,9 +121,12 @@ export async function getCurrentUserProfile(): Promise<SiteUserProfile | null> {
 
 export async function getUserPosts(username: string) {
   try {
-    const posts = await findUserPostsByUsername(username)
+    const [posts, anonymousMaskIdentity] = await Promise.all([
+      findUserPostsByUsername(username),
+      getAnonymousMaskDisplayIdentity(),
+    ])
 
-    return posts.map(mapListPost)
+    return posts.map((post) => mapListPost(post, anonymousMaskIdentity))
   } catch (error) {
     console.error(error)
     return []
@@ -154,7 +164,8 @@ export async function getUserAccountSettings(userId: number) {
 
   return {
     ...settings,
-    activityVisibilityPublic: profileSettings.activityVisibilityPublic,
+    activityVisibility: profileSettings.activityVisibility,
+    introductionVisibility: profileSettings.introductionVisibility,
     externalNotificationEnabled: profileSettings.externalNotificationEnabled,
     notificationWebhookUrl: profileSettings.notificationWebhookUrl,
   }

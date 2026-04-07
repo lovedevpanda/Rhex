@@ -222,7 +222,7 @@ export async function copyCommentPermalink(commentId: string, floor: number) {
   }
 }
 
-export function CommentThreadReplyBox({ postId, commentsVisibleToAuthorOnly, markdownEmojiMap, replyTarget, replyHint, isReplyBoxPinned, isReplyBoxFollowing, replyBoxPinnedLayout, replyBoxContainerRef, onDisableReplyBox, onClearReplyTarget }: { postId: string; commentsVisibleToAuthorOnly: boolean; markdownEmojiMap?: MarkdownEmojiItem[]; replyTarget: CommentReplyTarget | null; replyHint: string | null; isReplyBoxPinned: boolean; isReplyBoxFollowing: boolean; replyBoxPinnedLayout: { left: number; width: number }; replyBoxContainerRef: RefObject<HTMLDivElement | null>; onDisableReplyBox: () => void; onClearReplyTarget: () => void }) {
+export function CommentThreadReplyBox({ postId, commentsVisibleToAuthorOnly, anonymousIdentityEnabled, anonymousIdentityDefaultChecked, anonymousIdentitySwitchVisible, markdownEmojiMap, replyTarget, replyHint, isReplyBoxPinned, isReplyBoxFollowing, replyBoxPinnedLayout, replyBoxContainerRef, onDisableReplyBox, onClearReplyTarget }: { postId: string; commentsVisibleToAuthorOnly: boolean; anonymousIdentityEnabled?: boolean; anonymousIdentityDefaultChecked?: boolean; anonymousIdentitySwitchVisible?: boolean; markdownEmojiMap?: MarkdownEmojiItem[]; replyTarget: CommentReplyTarget | null; replyHint: string | null; isReplyBoxPinned: boolean; isReplyBoxFollowing: boolean; replyBoxPinnedLayout: { left: number; width: number }; replyBoxContainerRef: RefObject<HTMLDivElement | null>; onDisableReplyBox: () => void; onClearReplyTarget: () => void }) {
   return (
     <div id="post-comment-reply-box" data-comment-reply-box="true" data-ignore-reply-shortcut="true" ref={replyBoxContainerRef} className="relative">
       {isReplyBoxPinned && isReplyBoxFollowing ? <div aria-hidden="true" className="h-[22rem] sm:h-[24rem]" /> : null}
@@ -245,7 +245,18 @@ export function CommentThreadReplyBox({ postId, commentsVisibleToAuthorOnly, mar
             <button type="button" className="text-primary transition-opacity hover:opacity-80" onClick={onClearReplyTarget}>改为普通回复</button>
           </div>
         ) : null}
-        <CommentForm postId={postId} parentId={replyTarget?.parentId} replyToUserName={replyTarget?.replyToUserName} onCancel={onClearReplyTarget} commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly} markdownEmojiMap={markdownEmojiMap} />
+        <CommentForm
+          postId={postId}
+          parentId={replyTarget?.parentId}
+          replyToUserName={replyTarget?.replyToUserName}
+          replyToCommentId={replyTarget?.replyToCommentId}
+          onCancel={onClearReplyTarget}
+          commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly}
+          anonymousIdentityEnabled={anonymousIdentityEnabled}
+          anonymousIdentityDefaultChecked={anonymousIdentityDefaultChecked}
+          anonymousIdentitySwitchVisible={anonymousIdentitySwitchVisible}
+          markdownEmojiMap={markdownEmojiMap}
+        />
       </div>
     </div>
   )

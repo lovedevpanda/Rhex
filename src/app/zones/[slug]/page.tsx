@@ -120,7 +120,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
           boards={allBoards}
           activeZoneSlug={zone.slug}
           main={(
-            <main className="pb-12 py-1">
+            <main className="pb-12 py-1 mt-5">
             <div className="space-y-3">
 
               <CollapsibleInfoCard

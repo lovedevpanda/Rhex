@@ -1,18 +1,27 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
+import { Ellipsis } from "lucide-react"
 
-import { CommentThreadCommentItem } from "@/components/comment-thread-items"
+import { CommentThreadCommentItem, CommentThreadReplyItem } from "@/components/comment-thread-items"
 import { CommentThreadReplyBox } from "@/components/comment-thread-shared"
 
-import type { SiteCommentItem, SiteCommentReplyItem } from "@/lib/comments"
+import {
+  DEFAULT_BROWSING_PREFERENCES,
+  readBrowsingPreferencesSnapshot,
+  subscribeBrowsingPreferences,
+  updateBrowsingPreferences,
+} from "@/lib/browsing-preferences"
+import type { SiteCommentItem, SiteCommentReplyItem, SiteFlatCommentItem } from "@/lib/comments"
 import { COMMENT_REPLY_TOGGLE_EVENT, emitCommentReplyState, type CommentReplyTarget, type CommentReplyToggleDetail } from "@/lib/comment-reply-box-events"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 
 interface CommentThreadProps {
   threadId: string
   comments: SiteCommentItem[]
+  flatComments?: SiteFlatCommentItem[]
   postId: string
   pointName?: string
   canReply: boolean
@@ -20,14 +29,19 @@ interface CommentThreadProps {
   pageSize: number
   total: number
   currentSort: "oldest" | "newest"
+  currentDisplayMode: "tree" | "flat"
   currentUserId?: number
   canAcceptAnswer?: boolean
   commentsVisibleToAuthorOnly?: boolean
+  anonymousReplyEnabled?: boolean
+  anonymousReplyDefaultChecked?: boolean
+  anonymousReplySwitchVisible?: boolean
   isAdmin?: boolean
   adminRole?: "ADMIN" | "MODERATOR" | null
   canPinComment?: boolean
   markdownEmojiMap?: MarkdownEmojiItem[]
   commentEditWindowMinutes?: number
+  initialVisibleReplies?: number
 }
 
 const REPLY_BOX_FOLLOW_ENTER_OFFSET = 72
@@ -49,7 +63,15 @@ function shouldIgnoreReplyShortcut(target: EventTarget | null) {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
 }
 
-export function CommentThread({ threadId, comments, postId, pointName, canReply, currentPage, pageSize, total, currentSort, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, isAdmin = false, adminRole = null, canPinComment = false, markdownEmojiMap, commentEditWindowMinutes = 5 }: CommentThreadProps) {
+export function CommentThread({ threadId, comments, flatComments = [], postId, pointName, canReply, currentPage, pageSize, total, currentSort, currentDisplayMode, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, anonymousReplyEnabled = false, anonymousReplyDefaultChecked = false, anonymousReplySwitchVisible = false, isAdmin = false, adminRole = null, canPinComment = false, markdownEmojiMap, commentEditWindowMinutes = 5, initialVisibleReplies = 10 }: CommentThreadProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const browsingPreferences = useSyncExternalStore(
+    subscribeBrowsingPreferences,
+    readBrowsingPreferencesSnapshot,
+    () => DEFAULT_BROWSING_PREFERENCES,
+  )
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [submittingAnswerId, setSubmittingAnswerId] = useState<string | null>(null)
   const [pinningCommentId, setPinningCommentId] = useState<string | null>(null)
@@ -57,12 +79,15 @@ export function CommentThread({ threadId, comments, postId, pointName, canReply,
   const [actionMessage, setActionMessage] = useState("")
   const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [showOnlyAuthorComments, setShowOnlyAuthorComments] = useState(false)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false)
   const [isReplyBoxPinned, setIsReplyBoxPinned] = useState(false)
   const [isReplyBoxFollowing, setIsReplyBoxFollowing] = useState(false)
   const [replyBoxPinnedLayout, setReplyBoxPinnedLayout] = useState({ left: 0, width: 0 })
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const replyBoxContainerRef = useRef<HTMLDivElement | null>(null)
   const replyBoxFollowRafRef = useRef<number | null>(null)
+  const viewMenuRef = useRef<HTMLDivElement | null>(null)
 
   const filteredComments = useMemo(() => {
     if (!showOnlyAuthorComments) {
@@ -76,8 +101,112 @@ export function CommentThread({ threadId, comments, postId, pointName, canReply,
         replies: comment.replies.filter((reply) => reply.isPostAuthor),
       }))
   }, [comments, showOnlyAuthorComments])
+  const filteredFlatComments = useMemo(() => {
+    if (!showOnlyAuthorComments) {
+      return flatComments
+    }
+
+    return flatComments.filter((entry) => entry.type === "comment" ? entry.comment.isPostAuthor : entry.reply.isPostAuthor)
+  }, [flatComments, showOnlyAuthorComments])
+  const buildCommentHref = useCallback((patch: { sort?: "oldest" | "newest"; page?: number; view?: "tree" | "flat" }) => {
+    const nextSearchParams = new URLSearchParams(searchParams.toString())
+    nextSearchParams.set("sort", patch.sort ?? currentSort)
+    nextSearchParams.set("page", String(patch.page ?? currentPage))
+    nextSearchParams.set("view", patch.view ?? currentDisplayMode)
+    return `${pathname}?${nextSearchParams.toString()}#comments`
+  }, [currentDisplayMode, currentPage, currentSort, pathname, searchParams])
 
   const replyHint = replyTarget ? `正在回复 @${replyTarget.replyToUserName}` : null
+
+  const triggerCommentHighlight = useCallback((commentId: string) => {
+    setHighlightedCommentId(null)
+    window.requestAnimationFrame(() => {
+      setHighlightedCommentId(commentId)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (searchParams.get("view")) {
+      return
+    }
+
+    const preferredView = browsingPreferences.commentThreadDisplayMode
+    if (preferredView === currentDisplayMode) {
+      return
+    }
+
+    router.replace(buildCommentHref({ page: 1, view: preferredView }), { scroll: false })
+  }, [browsingPreferences.commentThreadDisplayMode, buildCommentHref, currentDisplayMode, router, searchParams])
+
+  useEffect(() => {
+    function syncHighlightedCommentFromLocation() {
+      const highlightedFromSearch = searchParams.get("highlight")
+      if (highlightedFromSearch) {
+        triggerCommentHighlight(highlightedFromSearch)
+        const nextSearchParams = new URLSearchParams(searchParams.toString())
+        nextSearchParams.delete("highlight")
+        const nextSearch = nextSearchParams.toString()
+        const hash = typeof window === "undefined" ? "" : window.location.hash
+        window.history.replaceState(null, "", `${pathname}${nextSearch ? `?${nextSearch}` : ""}${hash}`)
+        return
+      }
+
+      const hash = typeof window === "undefined" ? "" : window.location.hash
+      if (!hash.startsWith("#comment-")) {
+        setHighlightedCommentId(null)
+        return
+      }
+
+      triggerCommentHighlight(hash.slice("#comment-".length))
+    }
+
+    syncHighlightedCommentFromLocation()
+    window.addEventListener("hashchange", syncHighlightedCommentFromLocation)
+
+    return () => {
+      window.removeEventListener("hashchange", syncHighlightedCommentFromLocation)
+    }
+  }, [pathname, searchParams, triggerCommentHighlight])
+
+  useEffect(() => {
+    if (!highlightedCommentId) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedCommentId((current) => current === highlightedCommentId ? null : current)
+    }, 2600)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [highlightedCommentId])
+
+  useEffect(() => {
+    if (!isViewMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!viewMenuRef.current?.contains(event.target as Node)) {
+        setIsViewMenuOpen(false)
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsViewMenuOpen(false)
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown)
+    window.addEventListener("keydown", handleEscape)
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown)
+      window.removeEventListener("keydown", handleEscape)
+    }
+  }, [isViewMenuOpen])
 
   const updateReplyBoxPinnedLayout = useCallback(() => {
     const element = replyBoxContainerRef.current
@@ -374,6 +503,31 @@ export function CommentThread({ threadId, comments, postId, pointName, canReply,
     return editingCommentId === comment.id ? "取消编辑" : "编辑"
   }
 
+  function changeDisplayMode(nextView: "tree" | "flat") {
+    updateBrowsingPreferences({ commentThreadDisplayMode: nextView })
+    setIsViewMenuOpen(false)
+    router.replace(buildCommentHref({ page: 1, view: nextView }))
+  }
+
+  function jumpToParentComment(commentId: string, href?: string) {
+    const target = document.getElementById(`comment-${commentId}`)
+    if (target) {
+      const search = searchParams.toString()
+      const nextUrl = `${pathname}${search ? `?${search}` : ""}#comment-${commentId}`
+      window.history.replaceState(null, "", nextUrl)
+      triggerCommentHighlight(commentId)
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+      return
+    }
+
+    if (href) {
+      router.replace(href, { scroll: true })
+    }
+  }
+
   const hideFloatingActionButtons = editingCommentId !== null
 
   return (
@@ -389,69 +543,174 @@ export function CommentThread({ threadId, comments, postId, pointName, canReply,
             {showOnlyAuthorComments ? "查看全部评论" : "只看楼主"}
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={`?sort=oldest&page=1`} className={currentSort === "oldest" ? "rounded-full bg-foreground px-2.5 py-1 text-[11px] text-background" : "rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground"}>最早</Link>
-          <Link href={`?sort=newest&page=1`} className={currentSort === "newest" ? "rounded-full bg-foreground px-2.5 py-1 text-[11px] text-background" : "rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground"}>最新</Link>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link href={buildCommentHref({ sort: "oldest", page: 1 })} className={currentSort === "oldest" ? "rounded-full bg-foreground px-2.5 py-1 text-[11px] text-background" : "rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground"}>最早</Link>
+          <Link href={buildCommentHref({ sort: "newest", page: 1 })} className={currentSort === "newest" ? "rounded-full bg-foreground px-2.5 py-1 text-[11px] text-background" : "rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground"}>最新</Link>
+          <div ref={viewMenuRef} className="relative">
+            {isViewMenuOpen ? (
+              <div className="absolute right-0 top-10 z-20 min-w-[112px] rounded-2xl border border-border bg-background/95 p-1.5 shadow-sm backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => changeDisplayMode("tree")}
+                  className={currentDisplayMode === "tree" ? "flex w-full rounded-xl bg-accent px-3 py-2 text-left text-[12px] font-medium text-foreground" : "flex w-full rounded-xl px-3 py-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"}
+                >
+                  树形
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeDisplayMode("flat")}
+                  className={currentDisplayMode === "flat" ? "flex w-full rounded-xl bg-accent px-3 py-2 text-left text-[12px] font-medium text-foreground" : "flex w-full rounded-xl px-3 py-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"}
+                >
+                  平铺
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              aria-label="评论视图"
+              title="评论视图"
+              onClick={() => setIsViewMenuOpen((current) => !current)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Ellipsis className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {showOnlyAuthorComments && filteredComments.length === 0 ? (
+      {showOnlyAuthorComments && (currentDisplayMode === "flat" ? filteredFlatComments.length === 0 : filteredComments.length === 0) ? (
         <div className="rounded-[20px] border border-dashed border-border bg-card px-4 py-6 text-sm text-muted-foreground">
           当前页暂无楼主评论
         </div>
       ) : null}
 
-      {filteredComments.map((comment, index) => (
-        <CommentThreadCommentItem
-          key={comment.id}
-          comment={comment}
-          index={index}
-          pointName={pointName}
-          canReply={canReply}
-          currentUserId={currentUserId}
-          canAcceptAnswer={canAcceptAnswer}
-          isAdmin={isAdmin}
-          adminRole={adminRole}
-          canPinComment={canPinComment}
-          markdownEmojiMap={markdownEmojiMap}
-          commentEditWindowMinutes={commentEditWindowMinutes}
-          editingCommentId={editingCommentId}
-          pinningCommentId={pinningCommentId}
-          submittingAnswerId={submittingAnswerId}
-          hideFloatingActionButtons={hideFloatingActionButtons}
-          isExpanded={expandedReplies[comment.id] ?? false}
-          onToggleReplies={toggleReplies}
-          onEnableReplyBox={(target) => enableReplyBox(target)}
-          onAcceptAnswer={acceptAnswer}
-          onRunAdminAction={runAdminAction}
-          onTogglePinnedComment={togglePinnedComment}
-          onStartEdit={startEdit}
-          onStopEdit={stopEdit}
-          canEditComment={canEditComment}
-          getEditButtonLabel={getEditButtonLabel}
-        />
-      ))}
+      {currentDisplayMode === "tree" ? (
+        filteredComments.map((comment, index) => (
+          <CommentThreadCommentItem
+            key={comment.id}
+            comment={comment}
+            index={index}
+            pointName={pointName}
+            canReply={canReply}
+            currentUserId={currentUserId}
+            canAcceptAnswer={canAcceptAnswer}
+            isAdmin={isAdmin}
+            adminRole={adminRole}
+            canPinComment={canPinComment}
+            markdownEmojiMap={markdownEmojiMap}
+            commentEditWindowMinutes={commentEditWindowMinutes}
+            editingCommentId={editingCommentId}
+            pinningCommentId={pinningCommentId}
+            submittingAnswerId={submittingAnswerId}
+            hideFloatingActionButtons={hideFloatingActionButtons}
+            isHighlighted={highlightedCommentId === comment.id}
+            highlightedCommentId={highlightedCommentId}
+            isExpanded={expandedReplies[comment.id] ?? false}
+            initialVisibleReplies={initialVisibleReplies}
+            onToggleReplies={toggleReplies}
+            onEnableReplyBox={(target) => enableReplyBox(target)}
+            onAcceptAnswer={acceptAnswer}
+            onRunAdminAction={runAdminAction}
+            onTogglePinnedComment={togglePinnedComment}
+            onStartEdit={startEdit}
+            onStopEdit={stopEdit}
+            canEditComment={canEditComment}
+            getEditButtonLabel={getEditButtonLabel}
+          />
+        ))
+      ) : (
+        filteredFlatComments.map((entry, index) => {
+          if (entry.type === "comment") {
+            return (
+              <CommentThreadCommentItem
+                key={entry.comment.id}
+                comment={entry.comment}
+                index={index}
+                pointName={pointName}
+                canReply={canReply}
+                currentUserId={currentUserId}
+                canAcceptAnswer={canAcceptAnswer}
+                isAdmin={isAdmin}
+                adminRole={adminRole}
+                canPinComment={canPinComment}
+                markdownEmojiMap={markdownEmojiMap}
+                commentEditWindowMinutes={commentEditWindowMinutes}
+                editingCommentId={editingCommentId}
+                pinningCommentId={pinningCommentId}
+                submittingAnswerId={submittingAnswerId}
+                hideFloatingActionButtons={hideFloatingActionButtons}
+                isHighlighted={highlightedCommentId === entry.comment.id}
+                highlightedCommentId={highlightedCommentId}
+                isExpanded={false}
+                initialVisibleReplies={initialVisibleReplies}
+                onToggleReplies={toggleReplies}
+                onEnableReplyBox={(target) => enableReplyBox(target)}
+                onAcceptAnswer={acceptAnswer}
+                onRunAdminAction={runAdminAction}
+                onTogglePinnedComment={togglePinnedComment}
+                onStartEdit={startEdit}
+                onStopEdit={stopEdit}
+                canEditComment={canEditComment}
+                getEditButtonLabel={getEditButtonLabel}
+                renderReplies={false}
+              />
+            )
+          }
+
+          return (
+            <CommentThreadReplyItem
+              key={entry.reply.id}
+              reply={entry.reply}
+              parentCommentId={entry.reply.parentCommentId ?? ""}
+              parentCommentFloor={entry.reply.parentCommentFloor}
+              referenceCommentId={entry.reply.replyToCommentId ?? entry.reply.parentCommentId}
+              parentCommentHref={entry.reply.replyToCommentId ? `?sort=${currentSort}&page=${entry.reply.replyToCommentPage ?? 1}&view=flat&highlight=${entry.reply.replyToCommentId}#comment-${entry.reply.replyToCommentId}` : entry.reply.parentCommentId ? `?sort=${currentSort}&page=${entry.reply.parentCommentPage ?? 1}&view=flat&highlight=${entry.reply.parentCommentId}#comment-${entry.reply.parentCommentId}` : undefined}
+              pointName={pointName}
+              canReply={canReply}
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+              adminRole={adminRole}
+              markdownEmojiMap={markdownEmojiMap}
+              commentEditWindowMinutes={commentEditWindowMinutes}
+              editingCommentId={editingCommentId}
+              hideFloatingActionButtons={hideFloatingActionButtons}
+              isHighlighted={highlightedCommentId === entry.reply.id}
+              onJumpToParentComment={jumpToParentComment}
+              onEnableReplyBox={(target) => enableReplyBox(target)}
+              onRunAdminAction={runAdminAction}
+              onStartEdit={startEdit}
+              onStopEdit={stopEdit}
+              canEditComment={canEditComment}
+              getEditButtonLabel={getEditButtonLabel}
+              layout="flat"
+            />
+          )
+        })
+      )}
 
       {actionMessage ? <p className="text-sm text-muted-foreground">{actionMessage}</p> : null}
 
       {totalPages > 1 ? (
         <div className="flex items-center justify-between pt-2">
-          <Link href={`?sort=${currentSort}&page=${Math.max(1, currentPage - 1)}`} className={currentPage <= 1 ? "pointer-events-none rounded-full border border-border bg-card px-4 py-2 text-sm opacity-50" : "rounded-full border border-border bg-card px-4 py-2 text-sm"}>
+          <Link href={buildCommentHref({ page: Math.max(1, currentPage - 1) })} className={currentPage <= 1 ? "pointer-events-none rounded-full border border-border bg-card px-4 py-2 text-sm opacity-50" : "rounded-full border border-border bg-card px-4 py-2 text-sm"}>
             上一页
           </Link>
           <span className="text-sm text-muted-foreground">第 {currentPage} / {totalPages} 页</span>
-          <Link href={`?sort=${currentSort}&page=${Math.min(totalPages, currentPage + 1)}`} className={currentPage >= totalPages ? "pointer-events-none rounded-full border border-border bg-card px-4 py-2 text-sm opacity-50" : "rounded-full border border-border bg-card px-4 py-2 text-sm"}>
+          <Link href={buildCommentHref({ page: Math.min(totalPages, currentPage + 1) })} className={currentPage >= totalPages ? "pointer-events-none rounded-full border border-border bg-card px-4 py-2 text-sm opacity-50" : "rounded-full border border-border bg-card px-4 py-2 text-sm"}>
             下一页
           </Link>
         </div>
       ) : null}
 
       {canReply ? (
-        <CommentThreadReplyBox
-          postId={postId}
-          commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly}
-          markdownEmojiMap={markdownEmojiMap}
-          replyTarget={replyTarget}
+          <CommentThreadReplyBox
+            postId={postId}
+            commentsVisibleToAuthorOnly={commentsVisibleToAuthorOnly}
+            anonymousIdentityEnabled={anonymousReplyEnabled}
+            anonymousIdentityDefaultChecked={anonymousReplyDefaultChecked}
+            anonymousIdentitySwitchVisible={anonymousReplySwitchVisible}
+            markdownEmojiMap={markdownEmojiMap}
+            replyTarget={replyTarget}
           replyHint={replyHint}
           isReplyBoxPinned={isReplyBoxPinned}
           isReplyBoxFollowing={isReplyBoxFollowing}

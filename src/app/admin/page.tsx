@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils"
 
 import { AdminAnnouncementManager } from "@/components/admin-announcement-manager"
 import { AdminAppsSettingsForm } from "@/components/admin-apps-settings-form"
-import { AdminInviteCodeManager } from "@/components/admin-invite-code-manager"
 import { AdminModuleSearch } from "@/components/admin-module-search"
 import { AdminFooterLinksSettingsForm } from "@/components/admin-footer-links-settings-form"
 import { AdminFriendLinksSettingsForm } from "@/components/admin-friend-links-settings-form"
@@ -19,12 +18,11 @@ import { AdminLevelSettingsForm } from "@/components/admin-level-settings-form"
 import { AdminLogCenter } from "@/components/admin-log-center"
 import { AdminMarkdownEmojiSettingsForm } from "@/components/admin-markdown-emoji-settings-form"
 import { AdminPostList } from "@/components/admin-post-list"
-import { AdminRedeemCodeManager } from "@/components/admin-redeem-code-manager"
 import { AdminReportCenter } from "@/components/admin-report-center"
 import { AdminSensitiveWordManager } from "@/components/admin-sensitive-word-manager"
 import { AdminSettingsTabs } from "@/components/admin-settings-tabs"
 import { AdminUploadSettingsForm } from "@/components/admin-upload-settings-form"
-import { StructureManager } from "@/components/admin-structure-forms"
+import { AdminBoardApplicationManager, StructureManager } from "@/components/admin-structure-forms"
 import { AdminShell, adminNavigation } from "@/components/admin-shell"
 import { AdminUserList } from "@/components/admin-user-list"
 import { AdminVipSettingsForm } from "@/components/admin-vip-settings-form"
@@ -48,18 +46,19 @@ import { readSearchParam } from "@/lib/search-params"
 import { getSensitiveWordPage, getServerSiteSettings } from "@/lib/site-settings"
 import { requireAdminActor } from "@/lib/moderator-permissions"
 
-type AdminTabKey = "overview" | "users" | "posts" | "structure" | "levels" | "badges" | "verifications" | "announcements" | "reports" | "logs" | "security" | "settings"
-type AdminSettingsSectionKey = "profile" | "markdown-emoji" | "footer-links" | "apps" | "registration" | "interaction" | "friend-links" | "invite-codes" | "redeem-codes" | "vip" | "upload"
+type AdminTabKey = "overview" | "users" | "posts" | "structure" | "board-applications" | "levels" | "badges" | "verifications" | "announcements" | "reports" | "logs" | "security" | "settings"
+type AdminSettingsSectionKey = "profile" | "markdown-emoji" | "footer-links" | "apps" | "registration" | "board-applications" | "interaction" | "friend-links" | "invite-codes" | "redeem-codes" | "vip" | "upload"
 
-const adminTabs: AdminTabKey[] = ["overview", "users", "posts", "structure", "levels", "badges", "verifications", "announcements", "reports", "logs", "security", "settings"]
-const adminSettingsSections: AdminSettingsSectionKey[] = ["profile", "markdown-emoji", "footer-links", "apps", "registration", "interaction", "friend-links", "invite-codes", "redeem-codes", "vip", "upload"]
-const sectionsRequiringSiteSettings = new Set<AdminSettingsSectionKey>(["profile", "markdown-emoji", "footer-links", "apps", "registration", "interaction", "vip", "upload"])
+const adminTabs: AdminTabKey[] = ["overview", "users", "posts", "structure", "board-applications", "levels", "badges", "verifications", "announcements", "reports", "logs", "security", "settings"]
+const adminSettingsSections: AdminSettingsSectionKey[] = ["profile", "markdown-emoji", "footer-links", "apps", "registration", "board-applications", "interaction", "friend-links", "invite-codes", "redeem-codes", "vip", "upload"]
+const sectionsRequiringSiteSettings = new Set<AdminSettingsSectionKey>(["profile", "markdown-emoji", "footer-links", "apps", "registration", "board-applications", "interaction", "vip", "upload"])
 
 const tabLabels: Record<AdminTabKey, string> = {
   overview: "总览",
   users: "用户管理",
   posts: "帖子管理",
   structure: "版块管理",
+  "board-applications": "节点申请",
   levels: "等级系统",
   badges: "勋章系统",
   verifications: "认证系统",
@@ -112,6 +111,15 @@ export default async function AdminPage(props: PageProps<"/admin">) {
     ? ((currentSettingsSectionValue as AdminSettingsSectionKey) ?? "profile")
     : "profile"
   const currentSettingsSubTab = readSearchParam(searchParams?.subTab) ?? ""
+
+  if (tab === "settings" && admin.role === "ADMIN") {
+    if (currentSettingsSection === "invite-codes") {
+      redirect("/admin?tab=settings&section=registration&subTab=invite-codes")
+    }
+    if (currentSettingsSection === "redeem-codes") {
+      redirect("/admin?tab=settings&section=vip&subTab=redeem-codes")
+    }
+  }
   const currentPostTypeValue = readSearchParam(searchParams?.type)
   const currentPostType = isLocalPostType(currentPostTypeValue) ? currentPostTypeValue : "ALL"
   const currentPostStatusValue = readSearchParam(searchParams?.status)
@@ -159,7 +167,7 @@ export default async function AdminPage(props: PageProps<"/admin">) {
     admin.role === "ADMIN" && tab === "overview"
       ? getAdminDashboardData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminDashboardData>> | null>(null),
-    tab === "structure"
+    tab === "structure" || tab === "board-applications"
       ? getAdminStructureData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminStructureData>> | null>(null),
     admin.role === "ADMIN" && tab === "settings" && sectionsRequiringSiteSettings.has(currentSettingsSection)
@@ -194,10 +202,10 @@ export default async function AdminPage(props: PageProps<"/admin">) {
     admin.role === "ADMIN" && tab === "levels" ? getLevelDefinitions() : Promise.resolve<Awaited<ReturnType<typeof getLevelDefinitions>>>([]),
     admin.role === "ADMIN" && tab === "badges" ? getAllBadges() : Promise.resolve<Awaited<ReturnType<typeof getAllBadges>>>([]),
     admin.role === "ADMIN" && tab === "announcements" ? getAdminAnnouncementList() : Promise.resolve<Awaited<ReturnType<typeof getAdminAnnouncementList>>>([]),
-    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "invite-codes"
+    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "registration"
       ? getInviteCodeList()
       : Promise.resolve<Awaited<ReturnType<typeof getInviteCodeList>>>([]),
-    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "redeem-codes"
+    admin.role === "ADMIN" && tab === "settings" && currentSettingsSection === "vip"
       ? getRedeemCodeList()
       : Promise.resolve<Awaited<ReturnType<typeof getRedeemCodeList>>>([]),
     admin.role === "ADMIN" && tab === "reports"
@@ -243,13 +251,11 @@ export default async function AdminPage(props: PageProps<"/admin">) {
 
         {tab === "overview" ? (
           <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
               <CompactStatCard title="注册用户" value={dashboardData!.overview.userCount} icon={<Users className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newUserCount7d)}`} />
               <CompactStatCard title="帖子总数" value={dashboardData!.overview.postCount} icon={<FileText className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newPostCount7d)}`} tone="emerald" />
               <CompactStatCard title="评论总数" value={dashboardData!.overview.commentCount} icon={<MessageSquare className="h-4 w-4" />} hint={`近 7 天 +${formatNumber(dashboardData!.overview.newCommentCount7d)}`} tone="violet" />
               <CompactStatCard title="活跃用户" value={dashboardData!.overview.activeUserCount7d} icon={<TrendingUp className="h-4 w-4" />} hint="近 7 天登录/发帖/评论活跃" tone="sky" />
-              <CompactStatCard title="待处理举报" value={dashboardData!.overview.pendingReportCount} icon={<AlertTriangle className="h-4 w-4" />} hint={`累计 ${formatNumber(dashboardData!.overview.reportCount)} 条`} tone="rose" />
-              <CompactStatCard title="待审核帖子" value={dashboardData!.overview.pendingPostCount} icon={<FileText className="h-4 w-4" />} hint={`已下线 ${formatNumber(dashboardData!.overview.offlinePostCount)} 篇`} tone="amber" />
               <CompactStatCard title="节点数量" value={dashboardData!.overview.boardCount} icon={<LayoutGrid className="h-4 w-4" />} hint={`分区 ${formatNumber(dashboardData!.overview.zoneCount)} 个`} />
               <CompactStatCard title="风控用户" value={dashboardData!.overview.mutedUserCount + dashboardData!.overview.bannedUserCount} icon={<Ban className="h-4 w-4" />} hint={`禁言 ${formatNumber(dashboardData!.overview.mutedUserCount)} / 封禁 ${formatNumber(dashboardData!.overview.bannedUserCount)}`} tone="slate" />
             </section>
@@ -318,6 +324,7 @@ export default async function AdminPage(props: PageProps<"/admin">) {
                   <CardTitle className="text-base">运营待办</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-2 pt-0 sm:grid-cols-2">
+                  <PendingReviewCard href="/admin?tab=board-applications" title="待审核节点" value={dashboardData!.overview.pendingBoardApplicationCount} description="审核用户提交的节点申请与分区归属" icon={<LayoutGrid className="h-3.5 w-3.5" />} />
                   <PendingReviewCard href="/admin?tab=verifications" title="待认证审核" value={dashboardData!.overview.pendingVerificationCount} description="处理用户身份与资质认证申请" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
                   <PendingReviewCard href="/admin?tab=settings&section=friend-links" title="友情链接审核" value={dashboardData!.overview.pendingFriendLinkCount} description="审核站点互链申请与展示资料" icon={<Shield className="h-3.5 w-3.5" />} />
                   <PendingReviewCard href="/admin/apps/self-serve-ads" title="广告审核" value={dashboardData!.overview.pendingAdOrderCount} description="审核自助推广广告位申请内容" icon={<Megaphone className="h-3.5 w-3.5" />} />
@@ -388,7 +395,8 @@ export default async function AdminPage(props: PageProps<"/admin">) {
 
         {tab === "users" ? <AdminUserList data={adminUsers!} /> : null}
         {tab === "posts" ? <AdminPostList data={filteredPosts!} /> : null}
-        {tab === "structure" ? <StructureManager zones={structureData!.zones} boards={structureData!.boardStatus} permissions={structureData!.permissions} initialFilters={{ keyword: currentStructureKeyword, zoneId: currentStructureZoneId, boardStatus: currentStructureBoardStatus, posting: currentStructurePosting }} /> : null}
+        {tab === "structure" ? <StructureManager zones={structureData!.zones} boards={structureData!.boardStatus} permissions={structureData!.permissions} canReviewBoardApplications={structureData!.canReviewBoardApplications} pendingBoardApplicationCount={structureData!.boardApplications.filter((item) => item.status === "PENDING").length} initialFilters={{ keyword: currentStructureKeyword, zoneId: currentStructureZoneId, boardStatus: currentStructureBoardStatus, posting: currentStructurePosting }} /> : null}
+        {tab === "board-applications" ? <AdminBoardApplicationManager zones={structureData!.zones} boardApplications={structureData!.boardApplications} canReviewBoardApplications={structureData!.canReviewBoardApplications} /> : null}
         {tab === "levels" ? <AdminLevelSettingsForm initialLevels={levelDefinitions} /> : null}
         {tab === "badges" ? <AdminBadgeManager initialLevelDefinitions={levelDefinitions} initialBadges={badges.map((badge: BadgeItem) => ({
           id: badge.id,
@@ -440,12 +448,11 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         {tab === "settings" && currentSettingsSection === "markdown-emoji" ? <AdminMarkdownEmojiSettingsForm initialItems={siteSettings!.markdownEmojiMap} /> : null}
         {tab === "settings" && currentSettingsSection === "footer-links" ? <AdminFooterLinksSettingsForm initialLinks={siteSettings!.footerLinks} /> : null}
         {tab === "settings" && currentSettingsSection === "apps" ? <AdminAppsSettingsForm initialLinks={siteSettings!.headerAppLinks} initialIconName={siteSettings!.headerAppIconName} /> : null}
-        {tab === "settings" && currentSettingsSection === "registration" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="registration" initialSubTab={currentSettingsSubTab} /> : null}
+        {tab === "settings" && currentSettingsSection === "registration" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="registration" initialSubTab={currentSettingsSubTab} initialInviteCodes={inviteCodes} /> : null}
+        {tab === "settings" && currentSettingsSection === "board-applications" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="board-applications" initialSubTab={currentSettingsSubTab} /> : null}
         {tab === "settings" && currentSettingsSection === "interaction" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="interaction" initialSubTab={currentSettingsSubTab} /> : null}
         {tab === "settings" && currentSettingsSection === "friend-links" ? <AdminFriendLinksSettingsForm initialSettings={friendLinks!.settings} items={friendLinks!.items} pendingCount={friendLinks!.pendingCount} /> : null}
-        {tab === "settings" && currentSettingsSection === "invite-codes" ? <AdminInviteCodeManager initialInviteCodes={inviteCodes} /> : null}
-        {tab === "settings" && currentSettingsSection === "redeem-codes" ? <AdminRedeemCodeManager initialRedeemCodes={redeemCodes} /> : null}
-        {tab === "settings" && currentSettingsSection === "vip" ? <AdminVipSettingsForm initialSettings={siteSettings!} /> : null}
+        {tab === "settings" && currentSettingsSection === "vip" ? <AdminVipSettingsForm initialSettings={siteSettings!} initialSubTab={currentSettingsSubTab} initialRedeemCodes={redeemCodes} /> : null}
         {tab === "settings" && currentSettingsSection === "upload" ? <AdminUploadSettingsForm initialSettings={siteSettings!} /> : null}
 
         {tab === "reports" ? <AdminReportCenter data={reports!} /> : null}

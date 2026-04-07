@@ -1,4 +1,6 @@
 @import "katex/dist/katex.min.css";
+@import "yet-another-react-lightbox/styles.css";
+@import "yet-another-react-lightbox/plugins/counter.css";
 
 @tailwind base;
 @tailwind components;
@@ -20,6 +22,7 @@
   --border: 214 18% 88%;
   --ring: 217 91% 60%;
   --radius: 1rem;
+  --theme-font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 .dark {
@@ -45,6 +48,7 @@
 
 body {
   @apply min-h-screen bg-background text-foreground antialiased;
+  font-family: var(--theme-font-family, "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif);
 }
 
 a {
@@ -226,14 +230,18 @@ a {
   max-height: none;
   flex: none;
 }
-
+.my-3,
+img.my-4 {
+  max-width: 20em;
+  height: auto;
+}
 .markdown-body .md-emoji-image .md-emoji-icon {
   display: block;
   width: auto;
   height: auto;
   object-fit: contain;
-  max-width: 2em;
-  max-height: 2em;
+  max-width: 6em;
+  max-height: 6em;
   flex: none;
 }
 
@@ -310,6 +318,98 @@ a {
   background:
     linear-gradient(135deg, rgba(34, 17, 22, 0.96), rgba(18, 10, 13, 0.98)),
     radial-gradient(circle at top right, rgba(244, 63, 94, 0.14), transparent 42%);
+}
+
+.markdown-lightbox-viewer {
+  --yarl__portal_zindex: 2000;
+  --yarl__color_backdrop: rgba(0, 0, 0, 0.92);
+  --yarl__button_filter: none;
+  --yarl__icon_size: 20px;
+}
+
+.markdown-lightbox-viewer .yarl__toolbar {
+  padding: 12px;
+}
+
+.markdown-lightbox-viewer .yarl__toolbar .yarl__button,
+.markdown-lightbox-viewer .yarl__navigation_prev,
+.markdown-lightbox-viewer .yarl__navigation_next,
+.markdown-lightbox-viewer .yarl__counter {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+}
+
+.markdown-lightbox-viewer .yarl__toolbar .yarl__button,
+.markdown-lightbox-viewer .yarl__counter {
+  border-radius: 9999px;
+}
+
+.markdown-lightbox-viewer .yarl__navigation_prev,
+.markdown-lightbox-viewer .yarl__navigation_next {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  transform: translateY(-50%);
+  line-height: 1;
+  text-align: center;
+  padding: 0;
+}
+
+.markdown-lightbox-viewer .yarl__navigation_prev {
+  left: 16px;
+}
+
+.markdown-lightbox-viewer .yarl__navigation_next {
+  right: 16px;
+}
+
+.markdown-lightbox-viewer .yarl__toolbar .yarl__button:hover,
+.markdown-lightbox-viewer .yarl__navigation_prev:hover,
+.markdown-lightbox-viewer .yarl__navigation_next:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.markdown-lightbox-viewer .yarl__toolbar .yarl__button {
+  margin: 0 0 0 8px;
+  padding: 10px;
+}
+
+.markdown-lightbox-viewer .yarl__counter {
+  top: 12px;
+  left: 12px;
+  right: auto;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.markdown-lightbox-viewer .markdown-lightbox-counter {
+  min-width: 58px;
+  text-align: center;
+}
+
+.markdown-lightbox-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+@media (min-width: 640px) {
+  .markdown-lightbox-viewer .yarl__navigation_prev {
+    left: 20px;
+  }
+
+  .markdown-lightbox-viewer .yarl__navigation_next {
+    right: 20px;
+  }
 }
 
 .markdown-body .md-callout::before {
@@ -498,11 +598,15 @@ html.dark .sidebar-user-card-header {
 
 @media (min-width: 1024px) {
   .forum-page-shell {
-    grid-template-columns: 175px minmax(0, 1fr) 274px;
+    --forum-left-column-width: 175px;
+    --forum-right-column-width: 274px;
+    grid-template-columns: var(--forum-left-column-width) minmax(0, 1fr) var(--forum-right-column-width);
+    transform: translateX(calc((var(--forum-right-column-width) - var(--forum-left-column-width)) / 2));
   }
 
   html[data-sidebar-collapsed="true"] .forum-page-shell {
-    grid-template-columns: 52px minmax(0, 1fr) 274px;
+    --forum-left-column-width: 52px;
+    grid-template-columns: var(--forum-left-column-width) minmax(0, 1fr) var(--forum-right-column-width);
     column-gap: 0.2rem;
   }
 

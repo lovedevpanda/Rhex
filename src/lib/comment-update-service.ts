@@ -15,7 +15,11 @@ export async function updateCommentFlow(input: {
     nickname?: string | null
   }
 }) {
-  const validated = validateCommentPayload(input.body)
+  const settings = await getSiteSettings()
+  const validated = validateCommentPayload(input.body, {
+    contentMinLength: settings.commentContentMinLength,
+    contentMaxLength: settings.commentContentMaxLength,
+  })
 
   if (!validated.success || !validated.data) {
     apiError(400, validated.message ?? "参数错误")
@@ -30,10 +34,7 @@ export async function updateCommentFlow(input: {
     apiError(400, "缺少评论 ID")
   }
 
-  const [comment, settings] = await Promise.all([
-    findEditableCommentById(commentId),
-    getSiteSettings(),
-  ])
+  const comment = await findEditableCommentById(commentId)
 
   if (!comment || comment.postId !== postId || comment.status !== "NORMAL") {
     apiError(404, "评论不存在或不可编辑")

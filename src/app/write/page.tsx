@@ -140,6 +140,8 @@ export default async function WritePage(props: PageProps<"/write">) {
                 <CreatePostForm
                   boardOptions={boardOptions}
                   pointName={settings.pointName}
+                  anonymousPostEnabled={settings.anonymousPostEnabled}
+                  anonymousPostPrice={settings.anonymousPostPrice}
                   markdownEmojiMap={settings.markdownEmojiMap}
                   currentUser={{
                     username: user.username,
@@ -157,6 +159,7 @@ export default async function WritePage(props: PageProps<"/write">) {
                   initialValues={{
                     title: editingPost.title,
                     content: publicBlock?.text ?? editingPost.content,
+                    isAnonymous: editingPost.isAnonymous,
                     coverPath: editingPost.coverPath,
                     commentsVisibleToAuthorOnly: editingPost.commentsVisibleToAuthorOnly,
                     replyUnlockContent: replyUnlockBlock?.text ?? "",
@@ -201,6 +204,8 @@ export default async function WritePage(props: PageProps<"/write">) {
               <CreatePostForm
                 boardOptions={boardOptions}
                 pointName={settings.pointName}
+                anonymousPostEnabled={settings.anonymousPostEnabled}
+                anonymousPostPrice={settings.anonymousPostPrice}
                 postRedPacketEnabled={settings.postRedPacketEnabled}
                 postRedPacketMaxPoints={settings.postRedPacketMaxPoints}
                 postJackpotEnabled={settings.postJackpotEnabled}
@@ -219,7 +224,7 @@ export default async function WritePage(props: PageProps<"/write">) {
                 }}
                 viewLevelOptions={viewLevelOptions}
                 viewVipLevelOptions={viewVipLevelOptions}
-                initialValues={preferredBoardSlug ? { title: "", content: "", boardSlug: preferredBoardSlug, postType: "NORMAL" } : undefined}
+                initialValues={preferredBoardSlug ? { title: "", content: "", isAnonymous: false, boardSlug: preferredBoardSlug, postType: "NORMAL" } : undefined}
               />
             )}
           </CardContent>

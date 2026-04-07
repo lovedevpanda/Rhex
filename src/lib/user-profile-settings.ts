@@ -1,25 +1,59 @@
 const PROFILE_SETTINGS_KEY = "__profileSettings"
 const RAW_SIGNATURE_KEY = "__rawSignatureText"
 
+export type UserProfileVisibility = "PUBLIC" | "MEMBERS" | "PRIVATE"
+
+export const USER_PROFILE_VISIBILITY_VALUES = ["PUBLIC", "MEMBERS", "PRIVATE"] as const
+
 export interface UserProfileSettings {
-  activityVisibilityPublic: boolean
+  activityVisibility: UserProfileVisibility
+  introductionVisibility: UserProfileVisibility
   introduction: string
   externalNotificationEnabled: boolean
   notificationWebhookUrl: string
 }
 
 interface UserProfileSettingsInput {
-  activityVisibilityPublic?: boolean
+  activityVisibility?: UserProfileVisibility
+  introductionVisibility?: UserProfileVisibility
   introduction?: string
   externalNotificationEnabled?: boolean
   notificationWebhookUrl?: string
 }
 
 const defaultUserProfileSettings: UserProfileSettings = {
-  activityVisibilityPublic: true,
+  activityVisibility: "PUBLIC",
+  introductionVisibility: "PUBLIC",
   introduction: "",
   externalNotificationEnabled: false,
   notificationWebhookUrl: "",
+}
+
+export function isUserProfileVisibility(value: unknown): value is UserProfileVisibility {
+  return typeof value === "string" && USER_PROFILE_VISIBILITY_VALUES.includes(value as UserProfileVisibility)
+}
+
+export function mapLegacyVisibilityBoolean(value: boolean): UserProfileVisibility {
+  return value ? "PUBLIC" : "PRIVATE"
+}
+
+export function canViewUserProfileVisibility(
+  visibility: UserProfileVisibility,
+  options: { isOwner: boolean; isLoggedIn: boolean },
+) {
+  if (options.isOwner) {
+    return true
+  }
+
+  if (visibility === "PUBLIC") {
+    return true
+  }
+
+  if (visibility === "MEMBERS") {
+    return options.isLoggedIn
+  }
+
+  return false
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -62,10 +96,16 @@ export function resolveUserProfileSettings(signature: string | null | undefined)
   }
 
   return {
-    activityVisibilityPublic:
-      typeof rawSettings.activityVisibilityPublic === "boolean"
-        ? rawSettings.activityVisibilityPublic
-        : defaultUserProfileSettings.activityVisibilityPublic,
+    activityVisibility:
+      isUserProfileVisibility(rawSettings.activityVisibility)
+        ? rawSettings.activityVisibility
+        : typeof rawSettings.activityVisibilityPublic === "boolean"
+          ? mapLegacyVisibilityBoolean(rawSettings.activityVisibilityPublic)
+          : defaultUserProfileSettings.activityVisibility,
+    introductionVisibility:
+      isUserProfileVisibility(rawSettings.introductionVisibility)
+        ? rawSettings.introductionVisibility
+        : defaultUserProfileSettings.introductionVisibility,
     introduction:
       typeof rawSettings.introduction === "string"
         ? rawSettings.introduction
@@ -86,7 +126,8 @@ export function mergeUserProfileSettings(signature: string | null | undefined, i
   const current = resolveUserProfileSettings(signature)
 
   const nextSettings: UserProfileSettings = {
-    activityVisibilityPublic: input.activityVisibilityPublic ?? current.activityVisibilityPublic,
+    activityVisibility: input.activityVisibility ?? current.activityVisibility,
+    introductionVisibility: input.introductionVisibility ?? current.introductionVisibility,
     introduction: typeof input.introduction === "string" ? input.introduction.trim() : current.introduction,
     externalNotificationEnabled: input.externalNotificationEnabled ?? current.externalNotificationEnabled,
     notificationWebhookUrl:

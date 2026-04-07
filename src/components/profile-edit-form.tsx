@@ -11,6 +11,7 @@ import { UserAvatar } from "@/components/user-avatar"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
+import type { UserProfileVisibility } from "@/lib/user-profile-settings"
 
 interface ProfileEditFormProps {
   username: string
@@ -21,7 +22,8 @@ interface ProfileEditFormProps {
   initialAvatarPath?: string | null
   initialEmail?: string | null
   initialEmailVerified: boolean
-  initialActivityVisibilityPublic: boolean
+  initialActivityVisibility: UserProfileVisibility
+  initialIntroductionVisibility: UserProfileVisibility
   nicknameChangePointCost: number
   nicknameChangePriceDescription?: string
   introductionChangePointCost: number
@@ -52,6 +54,42 @@ const genderOptions = [
   { value: "female", label: "女" },
 ]
 
+const visibilityOptions: Array<{ value: UserProfileVisibility; label: string }> = [
+  { value: "PUBLIC", label: "公开" },
+  { value: "MEMBERS", label: "登录公开" },
+  { value: "PRIVATE", label: "仅自己可见" },
+]
+
+const visibilityLabelMap: Record<UserProfileVisibility, string> = {
+  PUBLIC: "公开",
+  MEMBERS: "登录公开",
+  PRIVATE: "仅自己可见",
+}
+
+function getActivityVisibilityDescription(visibility: UserProfileVisibility) {
+  if (visibility === "PUBLIC") {
+    return "任何访问你主页的人都能看到最近帖子与最近回复。"
+  }
+
+  if (visibility === "MEMBERS") {
+    return "只有登录用户能看到最近帖子与最近回复。"
+  }
+
+  return "只有你自己能看到最近帖子与最近回复。"
+}
+
+function getIntroductionVisibilityDescription(visibility: UserProfileVisibility) {
+  if (visibility === "PUBLIC") {
+    return "任何访问你主页的人都能看到“介绍”标签内容。"
+  }
+
+  if (visibility === "MEMBERS") {
+    return "只有登录用户能看到“介绍”标签内容。"
+  }
+
+  return "只有你自己能看到“介绍”标签内容。"
+}
+
 function revokeObjectUrl(url: string) {
   if (url.startsWith("blob:")) {
     URL.revokeObjectURL(url)
@@ -67,7 +105,8 @@ export function ProfileEditForm({
   initialAvatarPath,
   initialEmail,
   initialEmailVerified,
-  initialActivityVisibilityPublic,
+  initialActivityVisibility,
+  initialIntroductionVisibility,
   nicknameChangePointCost,
   nicknameChangePriceDescription,
   introductionChangePointCost,
@@ -103,11 +142,12 @@ export function ProfileEditForm({
   const [email, setEmail] = useState(initialEmail ?? "")
   const [emailCode, setEmailCode] = useState("")
   const [emailVerified, setEmailVerified] = useState(initialEmailVerified)
-  const [activityVisibilityPublic, setActivityVisibilityPublic] = useState(initialActivityVisibilityPublic)
+  const [activityVisibility, setActivityVisibility] = useState(initialActivityVisibility)
+  const [introductionVisibility, setIntroductionVisibility] = useState(initialIntroductionVisibility)
   const [profileLoading, setProfileLoading] = useState(false)
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [emailSaving, setEmailSaving] = useState(false)
-  const [privacySaving, setPrivacySaving] = useState(false)
+  const [privacySavingKey, setPrivacySavingKey] = useState<"activity" | "introduction" | null>(null)
   const [uploading, setUploading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
   const [showNicknameModal, setShowNicknameModal] = useState(false)
@@ -245,7 +285,8 @@ export function ProfileEditForm({
     avatarPath?: string
     email?: string
     emailCode?: string
-    activityVisibilityPublic?: boolean
+    activityVisibility?: UserProfileVisibility
+    introductionVisibility?: UserProfileVisibility
   }) {
     const response = await fetch("/api/profile/update", {
       method: "POST",
@@ -260,7 +301,8 @@ export function ProfileEditForm({
         avatarPath: payload.avatarPath ?? savedAvatarPath,
         email: payload.email ?? email,
         emailCode: payload.emailCode ?? "",
-        activityVisibilityPublic: payload.activityVisibilityPublic ?? activityVisibilityPublic,
+        activityVisibility: payload.activityVisibility ?? activityVisibility,
+        introductionVisibility: payload.introductionVisibility ?? introductionVisibility,
       }),
     })
 
@@ -271,6 +313,23 @@ export function ProfileEditForm({
     }
 
     return result
+  }
+
+  async function handleVisibilityChange(field: "activity" | "introduction", nextVisibility: UserProfileVisibility) {
+    setPrivacySavingKey(field)
+
+    try {
+      const result = await updateProfile(field === "activity"
+        ? { activityVisibility: nextVisibility }
+        : { introductionVisibility: nextVisibility })
+      setActivityVisibility(result.data?.activityVisibility ?? (field === "activity" ? nextVisibility : activityVisibility))
+      setIntroductionVisibility(result.data?.introductionVisibility ?? (field === "introduction" ? nextVisibility : introductionVisibility))
+      toast.success(result.message ?? "隐私设置已更新", "隐私设置")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "隐私设置保存失败", "隐私设置")
+    } finally {
+      setPrivacySavingKey(null)
+    }
   }
 
   async function handleNicknameSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -629,38 +688,27 @@ export function ProfileEditForm({
       {activeSection === "privacy" ? (
         <div className="space-y-5 rounded-[24px] border border-border bg-card p-5">
           <div>
-            <p className="text-sm font-medium">活动轨迹公开</p>
-            <p className="mt-1 text-xs text-muted-foreground">关闭后，其他用户无法在你的主页中看到最近帖子与回复动态，你自己仍然可以查看。</p>
+            <p className="text-sm font-medium">主页隐私</p>
+            <p className="mt-1 text-xs text-muted-foreground">分别控制“活动轨迹”和“介绍”在主页上的可见范围，登录公开表示只有登录后才能查看。</p>
           </div>
 
-          <div className="rounded-[20px] border border-border bg-background p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium">{activityVisibilityPublic ? "当前对外公开" : "当前仅自己可见"}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{activityVisibilityPublic ? "你的主页会显示最近发帖和最近回复。" : "你的主页将隐藏最近活动轨迹模块内容。"}</p>
-              </div>
-              <Button
-                type="button"
-                variant={activityVisibilityPublic ? "outline" : "default"}
-                disabled={privacySaving}
-                onClick={async () => {
-                  setPrivacySaving(true)
-
-                  try {
-                    const nextValue = !activityVisibilityPublic
-                    const result = await updateProfile({ activityVisibilityPublic: nextValue })
-                    setActivityVisibilityPublic(result.data?.activityVisibilityPublic ?? nextValue)
-                    toast.success(result.message ?? "隐私设置已更新", "隐私设置")
-                  } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "隐私设置保存失败", "隐私设置")
-                  } finally {
-                    setPrivacySaving(false)
-                  }
-                }}
-              >
-                {privacySaving ? "保存中..." : activityVisibilityPublic ? "改为仅自己可见" : "改为公开"}
-              </Button>
-            </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <PrivacyVisibilityCard
+              title="活动轨迹"
+              description="控制主页里的最近帖子与最近回复。"
+              value={activityVisibility}
+              saving={privacySavingKey === "activity"}
+              currentDescription={getActivityVisibilityDescription(activityVisibility)}
+              onChange={(nextVisibility) => handleVisibilityChange("activity", nextVisibility)}
+            />
+            <PrivacyVisibilityCard
+              title="介绍"
+              description="控制主页里“介绍”标签的详细内容。"
+              value={introductionVisibility}
+              saving={privacySavingKey === "introduction"}
+              currentDescription={getIntroductionVisibilityDescription(introductionVisibility)}
+              onChange={(nextVisibility) => handleVisibilityChange("introduction", nextVisibility)}
+            />
           </div>
         </div>
       ) : null}
@@ -735,6 +783,55 @@ export function ProfileEditForm({
           <p className="text-xs text-muted-foreground">{introductionHint}</p>
         </form>
       </AdminModal>
+    </div>
+  )
+}
+
+function PrivacyVisibilityCard({
+  title,
+  description,
+  value,
+  saving,
+  currentDescription,
+  onChange,
+}: {
+  title: string
+  description: string
+  value: UserProfileVisibility
+  saving: boolean
+  currentDescription: string
+  onChange: (nextVisibility: UserProfileVisibility) => void
+}) {
+  return (
+    <div className="rounded-[20px] border border-border bg-background p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+
+      <div className="mt-4 rounded-[18px] border border-border/70 bg-card px-4 py-3">
+        <p className="text-sm font-medium">当前：{visibilityLabelMap[value]}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{currentDescription}</p>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {visibilityOptions.map((option) => {
+          const active = option.value === value
+
+          return (
+            <Button
+              key={option.value}
+              type="button"
+              variant={active ? "default" : "outline"}
+              disabled={saving || active}
+              onClick={() => onChange(option.value)}
+              className="justify-center"
+            >
+              {saving && active ? "保存中..." : option.label}
+            </Button>
+          )
+        })}
+      </div>
     </div>
   )
 }

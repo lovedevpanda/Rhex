@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { getUserAccountBindingView } from "@/lib/account-binding"
 import { getCurrentUser } from "@/lib/auth"
+import { getBoardApplicationPageData } from "@/lib/board-applications"
 import { describeBadgeRule, getBadgeCenterData } from "@/lib/badges"
 import { getUserPointLogs } from "@/lib/points"
 import { readSearchParam } from "@/lib/search-params"
@@ -12,13 +13,15 @@ import { getUserAccountSettings, getUserProfile } from "@/lib/users"
 import { getCurrentUserVerificationData } from "@/lib/verifications"
 import { describeVipTierBilling, resolveVipTierPrice } from "@/lib/vip-tier-pricing"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
+import { getZones } from "@/lib/zones"
+import type { SessionActor } from "@/lib/auth"
 
-export type SettingsTabKey = "profile" | "invite" | "post-management" | "level" | "badges" | "verifications" | "points" | "follows"
+export type SettingsTabKey = "profile" | "invite" | "post-management" | "board-applications" | "level" | "badges" | "verifications" | "points" | "follows"
 export type ProfileTabKey = "basic" | "privacy" | "notifications" | "accounts" | "browsing"
 export type PostManagementTabKey = "posts" | "replies" | "favorites" | "likes"
 export type FollowTabKey = "boards" | "users" | "followers" | "tags" | "posts" | "history" | "blocks"
 
-export const settingsTabs: SettingsTabKey[] = ["profile", "invite", "post-management", "level", "badges", "verifications", "points", "follows"]
+export const settingsTabs: SettingsTabKey[] = ["profile", "invite", "post-management", "board-applications", "level", "badges", "verifications", "points", "follows"]
 export const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
   { key: "basic", label: "资料设置" },
   { key: "privacy", label: "隐私设置" },
@@ -46,6 +49,7 @@ export const settingsTabTitles: Record<SettingsTabKey, string> = {
   profile: "个人设置",
   invite: "邀请中心",
   "post-management": "帖子管理",
+  "board-applications": "节点申请",
   level: "等级中心",
   badges: "勋章中心",
   verifications: "认证中心",
@@ -78,6 +82,7 @@ export interface ResolvedSettingsRoute {
 export interface SettingsPageData {
   route: ResolvedSettingsRoute
   settings: Awaited<ReturnType<typeof getSiteSettings>>
+  currentUser: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>
   profile: NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
   dbUser: Awaited<ReturnType<typeof getUserAccountSettings>>
   invitePath: string
@@ -124,6 +129,8 @@ export interface SettingsPageData {
     eligibility: Awaited<ReturnType<typeof getBadgeCenterData>>[number]["eligibility"]
     display: Awaited<ReturnType<typeof getBadgeCenterData>>[number]["display"]
   }>
+  boardApplicationData: Awaited<ReturnType<typeof getBoardApplicationPageData>>
+  boardApplicationZones: Awaited<ReturnType<typeof getZones>>
   verificationData: Awaited<ReturnType<typeof getCurrentUserVerificationData>>
   pointLogs: Awaited<ReturnType<typeof getUserPointLogs>> | null
   accountBindings: Awaited<ReturnType<typeof getUserAccountBindingView>> | null
@@ -156,10 +163,11 @@ export function resolveSettingsRoute(searchParams?: RawSettingsSearchParams): Re
 }
 
 async function loadSettingsTabData(
-  userId: number,
+  currentUser: SessionActor,
   route: ResolvedSettingsRoute,
   settings: Awaited<ReturnType<typeof getSiteSettings>>,
 ) {
+  const userId = currentUser.id
   const { currentFollowTab, currentPostTab, currentTab, listAfter, listBefore } = route
 
   const [
@@ -175,6 +183,8 @@ async function loadSettingsTabData(
     blockedUsers,
     levelView,
     badges,
+    boardApplicationData,
+    boardApplicationZones,
     verificationData,
     pointLogs,
     accountBindings,
@@ -211,6 +221,8 @@ async function loadSettingsTabData(
       : Promise.resolve<Awaited<ReturnType<typeof getUserBlocks>> | null>(null),
     currentTab === "level" ? getCurrentUserLevelProgressView() : Promise.resolve(null),
     currentTab === "badges" ? getBadgeCenterData(userId) : Promise.resolve([]),
+    currentTab === "board-applications" ? getBoardApplicationPageData(userId, currentUser) : Promise.resolve({ pendingCount: 0, items: [] }),
+    currentTab === "board-applications" ? getZones() : Promise.resolve([]),
     currentTab === "verifications" ? getCurrentUserVerificationData() : Promise.resolve({ currentUserId: userId, types: [], approvedVerification: null }),
     currentTab === "points" ? getUserPointLogs(userId, { pageSize: 10, after: route.pointsAfter, before: route.pointsBefore }) : Promise.resolve(null),
     currentTab === "profile" && route.currentProfileTab === "accounts"
@@ -235,6 +247,8 @@ async function loadSettingsTabData(
     blockedUsers,
     levelView,
     badges,
+    boardApplicationData,
+    boardApplicationZones,
     verificationData,
     pointLogs,
     accountBindings,
@@ -304,10 +318,14 @@ export async function loadSettingsPageData(searchParams?: RawSettingsSearchParam
     redirect("/login?redirect=/settings")
   }
 
+  if (!settings.boardApplicationEnabled && route.currentTab === "board-applications") {
+    redirect("/settings?tab=profile")
+  }
+
   const [profile, dbUser, tabData] = await Promise.all([
     getUserProfile(currentUser.username),
     getUserAccountSettings(currentUser.id),
-    loadSettingsTabData(currentUser.id, route, settings),
+    loadSettingsTabData(currentUser, route, settings),
   ])
 
   if (!profile) {
@@ -343,6 +361,7 @@ export async function loadSettingsPageData(searchParams?: RawSettingsSearchParam
   return {
     route,
     settings,
+    currentUser,
     profile,
     dbUser,
     invitePath,

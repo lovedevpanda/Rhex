@@ -1,7 +1,7 @@
 "use client"
 
 import { Palette, Settings2 } from "lucide-react"
-import { Compass, ExternalLink, EyeOff, Sparkles, type LucideIcon } from "lucide-react"
+import { Compass, ExternalLink, EyeOff, MessageSquareText, Sparkles, type LucideIcon } from "lucide-react"
 import { useState, useSyncExternalStore } from "react"
 
 import { CustomThemeModal } from "@/components/custom-theme-modal"
@@ -26,8 +26,10 @@ export function BrowsingSettingsPanel() {
     readThemeLocalSettingsSnapshot,
     () => DEFAULT_THEME_LOCAL_SETTINGS_SNAPSHOT,
   )
+  const customTypography = themeSettings.customThemeConfig.typography
+  const customFontLabel = customTypography.fontFamily.split(",")[0]?.replace(/["']/g, "").trim() || "默认字体"
   const customThemeSummary = themeSettings.preset === "custom"
-    ? `已启用 · ${themeSettings.preference === "system" ? "跟随系统" : themeSettings.preference === "dark" ? "深色" : "浅色"} / ${themeSettings.fontSizePreset === "compact" ? "紧凑" : themeSettings.fontSizePreset === "relaxed" ? "宽松" : "正常"}`
+    ? `已启用 · ${themeSettings.preference === "system" ? "跟随系统" : themeSettings.preference === "dark" ? "深色" : "浅色"} / ${customFontLabel} / ${customTypography.fontSize}`
     : "未启用"
 
   return (
@@ -59,6 +61,17 @@ export function BrowsingSettingsPanel() {
             onChange={(checked) => updateBrowsingPreferences({ openPostLinksInNewTab: checked })}
           />
           <ChoiceRow
+            icon={MessageSquareText}
+            title="评论区视图"
+            description="控制帖子详情页评论区默认以树形嵌套还是平铺展开显示。"
+            value={preferences.commentThreadDisplayMode}
+            options={[
+              { value: "tree", label: "树形" },
+              { value: "flat", label: "平铺" },
+            ]}
+            onChange={(value) => updateBrowsingPreferences({ commentThreadDisplayMode: value })}
+          />
+          <ChoiceRow
             icon={Sparkles}
             title="红包 / 聚宝盆动画"
             description="控制帖子详情页首屏奖励池入场动画的播放策略。"
@@ -73,7 +86,7 @@ export function BrowsingSettingsPanel() {
           <ActionRow
             icon={Palette}
             title="自定义主题"
-            description="可分别设置浅色 / 深色模式的主色、背景、卡片、交互底色和边框，保存后自动应用。"
+            description="可分别设置浅色 / 深色模式配色，并单独指定字体、字号，还能直接查看生成后的原始 CSS。"
             summary={customThemeSummary}
             actionLabel="打开设置"
             onAction={() => setThemeModalOpen(true)}

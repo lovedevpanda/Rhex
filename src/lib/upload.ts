@@ -27,6 +27,7 @@ const IMAGE_MIME_TYPES = new Set([
   "image/gif",
   "image/webp",
   "image/avif",
+  "image/svg+xml",
 ])
 
 /**
@@ -53,12 +54,28 @@ function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
   return null
 }
 
+function detectSvgMimeType(buffer: Buffer): string | null {
+  const text = buffer.subarray(0, Math.min(buffer.length, 4096)).toString("utf8")
+    .replace(/^\uFEFF/, "")
+    .trimStart()
+
+  if (!text) {
+    return null
+  }
+
+  if (/^(<\?xml[\s\S]*?\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!doctype\s+svg[\s\S]*?>\s*)*<svg\b/i.test(text)) {
+    return "image/svg+xml"
+  }
+
+  return null
+}
+
 /**
  * 单次读取整文件，复用同一块 Buffer 完成哈希计算、类型检测和后续写盘。
  */
 export async function prepareUploadedFile(file: File): Promise<PreparedUploadFile> {
   const buffer = Buffer.from(await file.arrayBuffer())
-  const detectedMime = detectMimeTypeFromBytes(buffer.subarray(0, 12))
+  const detectedMime = detectMimeTypeFromBytes(buffer.subarray(0, 12)) ?? detectSvgMimeType(buffer)
 
   if (!detectedMime || !IMAGE_MIME_TYPES.has(detectedMime)) {
     throw new Error("仅支持上传常见图片格式文件")

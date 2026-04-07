@@ -1,9 +1,10 @@
 import { ChangeType } from "@/db/types"
+import type { PointLogEventDataValue, PointLogEventType } from "@/lib/point-log-events"
 
 import { countUserPointLogs, findUserPointLogsCursor } from "@/db/point-log-queries"
 import { decodeTimestampCursor, encodeTimestampCursor } from "@/lib/cursor-pagination"
 import { formatDateTime } from "@/lib/formatters"
-import { parsePointLogAuditTrail } from "@/lib/point-log-audit"
+import { resolvePointLogAuditPresentation, type PointLogEffectMetadata, type PointLogTaxMetadata } from "@/lib/point-log-audit"
 
 import { withRuntimeFallback } from "@/lib/runtime-errors"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
@@ -15,17 +16,16 @@ export interface SitePointLogItem {
   changeValue: number
   reason: string
   displayReason: string
+  eventType: PointLogEventType
+  eventData?: PointLogEventDataValue
   relatedType?: string | null
   relatedId?: string | null
   createdAt: string
   beforeBalance?: number | null
   afterBalance?: number | null
   isRedeemCode?: boolean
-  pointEffect?: {
-    baseValue: string
-    ruleSummary: string
-    deltaValue: string
-  } | null
+  pointEffect?: PointLogEffectMetadata | null
+  pointTax?: PointLogTaxMetadata | null
 }
 
 export interface UserPointLogsResult {
@@ -54,16 +54,22 @@ export async function getUserPointLogs(userId: number, options: { pageSize?: num
 
 
     return {
-      items: logs.map((log) => ({
-        ...parsePointLogAuditTrail(log.reason),
-        id: log.id,
-        changeType: log.changeType,
-        changeValue: log.changeValue,
-        reason: log.reason,
-        relatedType: log.relatedType,
-        relatedId: log.relatedId,
-        createdAt: formatDateTime(log.createdAt),
-      })),
+      items: logs.map((log) => {
+        const presentation = resolvePointLogAuditPresentation(log.reason, log.eventData)
+
+        return {
+          ...presentation,
+          id: log.id,
+          changeType: log.changeType,
+          changeValue: log.changeValue,
+          reason: log.reason,
+          eventType: log.eventType as PointLogEventType,
+          eventData: log.eventData,
+          relatedType: log.relatedType,
+          relatedId: log.relatedId,
+          createdAt: formatDateTime(log.createdAt),
+        }
+      }),
       pageSize,
       total,
       hasPrevPage,

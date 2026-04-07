@@ -8,6 +8,18 @@ export interface ValidationResult<T> {
   message?: string
 }
 
+interface PostPayloadValidationOptions {
+  titleMinLength?: number
+  titleMaxLength?: number
+  contentMinLength?: number
+  contentMaxLength?: number
+}
+
+interface CommentPayloadValidationOptions {
+  contentMinLength?: number
+  contentMaxLength?: number
+}
+
 function getField(body: unknown, key: string): unknown {
   if (body !== null && typeof body === "object" && !Array.isArray(body)) {
     return (body as Record<string, unknown>)[key]
@@ -136,9 +148,10 @@ export function validateAuthPayload(body: unknown): ValidationResult<{
   }
 }
 
-export function validatePostPayload(body: unknown): ValidationResult<{
+export function validatePostPayload(body: unknown, options: PostPayloadValidationOptions = {}): ValidationResult<{
   title: string
   content: string
+  isAnonymous: boolean
   coverPath: string | null
   boardSlug: string
   postType: LocalPostType
@@ -156,6 +169,7 @@ export function validatePostPayload(body: unknown): ValidationResult<{
 
   const title = normalizeString(getField(body, "title"))
   const content = normalizeString(getField(body, "content"))
+  const isAnonymous = Boolean(getField(body, "isAnonymous"))
   const coverPath = normalizeString(getField(body, "coverPath"))
   const boardSlug = normalizeString(getField(body, "boardSlug"))
   const postType = normalizePostType(getField(body, "postType"))
@@ -185,12 +199,17 @@ export function validatePostPayload(body: unknown): ValidationResult<{
     return { success: false, message: "缺少必要参数" }
   }
 
-  if (title.length < 5 || title.length > 100) {
-    return { success: false, message: "标题长度需为 5-100 个字符" }
+  const titleMinLength = Math.max(1, Math.min(100, options.titleMinLength ?? 5))
+  const titleMaxLength = Math.max(titleMinLength, Math.min(500, options.titleMaxLength ?? 100))
+  const contentMinLength = Math.max(1, Math.min(1000, options.contentMinLength ?? 10))
+  const contentMaxLength = Math.max(contentMinLength, Math.min(100000, options.contentMaxLength ?? 50000))
+
+  if (title.length < titleMinLength || title.length > titleMaxLength) {
+    return { success: false, message: `标题长度需为 ${titleMinLength}-${titleMaxLength} 个字符` }
   }
 
-  if (content.length < 10 || content.length > 50000) {
-    return { success: false, message: "正文字数需为 10-50000 个字符" }
+  if (content.length < contentMinLength || content.length > contentMaxLength) {
+    return { success: false, message: `正文字数需为 ${contentMinLength}-${contentMaxLength} 个字符` }
   }
 
   if (boardSlug.length > 50) {
@@ -255,6 +274,7 @@ export function validatePostPayload(body: unknown): ValidationResult<{
     data: {
       title,
       content,
+      isAnonymous,
       coverPath: coverPath || null,
       boardSlug,
       postType,
@@ -273,18 +293,24 @@ export function validatePostPayload(body: unknown): ValidationResult<{
 }
 
 
-export function validateCommentPayload(body: unknown): ValidationResult<{ postId: string; content: string; parentId: string; replyToUserName: string }> {
+export function validateCommentPayload(body: unknown, options: CommentPayloadValidationOptions = {}): ValidationResult<{ postId: string; content: string; parentId: string; replyToUserName: string; replyToCommentId: string; useAnonymousIdentity: boolean; commentView: "tree" | "flat" }> {
   const postId = normalizeString(getField(body, "postId"))
   const content = normalizeString(getField(body, "content"))
   const parentId = normalizeString(getField(body, "parentId"))
   const replyToUserName = normalizeString(getField(body, "replyToUserName"))
+  const replyToCommentId = normalizeString(getField(body, "replyToCommentId"))
+  const useAnonymousIdentity = Boolean(getField(body, "useAnonymousIdentity"))
+  const commentView = getField(body, "commentView") === "flat" ? "flat" : "tree"
 
   if (!postId || !content) {
     return { success: false, message: "缺少必要参数" }
   }
 
-  if (content.length < 2 || content.length > 2000) {
-    return { success: false, message: "评论长度需为 2-2000 个字符" }
+  const contentMinLength = Math.max(1, Math.min(500, options.contentMinLength ?? 2))
+  const contentMaxLength = Math.max(contentMinLength, Math.min(20000, options.contentMaxLength ?? 2000))
+
+  if (content.length < contentMinLength || content.length > contentMaxLength) {
+    return { success: false, message: `评论长度需为 ${contentMinLength}-${contentMaxLength} 个字符` }
   }
 
   return {
@@ -294,6 +320,9 @@ export function validateCommentPayload(body: unknown): ValidationResult<{ postId
       content,
       parentId,
       replyToUserName,
+      replyToCommentId,
+      useAnonymousIdentity,
+      commentView,
     },
   }
 }

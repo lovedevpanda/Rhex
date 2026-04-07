@@ -9,7 +9,7 @@ import { validateProfilePayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
-import { mergeUserProfileSettings, resolveUserProfileSettings } from "@/lib/user-profile-settings"
+import { isUserProfileVisibility, mapLegacyVisibilityBoolean, mergeUserProfileSettings, resolveUserProfileSettings, type UserProfileVisibility } from "@/lib/user-profile-settings"
 import { resolveVipTierPrice } from "@/lib/vip-tier-pricing"
 
 type ProfileUpdateResponse = {
@@ -21,7 +21,8 @@ type ProfileUpdateResponse = {
   avatarPath: string
   email: string
   emailVerifiedAt?: string | null
-  activityVisibilityPublic: boolean
+  activityVisibility: UserProfileVisibility
+  introductionVisibility: UserProfileVisibility
   points: number
 }
 
@@ -34,7 +35,8 @@ function toProfileUpdateResponse(input: {
   avatarPath: string | null
   email: string | null
   emailVerifiedAt?: Date | string | null
-  activityVisibilityPublic: boolean
+  activityVisibility: UserProfileVisibility
+  introductionVisibility: UserProfileVisibility
   points: number
 }): ProfileUpdateResponse {
   return {
@@ -48,7 +50,8 @@ function toProfileUpdateResponse(input: {
     emailVerifiedAt: typeof input.emailVerifiedAt === "string"
       ? input.emailVerifiedAt
       : input.emailVerifiedAt?.toISOString() ?? null,
-    activityVisibilityPublic: input.activityVisibilityPublic,
+    activityVisibility: input.activityVisibility,
+    introductionVisibility: input.introductionVisibility,
     points: input.points,
   }
 }
@@ -70,12 +73,6 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   const gender = validated.data.gender || "unknown"
   const avatarPath = typeof body.avatarPath === "string" ? body.avatarPath.trim() : ""
   const emailCode = typeof body.emailCode === "string" ? body.emailCode.trim() : ""
-  const activityVisibilityPublic = typeof body.activityVisibilityPublic === "boolean"
-    ? body.activityVisibilityPublic
-    : true
-
-
-
 
   const [dbUser, settings] = await Promise.all([
     prisma.user.findUnique({
@@ -102,9 +99,26 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   const nextNickname = nicknameSafety.sanitizedText
   const nextEmail = email || null
   const currentProfileSettings = resolveUserProfileSettings(dbUser.signature)
+  const activityVisibilityInput = typeof body.activityVisibility === "string" ? body.activityVisibility.trim().toUpperCase() : null
+  const introductionVisibilityInput = typeof body.introductionVisibility === "string" ? body.introductionVisibility.trim().toUpperCase() : null
+
+  if (activityVisibilityInput && !isUserProfileVisibility(activityVisibilityInput)) {
+    apiError(400, "活动轨迹可见范围参数不正确")
+  }
+
+  if (introductionVisibilityInput && !isUserProfileVisibility(introductionVisibilityInput)) {
+    apiError(400, "介绍可见范围参数不正确")
+  }
+
+  const activityVisibility = (activityVisibilityInput && isUserProfileVisibility(activityVisibilityInput) ? activityVisibilityInput : null)
+    ?? (typeof body.activityVisibilityPublic === "boolean" ? mapLegacyVisibilityBoolean(body.activityVisibilityPublic) : null)
+    ?? currentProfileSettings.activityVisibility
+  const introductionVisibility = (introductionVisibilityInput && isUserProfileVisibility(introductionVisibilityInput) ? introductionVisibilityInput : null)
+    ?? currentProfileSettings.introductionVisibility
   const nextIntroduction = introductionSafety.sanitizedText
   const nextSignature = mergeUserProfileSettings(dbUser.signature, {
-    activityVisibilityPublic,
+    activityVisibility,
+    introductionVisibility,
     introduction: nextIntroduction,
   })
   const emailChanged = (dbUser.email ?? null) !== nextEmail
@@ -304,7 +318,8 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
       avatarChanged,
       avatarRequiresPointCost,
       emailChanged,
-      activityVisibilityPublic,
+      activityVisibility,
+      introductionVisibility,
     },
   })
 
@@ -313,7 +328,8 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   return apiSuccess(toProfileUpdateResponse({
     ...updated,
     introduction: updatedProfileSettings.introduction,
-    activityVisibilityPublic: updatedProfileSettings.activityVisibilityPublic,
+    activityVisibility: updatedProfileSettings.activityVisibility,
+    introductionVisibility: updatedProfileSettings.introductionVisibility,
   }), messageParts.join("，"))
 
 

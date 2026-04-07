@@ -1,22 +1,27 @@
 "use client"
 
-import { AlertCircle, Building2, EyeOff, FolderTree, Plus, Search, ShieldCheck, Slash, Trash2 } from "lucide-react"
+import { AlertCircle, Building2, CircleHelp, EyeOff, FolderTree, Plus, Search, ShieldCheck, Slash, Trash2 } from "lucide-react"
 
 import { useMemo, useState, useTransition } from "react"
 
 import { useRouter } from "next/navigation"
 
 import { AdminIconPickerField } from "@/components/admin-icon-picker-field"
-import { AdminModal } from "@/components/admin-modal"
+import { AdminFormModal, AdminModal } from "@/components/admin-modal"
+import { PickerPopover, PickerTriggerField, normalizeHexColor } from "@/components/admin-picker-popover"
 import { LevelIcon } from "@/components/level-icon"
+import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { showConfirm } from "@/components/ui/confirm-dialog"
 import { toast } from "@/components/ui/toast"
+import { Tooltip } from "@/components/ui/tooltip"
 
 
 
 
 import type { BoardItem, ZoneItem } from "@/lib/admin-structure-management"
+import type { BoardSidebarLinkItem } from "@/lib/board-sidebar-config"
+import { formatNumber } from "@/lib/formatters"
 import { POST_LIST_LOAD_MODE_INFINITE, POST_LIST_LOAD_MODE_PAGINATION } from "@/lib/post-list-load-mode"
 import { POST_LIST_DISPLAY_MODE_DEFAULT, POST_LIST_DISPLAY_MODE_GALLERY } from "@/lib/post-list-display"
 import { DEFAULT_ALLOWED_POST_TYPES, normalizePostTypes } from "@/lib/post-types"
@@ -27,14 +32,61 @@ interface StructureManagerProps {
   permissions: {
     canCreateZone: boolean
     canCreateBoard: boolean
+    canDeleteZone: boolean
     canDeleteBoard: boolean
   }
+  canReviewBoardApplications: boolean
+  pendingBoardApplicationCount: number
   initialFilters: {
     keyword: string
     zoneId: string
     boardStatus: string
     posting: string
   }
+}
+
+interface BoardApplicationItem {
+  id: string
+  applicantId: number
+  zoneId: string
+  boardId: string | null
+  name: string
+  slug: string
+  description: string
+  icon: string
+  reason: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+  reviewNote: string
+  reviewedAt: string | null
+  createdAt: string
+  applicant: {
+    id: number
+    username: string
+    displayName: string
+    role: "USER" | "MODERATOR" | "ADMIN"
+    status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+  }
+  reviewer: {
+    id: number
+    displayName: string
+  } | null
+  zone: {
+    id: string
+    name: string
+    slug: string
+  }
+  board: {
+    id: string
+    name: string
+    slug: string
+    treasuryPoints: number
+  } | null
+}
+
+interface AdminBoardApplicationManagerProps {
+  zones: ZoneItem[]
+  boardApplications: BoardApplicationItem[]
+  canReviewBoardApplications: boolean
 }
 
 type ModalMode =
@@ -44,12 +96,28 @@ type ModalMode =
   | { kind: "edit-board"; item: BoardItem }
   | null
 
+interface BoardApplicationReviewFormState {
+  zoneId: string
+  name: string
+  slug: string
+  description: string
+  icon: string
+  reason: string
+  reviewNote: string
+}
+
+type BoardSidebarLinkDraft = BoardSidebarLinkItem
+
 interface StructureFormState {
   name: string
   slug: string
   description: string
   icon: string
+  sidebarLinks: BoardSidebarLinkDraft[]
+  rulesMarkdown: string
+  moderatorsCanWithdrawTreasury: boolean
   sortOrder: string
+  hiddenFromSidebar: boolean
   zoneId: string
   postPointDelta: string
   replyPointDelta: string
@@ -93,7 +161,16 @@ const postingOptions = [
   { value: "off", label: "暂停发帖" },
 ]
 
-export function StructureManager({ zones, boards, permissions, initialFilters }: StructureManagerProps) {
+function createEmptyBoardSidebarLink(): BoardSidebarLinkDraft {
+  return {
+    title: "",
+    url: "",
+    icon: null,
+    titleColor: null,
+  }
+}
+
+export function StructureManager({ zones, boards, permissions, canReviewBoardApplications, pendingBoardApplicationCount, initialFilters }: StructureManagerProps) {
   const [modal, setModal] = useState<ModalMode>(null)
   const [selectedZoneId, setSelectedZoneId] = useState(initialFilters.zoneId || zones[0]?.id || "")
 
@@ -147,6 +224,47 @@ export function StructureManager({ zones, boards, permissions, initialFilters }:
     ...zone,
     boards: boards.filter((board) => board.zoneId === zone.id),
   })), [boards, zones])
+  const activeZone = zones.find((zone) => zone.id === visibleZoneId) ?? null
+
+  async function handleDeleteZone() {
+    if (!activeZone || !permissions.canDeleteZone) {
+      return
+    }
+
+    const confirmed = await showConfirm({
+      title: "删除分区",
+      description: `确认删除分区“${activeZone.name}”吗？如果分区下仍有节点，系统会阻止删除。`,
+      confirmText: "删除",
+      variant: "danger",
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      const response = await fetch("/api/admin/structure", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "zone",
+          id: activeZone.id,
+        }),
+      })
+      const result = (await response.json().catch(() => null)) as { message?: string } | null
+      const message = result?.message ?? (response.ok ? "分区已删除" : "删除失败，请稍后重试")
+
+      if (!response.ok) {
+        toast.error(message)
+        return
+      }
+
+      toast.success(message)
+      window.location.href = "/admin?tab=structure"
+    } catch {
+      toast.error("网络异常，请稍后重试")
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -210,6 +328,7 @@ export function StructureManager({ zones, boards, permissions, initialFilters }:
                     <span className="rounded-full bg-background px-2 py-0.5">帖 {zone.postCount}</span>
                     <span className="rounded-full bg-background px-2 py-0.5">关注 {zone.followerCount}</span>
                     <span className="rounded-full bg-background px-2 py-0.5">{zone.requirePostReview ? "发帖审核" : "直发"}</span>
+                    <span className="rounded-full bg-background px-2 py-0.5">{zone.hiddenFromSidebar ? "左侧导航隐藏" : "左侧导航显示"}</span>
                   </div>
                 </button>
               )
@@ -224,11 +343,21 @@ export function StructureManager({ zones, boards, permissions, initialFilters }:
               <p className="mt-1 text-xs text-muted-foreground">围绕当前分区集中查看节点状态、发帖权限、审核策略和流量表现。</p>
             </div>
             <div className="flex items-center gap-2">
-              {visibleZoneId && zones.find((zone) => zone.id === visibleZoneId)?.canEditSettings ? <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "edit-zone", item: zones.find((zone) => zone.id === visibleZoneId)! })}>编辑分区</Button> : null}
+              {visibleZoneId && activeZone?.canEditSettings ? <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "edit-zone", item: activeZone })}>编辑分区</Button> : null}
+              {permissions.canDeleteZone && activeZone ? (
+                <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={handleDeleteZone}>
+                  删除分区
+                </Button>
+              ) : null}
               {permissions.canCreateBoard ? (
                 <Button type="button" className="h-8 rounded-full px-3 text-xs" onClick={() => setModal({ kind: "create-board", zoneId: visibleZoneId })}>
                   <Plus className="mr-1 h-3.5 w-3.5" />新建节点
                 </Button>
+              ) : null}
+              {canReviewBoardApplications ? (
+                <a href="/admin?tab=board-applications" className="inline-flex h-8 items-center justify-center rounded-full border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                  节点申请{pendingBoardApplicationCount > 0 ? ` ${pendingBoardApplicationCount}` : ""}
+                </a>
               ) : null}
             </div>
           </div>
@@ -250,7 +379,74 @@ export function StructureManager({ zones, boards, permissions, initialFilters }:
         </section>
       </div>
 
-      <StructureModal modal={modal} zones={zones} onClose={() => setModal(null)} />
+      <StructureModal modal={modal} zones={zones} isSiteAdmin={permissions.canCreateBoard} onClose={() => setModal(null)} />
+    </div>
+  )
+}
+
+export function AdminBoardApplicationManager({ zones, boardApplications, canReviewBoardApplications }: AdminBoardApplicationManagerProps) {
+  const [applicationModal, setApplicationModal] = useState<BoardApplicationItem | null>(null)
+  const pendingBoardApplications = useMemo(
+    () => boardApplications.filter((item) => item.status === "PENDING"),
+    [boardApplications],
+  )
+  const approvedBoardApplications = useMemo(
+    () => boardApplications.filter((item) => item.status === "APPROVED"),
+    [boardApplications],
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SummaryCard label="申请总数" value={boardApplications.length} icon={<FolderTree className="h-4 w-4" />} />
+        <SummaryCard label="待审核" value={pendingBoardApplications.length} icon={<AlertCircle className="h-4 w-4" />} />
+        <SummaryCard label="已通过" value={approvedBoardApplications.length} icon={<ShieldCheck className="h-4 w-4" />} />
+      </div>
+
+      <section className="rounded-[22px] border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">节点申请</h3>
+            <p className="mt-1 text-xs text-muted-foreground">用户提交新建节点申请后，会在这里等待管理员审核；通过后将自动创建节点并把申请人设为该节点版主。</p>
+          </div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700">待审核 {pendingBoardApplications.length}</span>
+        </div>
+
+        {!canReviewBoardApplications ? (
+          <div className="mt-4 rounded-[18px] border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+            当前无权审核节点申请。
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {boardApplications.map((item) => (
+              <div key={item.id} className="rounded-[18px] border border-border bg-background/70 px-4 py-4">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-lg">{item.icon}</span>
+                      <span className="text-sm font-semibold">{item.name}</span>
+                      <BoardApplicationStatusBadge status={item.status} />
+                      <span className="text-xs text-muted-foreground">{item.zone.name}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">申请人：@{item.applicant.username} · slug：/{item.slug}</p>
+                    {item.reason ? <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{item.reason}</p> : null}
+                    {item.reviewNote ? <p className="mt-2 text-xs text-muted-foreground">审核备注：{item.reviewNote}</p> : null}
+                    {item.board ? <p className="mt-2 text-xs text-emerald-700">已创建节点：/boards/{item.board.slug} · 节点金库 {formatNumber(item.board.treasuryPoints)}</p> : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setApplicationModal(item)}>
+                      {item.status === "PENDING" ? "审核" : "查看"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {boardApplications.length === 0 ? <div className="rounded-[18px] border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">当前还没有节点申请。</div> : null}
+          </div>
+        )}
+      </section>
+
+      <BoardApplicationReviewModal key={applicationModal?.id ?? "board-application-modal"} application={applicationModal} zones={zones} onClose={() => setApplicationModal(null)} />
     </div>
   )
 }
@@ -317,9 +513,10 @@ function BoardRow({ board, canDelete, onEdit }: { board: BoardItem; canDelete: b
       </div>
 
       <div className="space-y-1 text-muted-foreground">
-        <div>帖子 {board.postCount}</div>
-        <div>关注 {board.followerCount}</div>
-        <div>今日 {board.todayPostCount}</div>
+        <div>帖子 {formatNumber(board.postCount)}</div>
+        <div>关注 {formatNumber(board.followerCount)}</div>
+        <div>今日 {formatNumber(board.todayPostCount)}</div>
+        <div>金库 {formatNumber(board.treasuryPoints)}</div>
       </div>
 
       <div className="grid gap-1 text-muted-foreground md:grid-cols-2">
@@ -327,6 +524,7 @@ function BoardRow({ board, canDelete, onEdit }: { board: BoardItem; canDelete: b
         <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">回复 {board.replyPointDelta ?? "继承"}</span>
         <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">间隔 {board.postIntervalSeconds ?? "继承"}</span>
         <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">VIP {board.minPostVipLevel ?? 0}</span>
+        <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">{board.moderatorsCanWithdrawTreasury ? "版主可提金库" : "仅管理员提金库"}</span>
         <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">列表 {board.postListDisplayMode === POST_LIST_DISPLAY_MODE_GALLERY ? "画廊" : board.postListDisplayMode === POST_LIST_DISPLAY_MODE_DEFAULT ? "普通" : "继承分区"}</span>
         <span className="rounded-full bg-secondary/50 px-2 py-1 text-center">加载 {board.postListLoadMode === POST_LIST_LOAD_MODE_INFINITE ? "无限下拉" : board.postListLoadMode === POST_LIST_LOAD_MODE_PAGINATION ? "分页" : "继承分区"}</span>
       </div>
@@ -379,15 +577,35 @@ function CompactSelect({ name, label, value, options }: { name: string; label: s
   )
 }
 
-function StructureModal({ modal, zones, onClose }: { modal: ModalMode; zones: ZoneItem[]; onClose: () => void }) {
+function StructureModal({
+  modal,
+  zones,
+  isSiteAdmin,
+  onClose,
+}: {
+  modal: ModalMode
+  zones: ZoneItem[]
+  isSiteAdmin: boolean
+  onClose: () => void
+}) {
   if (!modal) {
     return null
   }
 
-  return <StructureModalForm key={getStructureModalKey(modal)} modal={modal} zones={zones} onClose={onClose} />
+  return <StructureModalForm key={getStructureModalKey(modal)} modal={modal} zones={zones} isSiteAdmin={isSiteAdmin} onClose={onClose} />
 }
 
-function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMode, null>; zones: ZoneItem[]; onClose: () => void }) {
+function StructureModalForm({
+  modal,
+  zones,
+  isSiteAdmin,
+  onClose,
+}: {
+  modal: Exclude<ModalMode, null>
+  zones: ZoneItem[]
+  isSiteAdmin: boolean
+  onClose: () => void
+}) {
   const router = useRouter()
   const [form, setForm] = useState<StructureFormState>(() => getInitialStructureFormState(modal, zones))
   const [isPending, startTransition] = useTransition()
@@ -395,6 +613,7 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
 
   const isBoard = modal.kind === "create-board" || modal.kind === "edit-board"
   const isEdit = modal.kind === "edit-zone" || modal.kind === "edit-board"
+  const isModeratorBoardEdit = isBoard && isEdit && !isSiteAdmin
   const editingItemId = modal.kind === "edit-zone" || modal.kind === "edit-board" ? modal.item.id : undefined
 
   const {
@@ -402,7 +621,11 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
     slug,
     description,
     icon,
+    sidebarLinks,
+    rulesMarkdown,
+    moderatorsCanWithdrawTreasury,
     sortOrder,
+    hiddenFromSidebar,
     zoneId,
     postPointDelta,
     replyPointDelta,
@@ -441,9 +664,49 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
     }))
   }
 
+  function updateSidebarLink(index: number, key: keyof BoardSidebarLinkDraft, value: BoardSidebarLinkDraft[keyof BoardSidebarLinkDraft]) {
+    setForm((current) => ({
+      ...current,
+      sidebarLinks: current.sidebarLinks.map((item, currentIndex) => (currentIndex === index ? { ...item, [key]: value } : item)),
+    }))
+  }
+
+  function addSidebarLink() {
+    setForm((current) => ({
+      ...current,
+      sidebarLinks: [...current.sidebarLinks, createEmptyBoardSidebarLink()],
+    }))
+  }
+
+  function removeSidebarLink(index: number) {
+    setForm((current) => ({
+      ...current,
+      sidebarLinks: current.sidebarLinks.filter((_, currentIndex) => currentIndex !== index),
+    }))
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     updateField("feedback", "")
+
+    if (isModeratorBoardEdit) {
+      const limitedFields = [
+        { label: "发帖积分", value: postPointDelta },
+        { label: "回复积分", value: replyPointDelta },
+        { label: "发帖间隔", value: postIntervalSeconds },
+        { label: "回复间隔", value: replyIntervalSeconds },
+      ]
+      const invalidField = limitedFields.find((field) => field.value !== "" && Number(field.value) > 0)
+
+      if (invalidField) {
+        setForm((current) => ({
+          ...current,
+          feedback: `版主编辑节点时，${invalidField.label}只能填写留空、0 或负数`,
+          feedbackTone: "error",
+        }))
+        return
+      }
+    }
 
     const payload: Record<string, unknown> = {
       type: isBoard ? "board" : "zone",
@@ -452,6 +715,10 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
       description,
       sortOrder: Number(sortOrder) || 0,
       icon,
+      sidebarLinks: isBoard ? sidebarLinks : undefined,
+      rulesMarkdown: isBoard ? rulesMarkdown : undefined,
+      moderatorsCanWithdrawTreasury: isBoard && !isModeratorBoardEdit ? moderatorsCanWithdrawTreasury : undefined,
+      hiddenFromSidebar: isBoard ? undefined : hiddenFromSidebar,
       zoneId: isBoard ? zoneId : undefined,
       id: editingItemId,
       postPointDelta: postPointDelta === "" ? undefined : Number(postPointDelta),
@@ -525,14 +792,26 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
           <Field label="排序" value={sortOrder} onChange={(value) => updateField("sortOrder", value)} placeholder="数字越小越靠前" />
         </div>
 
+        {!isBoard ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Toggle label="在左侧导航隐藏" checked={hiddenFromSidebar} onChange={(value) => updateField("hiddenFromSidebar", value)} />
+          </div>
+        ) : null}
+
         {isBoard ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">所属分区</p>
-            <select value={zoneId} onChange={(event) => updateField("zoneId", event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none">
-              {zones.map((zone) => (
-                <option key={zone.id} value={zone.id}>{zone.name}</option>
-              ))}
-            </select>
+            {isModeratorBoardEdit ? (
+              <div className="flex h-11 items-center rounded-full border border-border bg-background px-4 text-sm text-muted-foreground">
+                {modal.kind === "edit-board" ? (modal.item.zoneName ?? "未分配分区") : "当前节点所属分区"}
+              </div>
+            ) : (
+              <select value={zoneId} onChange={(event) => updateField("zoneId", event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none">
+                {zones.map((zone) => (
+                  <option key={zone.id} value={zone.id}>{zone.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         ) : null}
 
@@ -541,13 +820,54 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
           <textarea value={description} onChange={(event) => updateField("description", event.target.value)} placeholder="填写结构描述，帮助用户理解这个分区或节点的定位" className="min-h-[120px] w-full rounded-[24px] border border-border bg-background px-4 py-3 text-sm outline-none" />
         </div>
 
+        {isBoard ? (
+          <div className="rounded-[24px] ">
+            <h4 className="text-sm font-semibold">节点侧栏</h4>
+            <div className="mt-4 space-y-2">
+              {sidebarLinks.length > 0 ? (
+                <div className="hidden items-center gap-3 px-3 text-[11px] font-medium text-muted-foreground lg:grid lg:grid-cols-[120px_minmax(0,1fr)_110px_120px_80px]">
+                  <span>图标 / 标题</span>
+                  <span>URL</span>
+                  <span>标题颜色</span>
+                  <span className="text-right">操作</span>
+                </div>
+              ) : null}
+              {sidebarLinks.map((item, index) => (
+                <BoardSidebarLinkEditor
+                  key={`sidebar-link-${index}`}
+                  item={item}
+                  index={index}
+                  onChange={updateSidebarLink}
+                  onRemove={removeSidebarLink}
+                />
+              ))}
+              <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-xs" onClick={addSidebarLink}>
+                <Plus className="mr-2 h-4 w-4" />新增节点链接
+              </Button>
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-medium">节点规则 Markdown</p>
+              <RefinedRichPostEditor value={rulesMarkdown} onChange={(value) => updateField("rulesMarkdown", value)} placeholder="留空时前台显示系统默认节点规则" minHeight={220} uploadFolder="posts" />
+
+            </div>
+            {!isModeratorBoardEdit ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <Toggle label="版主可提取节点金库" checked={moderatorsCanWithdrawTreasury} onChange={(value) => updateField("moderatorsCanWithdrawTreasury", value)} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="rounded-[24px] border border-border p-5">
           <h4 className="text-sm font-semibold">积分与频率设置</h4>
+          {isModeratorBoardEdit ? (
+            <p className="mt-2 text-xs leading-6 text-muted-foreground">编辑节点时，这四项只能填写留空、0 或负数；留空表示继续继承分区设置。</p>
+          ) : null}
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="发帖积分" value={postPointDelta} onChange={(value) => updateField("postPointDelta", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="回复积分" value={replyPointDelta} onChange={(value) => updateField("replyPointDelta", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="发帖间隔(秒)" value={postIntervalSeconds} onChange={(value) => updateField("postIntervalSeconds", value)} placeholder={isBoard ? "留空继承分区" : "默认 120"} />
-            <Field label="回复间隔(秒)" value={replyIntervalSeconds} onChange={(value) => updateField("replyIntervalSeconds", value)} placeholder={isBoard ? "留空继承分区" : "默认 3"} />
+            <Field label="发帖积分" help={getStructureNumericFieldHelp({ field: "postPointDelta", isBoard, isModeratorBoardEdit })} value={postPointDelta} onChange={(value) => updateField("postPointDelta", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="回复积分" help={getStructureNumericFieldHelp({ field: "replyPointDelta", isBoard, isModeratorBoardEdit })} value={replyPointDelta} onChange={(value) => updateField("replyPointDelta", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="发帖间隔(秒)" help={getStructureNumericFieldHelp({ field: "postIntervalSeconds", isBoard, isModeratorBoardEdit })} value={postIntervalSeconds} onChange={(value) => updateField("postIntervalSeconds", value)} placeholder={isBoard ? "留空继承分区" : "默认 120"} />
+            <Field label="回复间隔(秒)" help={getStructureNumericFieldHelp({ field: "replyIntervalSeconds", isBoard, isModeratorBoardEdit })} value={replyIntervalSeconds} onChange={(value) => updateField("replyIntervalSeconds", value)} placeholder={isBoard ? "留空继承分区" : "默认 3"} />
           </div>
         </div>
 
@@ -566,15 +886,15 @@ function StructureModalForm({ modal, zones, onClose }: { modal: Exclude<ModalMod
         <div className="rounded-[24px] border border-border p-5">
           <h4 className="text-sm font-semibold">浏览 / 发帖 / 回复权限</h4>
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Field label="浏览最低积分" value={minViewPoints} onChange={(value) => updateField("minViewPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="浏览最低等级" value={minViewLevel} onChange={(value) => updateField("minViewLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="浏览最低 VIP 等级" value={minViewVipLevel} onChange={(value) => updateField("minViewVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="发帖最低积分" value={minPostPoints} onChange={(value) => updateField("minPostPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="发帖最低等级" value={minPostLevel} onChange={(value) => updateField("minPostLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="发帖最低 VIP 等级" value={minPostVipLevel} onChange={(value) => updateField("minPostVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="回复最低积分" value={minReplyPoints} onChange={(value) => updateField("minReplyPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="回复最低等级" value={minReplyLevel} onChange={(value) => updateField("minReplyLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
-            <Field label="回复最低 VIP 等级" value={minReplyVipLevel} onChange={(value) => updateField("minReplyVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="浏览最低积分" help={getStructureAccessFieldHelp({ field: "minViewPoints", isBoard })} value={minViewPoints} onChange={(value) => updateField("minViewPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="浏览最低等级" help={getStructureAccessFieldHelp({ field: "minViewLevel", isBoard })} value={minViewLevel} onChange={(value) => updateField("minViewLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="浏览最低 VIP 等级" help={getStructureAccessFieldHelp({ field: "minViewVipLevel", isBoard })} value={minViewVipLevel} onChange={(value) => updateField("minViewVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="发帖最低积分" help={getStructureAccessFieldHelp({ field: "minPostPoints", isBoard })} value={minPostPoints} onChange={(value) => updateField("minPostPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="发帖最低等级" help={getStructureAccessFieldHelp({ field: "minPostLevel", isBoard })} value={minPostLevel} onChange={(value) => updateField("minPostLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="发帖最低 VIP 等级" help={getStructureAccessFieldHelp({ field: "minPostVipLevel", isBoard })} value={minPostVipLevel} onChange={(value) => updateField("minPostVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="回复最低积分" help={getStructureAccessFieldHelp({ field: "minReplyPoints", isBoard })} value={minReplyPoints} onChange={(value) => updateField("minReplyPoints", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="回复最低等级" help={getStructureAccessFieldHelp({ field: "minReplyLevel", isBoard })} value={minReplyLevel} onChange={(value) => updateField("minReplyLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
+            <Field label="回复最低 VIP 等级" help={getStructureAccessFieldHelp({ field: "minReplyVipLevel", isBoard })} value={minReplyVipLevel} onChange={(value) => updateField("minReplyVipLevel", value)} placeholder={isBoard ? "留空继承分区" : "默认 0"} />
           </div>
         </div>
 
@@ -628,7 +948,11 @@ function getInitialStructureFormState(modal: Exclude<ModalMode, null>, zones: Zo
       slug: "",
       description: "",
       icon: "📚",
+      sidebarLinks: [],
+      rulesMarkdown: "",
+      moderatorsCanWithdrawTreasury: false,
       sortOrder: String(zones.length + 1),
+      hiddenFromSidebar: false,
       zoneId: defaultZoneId,
       postPointDelta: "0",
       replyPointDelta: "0",
@@ -658,7 +982,11 @@ function getInitialStructureFormState(modal: Exclude<ModalMode, null>, zones: Zo
       slug: "",
       description: "",
       icon: "💬",
+      sidebarLinks: [],
+      rulesMarkdown: "",
+      moderatorsCanWithdrawTreasury: false,
       sortOrder: "0",
+      hiddenFromSidebar: false,
       zoneId: modal.zoneId ?? defaultZoneId,
       postPointDelta: "",
       replyPointDelta: "",
@@ -688,7 +1016,11 @@ function getInitialStructureFormState(modal: Exclude<ModalMode, null>, zones: Zo
       slug: modal.item.slug,
       description: modal.item.description,
       icon: modal.item.icon,
+      sidebarLinks: [],
+      rulesMarkdown: "",
+      moderatorsCanWithdrawTreasury: false,
       sortOrder: String(modal.item.sortOrder),
+      hiddenFromSidebar: modal.item.hiddenFromSidebar,
       zoneId: defaultZoneId,
       postPointDelta: String(modal.item.postPointDelta),
       replyPointDelta: String(modal.item.replyPointDelta),
@@ -717,7 +1049,11 @@ function getInitialStructureFormState(modal: Exclude<ModalMode, null>, zones: Zo
     slug: modal.item.slug,
     description: modal.item.description ?? "",
     icon: modal.item.icon ?? "💬",
+    sidebarLinks: modal.item.sidebarLinks.length > 0 ? modal.item.sidebarLinks.map((item) => ({ ...item })) : [],
+    rulesMarkdown: modal.item.rulesMarkdown ?? "",
+    moderatorsCanWithdrawTreasury: Boolean(modal.item.moderatorsCanWithdrawTreasury),
     sortOrder: String(modal.item.sortOrder ?? 0),
+    hiddenFromSidebar: false,
     zoneId: modal.item.zoneId ?? defaultZoneId,
     postPointDelta: modal.item.postPointDelta == null ? "" : String(modal.item.postPointDelta),
     replyPointDelta: modal.item.replyPointDelta == null ? "" : String(modal.item.replyPointDelta),
@@ -755,10 +1091,331 @@ function getStructureModalTitle(modal: Exclude<ModalMode, null>) {
   return "编辑节点"
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+function getStructureNumericFieldHelp({
+  field,
+  isBoard,
+  isModeratorBoardEdit,
+}: {
+  field: "postPointDelta" | "replyPointDelta" | "postIntervalSeconds" | "replyIntervalSeconds"
+  isBoard: boolean
+  isModeratorBoardEdit: boolean
+}) {
+  const isPointsField = field === "postPointDelta" || field === "replyPointDelta"
+  const inheritText = isBoard ? "留空：继承所属分区的设置。" : "分区建议直接填写明确数值；留空时会回落到系统默认值。"
+  const zeroText = isPointsField ? "填写 0：不加分也不扣分。" : "填写 0：不限制操作频率。"
+  const negativeText = isPointsField ? "填写负数：执行操作时扣除对应积分。" : "填写负数：系统会按“无频率限制”处理。"
+  const positiveText = isPointsField ? "填写正数：执行成功后奖励对应积分。" : "填写正数：要求用户等待这么多秒后才能再次操作。"
+
+  return (
+    <div className="space-y-1.5 text-[12px] leading-5">
+      <p>{inheritText}</p>
+      <p>{zeroText}</p>
+      <p>{negativeText}</p>
+      {!isModeratorBoardEdit ? <p>{positiveText}</p> : <p>版主编辑节点时：只能填写留空、0 或负数，不能填写正数。</p>}
+    </div>
+  )
+}
+
+function getStructureAccessFieldHelp({
+  field,
+  isBoard,
+}: {
+  field:
+    | "minViewPoints"
+    | "minViewLevel"
+    | "minPostPoints"
+    | "minPostLevel"
+    | "minReplyPoints"
+    | "minReplyLevel"
+    | "minViewVipLevel"
+    | "minPostVipLevel"
+    | "minReplyVipLevel"
+  isBoard: boolean
+}) {
+  const inheritText = isBoard ? "留空：继承所属分区的限制。" : "分区建议直接填写明确数值；留空时会回落到系统默认值。"
+  const isVipField = field === "minViewVipLevel" || field === "minPostVipLevel" || field === "minReplyVipLevel"
+  const isLevelField = field === "minViewLevel" || field === "minPostLevel" || field === "minReplyLevel"
+  const actionText = field.startsWith("minView") ? "浏览" : field.startsWith("minPost") ? "发帖" : "回复"
+  const thresholdText = isVipField
+    ? `填写数值：只有 VIP 等级大于等于该值的用户才能${actionText}。`
+    : isLevelField
+      ? `填写数值：只有等级大于等于该值的用户才能${actionText}。`
+      : `填写数值：只有积分大于等于该值的用户才能${actionText}。`
+  const zeroText = "填写 0：不额外限制这项权限。"
+
+  return (
+    <div className="space-y-1.5 text-[12px] leading-5">
+      <p>{inheritText}</p>
+      <p>{zeroText}</p>
+      <p>{thresholdText}</p>
+    </div>
+  )
+}
+
+function getInitialBoardApplicationReviewState(application: BoardApplicationItem | null): BoardApplicationReviewFormState {
+  return {
+    zoneId: application?.zone.id ?? "",
+    name: application?.name ?? "",
+    slug: application?.slug ?? "",
+    description: application?.description ?? "",
+    icon: application?.icon ?? "💬",
+    reason: application?.reason ?? "",
+    reviewNote: application?.reviewNote ?? "",
+  }
+}
+
+function BoardApplicationReviewModal({
+  application,
+  zones,
+  onClose,
+}: {
+  application: BoardApplicationItem | null
+  zones: ZoneItem[]
+  onClose: () => void
+}) {
+  const router = useRouter()
+  const [form, setForm] = useState<BoardApplicationReviewFormState>(() => getInitialBoardApplicationReviewState(application))
+  const [isPending, startTransition] = useTransition()
+
+  if (!application) {
+    return null
+  }
+
+  const currentApplication = application
+
+  function updateField<K extends keyof BoardApplicationReviewFormState>(field: K, value: BoardApplicationReviewFormState[K]) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function runReviewAction(action: "update" | "approve" | "reject") {
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/admin/board-applications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: currentApplication.id,
+            action,
+            zoneId: form.zoneId,
+            name: form.name,
+            slug: form.slug,
+            description: form.description,
+            icon: form.icon,
+            reason: form.reason,
+            reviewNote: form.reviewNote,
+          }),
+        })
+        const result = await response.json().catch(() => null) as { message?: string } | null
+
+        if (!response.ok) {
+          toast.error(result?.message ?? "处理节点申请失败", "节点申请")
+          return
+        }
+
+        toast.success(result?.message ?? "节点申请已处理", "节点申请")
+        router.refresh()
+        onClose()
+      } catch {
+        toast.error("处理节点申请失败", "节点申请")
+      }
+    })
+  }
+
+  return (
+    <AdminFormModal
+      open
+      onClose={onClose}
+      closeDisabled={isPending}
+      closeOnEscape={!isPending}
+      size="lg"
+      title={currentApplication.status === "PENDING" ? "审核节点申请" : "查看节点申请"}
+      description={`申请人 @${currentApplication.applicant.username}，提交于 ${new Date(currentApplication.createdAt).toLocaleString("zh-CN")}`}
+      onSubmit={(event) => {
+        event.preventDefault()
+        runReviewAction("update")
+      }}
+      footer={({ formId }) => (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" form={formId} variant="outline" disabled={isPending}>
+            {isPending ? "保存中..." : "保存修改"}
+          </Button>
+          {currentApplication.status === "PENDING" ? (
+            <>
+              <Button type="button" disabled={isPending} onClick={() => runReviewAction("approve")}>
+                通过并创建节点
+              </Button>
+              <Button type="button" variant="outline" disabled={isPending} onClick={() => runReviewAction("reject")}>
+                驳回申请
+              </Button>
+            </>
+          ) : null}
+          <Button type="button" variant="ghost" disabled={isPending} onClick={onClose}>
+            关闭
+          </Button>
+        </div>
+      )}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">所属分区</p>
+          <select value={form.zoneId} onChange={(event) => updateField("zoneId", event.target.value)} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none">
+            {zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>{zone.name}</option>
+            ))}
+          </select>
+        </div>
+        <Field label="节点名称" value={form.name} onChange={(value) => updateField("name", value)} placeholder="请输入节点名称" />
+        <Field label="slug" value={form.slug} onChange={(value) => updateField("slug", value)} placeholder="例如 photography" />
+        <Field label="图标" value={form.icon} onChange={(value) => updateField("icon", value)} placeholder="例如 📷" />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">节点描述</p>
+        <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} className="min-h-[120px] w-full rounded-[20px] border border-border bg-background px-4 py-3 text-sm outline-none" placeholder="补充这个节点的定位和用途" />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">申请理由</p>
+        <textarea value={form.reason} onChange={(event) => updateField("reason", event.target.value)} className="min-h-[120px] w-full rounded-[20px] border border-border bg-background px-4 py-3 text-sm outline-none" placeholder="申请人补充说明为什么需要这个节点" />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">审核备注</p>
+        <textarea value={form.reviewNote} onChange={(event) => updateField("reviewNote", event.target.value)} className="min-h-[100px] w-full rounded-[20px] border border-border bg-background px-4 py-3 text-sm outline-none" placeholder="填写审核意见、补充说明或驳回原因" />
+      </div>
+
+      <div className="rounded-[18px] border border-border bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+        <p>申请人：@{currentApplication.applicant.username}（{currentApplication.applicant.displayName}）</p>
+        <p className="mt-1">当前状态：{getBoardApplicationStatusLabel(currentApplication.status)}</p>
+        {currentApplication.board ? <p className="mt-1">已创建节点：/boards/{currentApplication.board.slug} · 节点金库 {formatNumber(currentApplication.board.treasuryPoints)}</p> : null}
+      </div>
+    </AdminFormModal>
+  )
+}
+
+function getBoardApplicationStatusLabel(status: BoardApplicationItem["status"]) {
+  if (status === "APPROVED") return "已通过"
+  if (status === "REJECTED") return "已驳回"
+  if (status === "CANCELLED") return "已取消"
+  return "待审核"
+}
+
+function BoardApplicationStatusBadge({ status }: { status: BoardApplicationItem["status"] }) {
+  const className = status === "APPROVED"
+    ? "rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] text-emerald-700"
+    : status === "REJECTED"
+      ? "rounded-full bg-rose-100 px-2.5 py-1 text-[11px] text-rose-700"
+      : status === "CANCELLED"
+        ? "rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700"
+        : "rounded-full bg-amber-100 px-2.5 py-1 text-[11px] text-amber-700"
+
+  return <span className={className}>{getBoardApplicationStatusLabel(status)}</span>
+}
+
+function BoardSidebarLinkEditor({
+  item,
+  index,
+  onChange,
+  onRemove,
+}: {
+  item: BoardSidebarLinkDraft
+  index: number
+  onChange: (index: number, key: keyof BoardSidebarLinkDraft, value: BoardSidebarLinkDraft[keyof BoardSidebarLinkDraft]) => void
+  onRemove: (index: number) => void
+}) {
+  return (
+    <div className="rounded-[18px] border border-border bg-card/60 p-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(360px,1.6fr)_110px_72px] lg:items-center">
+        <div className="flex items-center gap-2">
+          <AdminIconPickerField
+            label="图标"
+            value={item.icon ?? ""}
+            onChange={(value) => onChange(index, "icon", value.trim() ? value : null)}
+            popoverTitle="选择节点链接图标"
+            containerClassName="shrink-0"
+            triggerClassName="flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-background text-left text-sm transition-colors hover:bg-accent"
+            textareaRows={3}
+            hideLabel
+            triggerMode="icon"
+          />
+          <input
+            value={item.title}
+            onChange={(event) => onChange(index, "title", event.target.value)}
+            placeholder="标题"
+            className="h-9 min-w-0 flex-1 rounded-full border border-border bg-background px-3 text-sm outline-none"
+          />
+        </div>
+        <input
+          value={item.url}
+          onChange={(event) => onChange(index, "url", event.target.value)}
+          placeholder="/help/pkq 或 https://example.com"
+          className="h-9 min-w-0 rounded-full border border-border bg-background px-3 text-sm outline-none"
+        />
+        <BoardSidebarLinkColorField value={item.titleColor ?? ""} onChange={(value) => onChange(index, "titleColor", value || null)} />
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={() => onRemove(index)}>删除</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BoardSidebarLinkColorField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const normalizedValue = normalizeHexColor(value || "#111827", "#111827")
+
+  return (
+    <div className="relative">
+      <PickerTriggerField value={value || normalizedValue} previewColor={value || normalizedValue} fallbackColor="#111827" onClick={() => setOpen((current) => !current)} />
+      {open ? (
+        <div className="absolute right-0 top-full z-20 mt-2 w-[280px]">
+          <PickerPopover title="选择标题颜色" onClose={() => setOpen(false)}>
+            <div className="flex items-center gap-2">
+              <input type="color" value={normalizedValue} onChange={(event) => onChange(event.target.value)} className="h-8 w-10 cursor-pointer rounded-lg border border-border bg-background p-0.5" aria-label="选择标题颜色" />
+              <input value={value} onChange={(event) => onChange(event.target.value)} className="h-8 w-28 rounded-full border border-border bg-background px-3 text-xs outline-none" placeholder="#111827" />
+              <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" onClick={() => onChange("")}>清空</Button>
+            </div>
+          </PickerPopover>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function Field({
+  label,
+  help,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string
+  help?: React.ReactNode
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-medium">{label}</p>
+        {help ? (
+          <Tooltip content={help} contentClassName="max-w-[320px]" enableMobileTap>
+            <button type="button" className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground" aria-label={`${label}填写说明`}>
+              <CircleHelp className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        ) : null}
+      </div>
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="h-11 w-full rounded-full border border-border bg-background px-4 text-sm outline-none" />
     </div>
   )

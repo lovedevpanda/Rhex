@@ -4,6 +4,8 @@ import type { Board, Comment, LotteryCondition, LotteryParticipant, LotteryPrize
 
 import type { LocalPostType } from "@/lib/post-types"
 import { mapLotteryView } from "@/lib/lottery"
+import type { AnonymousDisplayIdentity } from "@/lib/post-anonymous"
+import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 
 import { getPublicPostContentText, parsePostContentDocument } from "@/lib/post-content"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
@@ -53,6 +55,7 @@ export interface SitePostItem {
   board: string
   boardIcon: string
   boardSlug?: string
+  isAnonymous?: boolean
   author: string
   authorId?: number
   authorUsername?: string
@@ -88,6 +91,7 @@ export interface SitePostItem {
     visible: boolean
     replyThreshold?: number
     price?: number
+    purchaseCount?: number
   }>
 
   editableUntil?: string | null
@@ -171,15 +175,15 @@ export interface SitePostItem {
 }
 
 
-function mapDatabasePost(post: Post & { board: Board; author: User }): SitePostItem {
-  return mapListPost(post)
+function mapDatabasePost(post: Post & { board: Board; author: User }, anonymousMaskIdentity: AnonymousDisplayIdentity | null = null): SitePostItem {
+  return mapListPost(post, anonymousMaskIdentity)
 }
 
 
 function mapPostDetail(
   post: Post & PostDetailRelations,
   currentUserId?: number,
-  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary },
+  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; purchasedBlockBuyerCounts?: Map<string, number>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary; anonymousMaskIdentity?: AnonymousDisplayIdentity | null },
 ): SitePostItem {
   const totalVotes = post.pollOptions.reduce((sum, option) => sum + option.voteCount, 0)
   const tipSummary = options?.tipSummary
@@ -191,6 +195,7 @@ function mapPostDetail(
     const isAdmin = Boolean(options?.isAdmin)
     const replyCount = options?.userReplyCount ?? 0
     const purchasedBlockIds = options?.purchasedBlockIds ?? new Set<string>()
+    const purchasedBlockBuyerCounts = options?.purchasedBlockBuyerCounts ?? new Map<string, number>()
     const replyUnlocked = isOwner || isAdmin || replyCount >= (block.replyThreshold ?? 1)
     const visible = block.type === "PUBLIC"
       || (block.type === "AUTHOR_ONLY" && (isOwner || isAdmin))
@@ -205,11 +210,12 @@ function mapPostDetail(
       visible,
       replyThreshold: block.replyThreshold,
       price: block.price,
+      purchaseCount: block.type === "PURCHASE_UNLOCK" ? (purchasedBlockBuyerCounts.get(block.id) ?? 0) : undefined,
     }
   })
 
   return {
-    ...mapDatabasePost(post),
+    ...mapDatabasePost(post, options?.anonymousMaskIdentity ?? null),
     boardSlug: post.board.slug,
     commentsVisibleToAuthorOnly: post.commentsVisibleToAuthorOnly,
     contentBlocks,
@@ -298,8 +304,11 @@ function mapPostDetail(
 
 export async function getHomepagePosts(page = 1, pageSize = 20): Promise<SitePostItem[]> {
   return withRuntimeFallback(async () => {
-    const posts = await findHomepagePosts(page, pageSize)
-    return posts.map(mapDatabasePost)
+    const [posts, anonymousMaskIdentity] = await Promise.all([
+      findHomepagePosts(page, pageSize),
+      getAnonymousMaskDisplayIdentity(),
+    ])
+    return posts.map((post) => mapDatabasePost(post, anonymousMaskIdentity))
   }, {
     area: "posts",
     action: "getHomepagePosts",
@@ -313,18 +322,24 @@ export async function getHomepagePosts(page = 1, pageSize = 20): Promise<SitePos
 export async function getPostDetailBySlug(
   slug: string,
   currentUserId?: number,
-  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary },
+  options?: { isAdmin?: boolean; userReplyCount?: number; purchasedBlockIds?: Set<string>; purchasedBlockBuyerCounts?: Map<string, number>; tipSummary?: PostTipSummary; redPacketSummary?: PostRedPacketSummary },
 ): Promise<SitePostItem | null> {
 
   try {
-    const post = await findPostDetailBySlug(slug, currentUserId)
+    const [post, anonymousMaskIdentity] = await Promise.all([
+      findPostDetailBySlug(slug, currentUserId),
+      getAnonymousMaskDisplayIdentity(),
+    ])
 
     if (!post) {
 
       return null
     }
 
-    return mapPostDetail(post, currentUserId, options)
+    return mapPostDetail(post, currentUserId, {
+      ...options,
+      anonymousMaskIdentity,
+    })
   } catch (error) {
     console.error(error)
     return null

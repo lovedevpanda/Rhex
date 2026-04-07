@@ -46,6 +46,7 @@ export async function updateProfileSiteSettingsSection(existing: SiteSettingsRec
       homeFeedFallback: 35,
       zonePostsFallback: 20,
       boardPostsFallback: 20,
+      commentsFallback: 15,
       hotTopicsFallback: 5,
       postRelatedTopicsFallback: 5,
     })
@@ -67,6 +68,7 @@ export async function updateProfileSiteSettingsSection(existing: SiteSettingsRec
       homeFeed: homeFeedPostPageSize,
       zonePosts: zonePostPageSize,
       boardPosts: boardPostPageSize,
+      comments: existingPostPageSizeSettings.comments,
       hotTopics: homeSidebarHotTopicsCount,
       postRelatedTopics: postSidebarRelatedTopicsCount,
     })

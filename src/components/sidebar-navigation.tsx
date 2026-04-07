@@ -10,6 +10,7 @@ interface SidebarZoneItem {
   slug: string
   name: string
   icon: string
+  hiddenFromSidebar?: boolean
   minViewPoints?: number
   minViewLevel?: number
   vipViewOnly?: boolean
@@ -40,6 +41,7 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
   const baseItemClass = "flex items-center gap-3 rounded-md px-4 py-2 text-sm transition-colors"
   const activeItemClass = "bg-[linear-gradient(135deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.08)_50%,rgba(255,255,255,0.08)_75%,transparent_75%,transparent)] bg-[length:8px_8px] font-medium text-foreground"
   const inactiveItemClass = "text-muted-foreground hover:bg-accent hover:text-foreground"
+  const visibleZones = zones.filter((zone) => !zone.hiddenFromSidebar)
 
   return (
     <div className="forum-page-sidebar hidden lg:-ml-2 lg:block">
@@ -67,7 +69,7 @@ export function SidebarNavigation({ zones, boards, activeZoneSlug, activeBoardSl
                 </button>
               </div>
     
-              {zones.map((zone) => {
+              {visibleZones.map((zone) => {
                 const isActive = activeZoneSlug === zone.slug
 
                 return (

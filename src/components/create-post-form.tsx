@@ -44,6 +44,19 @@ import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 
+function HoverTip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex items-center">
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground">
+        <Info className="h-3.5 w-3.5" />
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-20 w-56 -translate-x-1/2 rounded-2xl border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground opacity-0 shadow-2xl transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 function resolveAvailableRewardPoolMode(
   currentMode: LocalPostDraft["redPacketMode"],
   options: {
@@ -66,9 +79,24 @@ function resolveAvailableRewardPoolMode(
   return "RED_PACKET" as const
 }
 
+function getEffectiveRewardPoolOptions(
+  isAnonymous: boolean,
+  options: {
+    postRedPacketEnabled: boolean
+    postJackpotEnabled: boolean
+  },
+) {
+  return {
+    postRedPacketEnabled: !isAnonymous && options.postRedPacketEnabled,
+    postJackpotEnabled: options.postJackpotEnabled,
+  }
+}
+
 export function CreatePostForm({
   boardOptions,
   pointName,
+  anonymousPostEnabled = false,
+  anonymousPostPrice = 0,
   postRedPacketEnabled = false,
   postRedPacketMaxPoints = 100,
   postJackpotEnabled = false,
@@ -91,6 +119,10 @@ export function CreatePostForm({
   const initialDraftData = useMemo(
     () => {
       const draft = buildInitialPostDraft(initialValues, boardOptions, pointName)
+      const effectiveRewardPoolOptions = getEffectiveRewardPoolOptions(draft.isAnonymous, {
+        postRedPacketEnabled,
+        postJackpotEnabled,
+      })
 
       if (mode === "edit") {
         return draft
@@ -98,10 +130,7 @@ export function CreatePostForm({
 
       return {
         ...draft,
-        redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, {
-          postRedPacketEnabled,
-          postJackpotEnabled,
-        }),
+        redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions),
       }
     },
     [boardOptions, initialValues, mode, pointName, postJackpotEnabled, postRedPacketEnabled],
@@ -144,13 +173,25 @@ export function CreatePostForm({
     () => multiplyPositiveSafeIntegers(normalizedRedPacketUnitPoints, normalizedRedPacketPacketCount),
     [normalizedRedPacketPacketCount, normalizedRedPacketUnitPoints],
   )
-  const rewardPoolFeatureEnabled = postRedPacketEnabled || postJackpotEnabled
+  const effectiveRewardPoolOptions = useMemo(
+    () => getEffectiveRewardPoolOptions(draft.isAnonymous, { postRedPacketEnabled, postJackpotEnabled }),
+    [draft.isAnonymous, postJackpotEnabled, postRedPacketEnabled],
+  )
+  const rewardPoolFeatureEnabled = effectiveRewardPoolOptions.postJackpotEnabled || effectiveRewardPoolOptions.postRedPacketEnabled
   const allBoards = useMemo(() => boardOptions.flatMap((group) => group.items), [boardOptions])
   const selectedBoard = allBoards.find((item) => item.value === draft.boardSlug) ?? allBoards[0]
   const allowedPostTypes = useMemo(() => resolveAllowedPostTypes(selectedBoard), [selectedBoard])
+  const anonymousAllowedPostTypes = useMemo(
+    () => allowedPostTypes.filter((item) => item === "NORMAL" || item === "POLL"),
+    [allowedPostTypes],
+  )
   const availablePostTypes = useMemo(
-    () => getAvailablePostTypes(allowedPostTypes, pointName),
-    [allowedPostTypes, pointName],
+    () => getAvailablePostTypes(draft.isAnonymous ? anonymousAllowedPostTypes : allowedPostTypes, pointName),
+    [allowedPostTypes, anonymousAllowedPostTypes, draft.isAnonymous, pointName],
+  )
+  const selectedPostTypeOption = useMemo(
+    () => availablePostTypes.find((item) => item.value === draft.postType) ?? availablePostTypes[0] ?? null,
+    [availablePostTypes, draft.postType],
   )
   const autoExtractedTags = useMemo(
     () => (jiebaReady ? extractAutoTags(deferredTitle, deferredContent) : []),
@@ -193,25 +234,38 @@ export function CreatePostForm({
   }, [])
 
   useEffect(() => {
-    if (!allowedPostTypes.includes(draft.postType as LocalPostType)) {
-      updateDraftField("postType", allowedPostTypes[0] ?? DEFAULT_POST_TYPE)
+    const nextAllowedPostTypes = draft.isAnonymous ? anonymousAllowedPostTypes : allowedPostTypes
+    if (!nextAllowedPostTypes.includes(draft.postType as LocalPostType)) {
+      updateDraftField("postType", nextAllowedPostTypes[0] ?? DEFAULT_POST_TYPE)
     }
-  }, [allowedPostTypes, draft.postType])
+  }, [allowedPostTypes, anonymousAllowedPostTypes, draft.isAnonymous, draft.postType])
 
   useEffect(() => {
     if (!draft.redPacketEnabled) {
       return
     }
 
-    const resolvedMode = resolveAvailableRewardPoolMode(draft.redPacketMode, {
-      postRedPacketEnabled,
-      postJackpotEnabled,
-    })
+    if (!rewardPoolFeatureEnabled) {
+      patchDraft({
+        redPacketEnabled: false,
+        redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions),
+        jackpotInitialPoints: String(postJackpotMinInitialPoints),
+        redPacketGrantMode: "FIXED",
+        redPacketClaimOrderMode: "FIRST_COME_FIRST_SERVED",
+        redPacketTriggerType: "REPLY",
+        redPacketUnitPoints: "10",
+        redPacketTotalPoints: "10",
+        redPacketPacketCount: "1",
+      })
+      return
+    }
+
+    const resolvedMode = resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions)
 
     if (resolvedMode !== draft.redPacketMode) {
       updateDraftField("redPacketMode", resolvedMode)
     }
-  }, [draft.redPacketEnabled, draft.redPacketMode, postJackpotEnabled, postRedPacketEnabled])
+  }, [draft.redPacketEnabled, draft.redPacketMode, effectiveRewardPoolOptions, postJackpotMinInitialPoints, rewardPoolFeatureEnabled])
 
   useEffect(() => {
     if (typeof window === "undefined" || hasPromptedDraftRef.current) {
@@ -273,12 +327,15 @@ export function CreatePostForm({
 
   function restoreDraft(nextDraft: LocalPostDraft) {
     const normalizedDraft = normalizeDraftData(nextDraft, pointName, initialDraftData.boardSlug)
+    const restoredRewardPoolOptions = getEffectiveRewardPoolOptions(normalizedDraft.isAnonymous, {
+      postRedPacketEnabled,
+      postJackpotEnabled,
+    })
     setDraft({
       ...normalizedDraft,
-      redPacketMode: resolveAvailableRewardPoolMode(normalizedDraft.redPacketMode, {
-        postRedPacketEnabled,
-        postJackpotEnabled,
-      }),
+      redPacketMode: resolveAvailableRewardPoolMode(normalizedDraft.redPacketMode, restoredRewardPoolOptions),
+      redPacketEnabled: normalizedDraft.redPacketEnabled
+        && (restoredRewardPoolOptions.postRedPacketEnabled || restoredRewardPoolOptions.postJackpotEnabled),
     })
     setDraftRestored(true)
     setPendingDraftToRestore(null)
@@ -636,20 +693,35 @@ export function CreatePostForm({
               <p className="text-sm font-medium">帖子类型</p>
               <p className="text-xs text-muted-foreground">选择后再填写对应内容</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {availablePostTypes.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => updateDraftField("postType", item.value as LocalPostType)}
-                  className={draft.postType === item.value ? "inline-flex items-center gap-2 rounded-full border border-foreground bg-accent px-4 py-2 text-sm font-medium" : "inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground hover:bg-accent/50"}
-                  disabled={isEditMode}
-                >
-                  <span>{item.label}</span>
-                  <span className="text-xs opacity-80">{item.hint}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <select
+                value={draft.postType}
+                onChange={(event) => updateDraftField("postType", event.target.value as LocalPostType)}
+                className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-none"
+                disabled={isEditMode}
+              >
+                {availablePostTypes.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              {!isEditMode && anonymousPostEnabled ? (
+                <label className="flex h-11 shrink-0 items-center justify-between gap-3 rounded-full border border-border bg-card px-4 text-sm sm:min-w-[168px]">
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="font-medium">匿名发布</span>
+                    <HoverTip text={`开启后显示为匿名账号，发布额外扣除 ${anonymousPostPrice} ${pointName}`} />
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={draft.isAnonymous}
+                    onChange={(event) => updateDraftField("isAnonymous", event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </label>
+              ) : null}
             </div>
+            {selectedPostTypeOption ? <p className="text-xs leading-6 text-muted-foreground">{selectedPostTypeOption.hint}</p> : null}
           </div>
         </div>
 
@@ -743,7 +815,7 @@ export function CreatePostForm({
 
         <PostEnhancementsSection
           pointName={pointName}
-          postRedPacketEnabled={rewardPoolFeatureEnabled}
+          rewardPoolEnabled={rewardPoolFeatureEnabled}
           settings={{
             finalTags: draft.manualTags,
             autoExtractedTags,
@@ -780,10 +852,7 @@ export function CreatePostForm({
             onOpenRewardPoolModal: () => setRewardPoolModalOpen(true),
             onClearRewardPool: () => patchDraft({
               redPacketEnabled: false,
-              redPacketMode: resolveAvailableRewardPoolMode("RED_PACKET", {
-                postRedPacketEnabled,
-                postJackpotEnabled,
-              }),
+              redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions),
               jackpotInitialPoints: String(postJackpotMinInitialPoints),
               redPacketGrantMode: "FIXED",
               redPacketClaimOrderMode: "FIRST_COME_FIRST_SERVED",
@@ -796,10 +865,7 @@ export function CreatePostForm({
               redPacketEnabled: checked,
               ...(checked
                 ? {
-                    redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, {
-                      postRedPacketEnabled,
-                      postJackpotEnabled,
-                    }),
+                    redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions),
                   }
                 : {}),
             }),
@@ -870,9 +936,9 @@ export function CreatePostForm({
       <PostRewardPoolModal
         open={rewardPoolModalOpen}
         pointName={pointName}
-        redPacketEnabled={postRedPacketEnabled}
+        redPacketEnabled={effectiveRewardPoolOptions.postRedPacketEnabled}
         redPacketMaxPoints={postRedPacketMaxPoints}
-        jackpotEnabled={postJackpotEnabled}
+        jackpotEnabled={effectiveRewardPoolOptions.postJackpotEnabled}
         jackpotMinInitialPoints={postJackpotMinInitialPoints}
         jackpotMaxInitialPoints={postJackpotMaxInitialPoints}
         jackpotReplyIncrementPoints={postJackpotReplyIncrementPoints}
@@ -896,10 +962,7 @@ export function CreatePostForm({
             redPacketEnabled: checked,
             ...(checked
               ? {
-                  redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, {
-                    postRedPacketEnabled,
-                    postJackpotEnabled,
-                  }),
+                  redPacketMode: resolveAvailableRewardPoolMode(draft.redPacketMode, effectiveRewardPoolOptions),
                 }
               : {}),
           }),

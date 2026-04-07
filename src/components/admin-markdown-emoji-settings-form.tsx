@@ -46,7 +46,7 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
         </div>
         <div className="space-y-3">
           {items.map((item, index) => (
-            <div key={`${item.shortcode}-${index}`} className="rounded-[20px] border border-border bg-card/60 p-4">
+            <div key={`markdown-emoji-${index}`} className="rounded-[20px] border border-border bg-card/60 p-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[180px_minmax(0,1fr)_auto] xl:items-start">
                 <TextField
                   label="短码"

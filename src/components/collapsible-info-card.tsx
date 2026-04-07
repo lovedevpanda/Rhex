@@ -7,8 +7,6 @@ import { ChevronDown, ChevronUp, Info, X } from "lucide-react"
 
 import { LevelIcon } from "@/components/level-icon"
 
-
-
 interface CategoryPill {
   id: string
   label: string
@@ -27,90 +25,114 @@ interface CollapsibleInfoCardProps {
   defaultVisibleCount?: number
   actions?: ReactNode
   summaryActions?: ReactNode
+  alwaysOpen?: boolean
+  hidePills?: boolean
+  detailAction?: ReactNode
 }
 
-export function CollapsibleInfoCard({ badge, title, icon, description, summary, pills, defaultVisibleCount = 7, actions, summaryActions }: CollapsibleInfoCardProps) {
-
-  const [open, setOpen] = useState(false)
+export function CollapsibleInfoCard({
+  badge,
+  title,
+  icon,
+  description,
+  summary,
+  pills,
+  defaultVisibleCount = 7,
+  actions,
+  summaryActions,
+  alwaysOpen = false,
+  hidePills = false,
+  detailAction,
+}: CollapsibleInfoCardProps) {
+  const [open, setOpen] = useState(alwaysOpen)
   const [expanded, setExpanded] = useState(false)
 
-  const shouldCollapsePills = pills.length > defaultVisibleCount
-  const visiblePills = expanded || !shouldCollapsePills ? pills : pills.slice(0, defaultVisibleCount)
+  const shouldCollapsePills = !hidePills && pills.length > defaultVisibleCount
+  const visiblePills = hidePills ? [] : expanded || !shouldCollapsePills ? pills : pills.slice(0, defaultVisibleCount)
+  const showTopBar = visiblePills.length > 0 || shouldCollapsePills || !alwaysOpen || Boolean(actions)
+  const resolvedDetailAction = detailAction ?? (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      onClick={() => setOpen(false)}
+    >
+      <X className="h-3 w-3" />
+      收起
+    </button>
+  )
 
   return (
     <>
-      <div className="px-4 pt-4 pb-1">
-        <div className="flex flex-col gap-2 border-b border-border/80 pb-2 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-            {visiblePills.map((pill) => (
-              <Link
-                key={pill.id}
-                href={pill.href}
-                className={pill.active ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
-              >
-                <LevelIcon icon={pill.icon} className="h-3.5 w-3.5 text-[13px] leading-none" svgClassName="[&>svg]:block" />
-                <span>{pill.label}</span>
-              </Link>
-
-            ))}
-          </div>
-
-          <div className="flex shrink-0 items-center justify-end gap-1 lg:pl-3">
-           
-            {shouldCollapsePills ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"
-                onClick={() => setExpanded((current) => !current)}
-              >
-                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                {expanded ? "" : `${pills.length - defaultVisibleCount}`}
-              </button>
-            ) : null}
-
-            <button
-              type="button"
-              className={open ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2 py-1 text-[10px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
-              onClick={() => setOpen((current) => !current)}
-              aria-expanded={open}
-            >
-              <Info className="h-3 w-3" />
-
-            </button>
-
-                           {actions}
-
-          </div>
-        </div>
-      </div>
-
-      {open ? (
-        <div className="overflow-hidden rounded-[28px] border-none bg-gradient-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
-          <div className="p-8">
-            <div className="mb-4 flex items-center gap-3">
-              <LevelIcon icon={icon} className="h-8 w-8 text-3xl" svgClassName="[&>svg]:block" />
-              <div>
-
-                <p className="text-sm text-white/70">{badge}</p>
-                <h1 className="text-3xl font-semibold">{title}</h1>
-              </div>
+      {showTopBar ? (
+        <div className="px-3 pt-2 pb-1">
+          <div className="flex flex-col gap-1.5 border-b border-border/80 pb-1.5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+              {visiblePills.map((pill) => (
+                <Link
+                  key={pill.id}
+                  href={pill.href}
+                  className={pill.active ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
+                >
+                  <LevelIcon icon={pill.icon} className="h-3 w-3 text-[12px] leading-none" svgClassName="[&>svg]:block" />
+                  <span>{pill.label}</span>
+                </Link>
+              ))}
             </div>
-            <p className="max-w-2xl text-sm leading-7 text-white/75 md:text-base">{description}</p>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-white/70">
-              <span>{summary}</span>
-              <div className="flex items-center gap-2">
-                {summaryActions}
+
+            <div className="flex shrink-0 items-center justify-end gap-1 lg:pl-3">
+              {shouldCollapsePills ? (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/15"
-                  onClick={() => setOpen(false)}
+                  className="inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"
+                  onClick={() => setExpanded((current) => !current)}
                 >
-                  <X className="h-3.5 w-3.5" />
-                  收起
+                  {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {expanded ? "" : `${pills.length - defaultVisibleCount}`}
                 </button>
+              ) : null}
+
+              {!alwaysOpen ? (
+                <button
+                  type="button"
+                  className={open ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
+                  onClick={() => setOpen((current) => !current)}
+                  aria-expanded={open}
+                >
+                  <Info className="h-3 w-3" />
+                </button>
+              ) : null}
+              {actions}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {open ? (
+        <div className="relative overflow-hidden rounded-[22px] border border-border bg-card shadow-sm shadow-black/5">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 left-6 h-20 w-20 rounded-full bg-accent blur-2xl" />
+          <div className="absolute bottom-3 right-3 top-3 z-10 flex w-[120px] flex-col items-end justify-between">
+            {resolvedDetailAction}
+            <div className="flex justify-end">
+              {summaryActions}
+            </div>
+          </div>
+          <div className="relative grid gap-3 p-4 pr-[9.5rem] md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] border border-border bg-accent text-foreground/90">
+              <LevelIcon icon={icon} className="h-5 w-5 text-lg" svgClassName="[&>svg]:block" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{badge}</p>
+                <span className="inline-flex max-w-full items-center rounded-full border border-border bg-background/85 px-2 py-0.5 text-[10px] font-medium text-foreground/80">
+                  <span className="truncate">{summary}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h1 className="text-lg font-semibold leading-tight text-foreground">{title}</h1>
+                <p className="min-w-0 text-sm leading-6 text-muted-foreground">{description}</p>
               </div>
             </div>
-
           </div>
         </div>
       ) : null}

@@ -208,6 +208,21 @@ export function canEditBoardSettings(actor: AdminActor, boardId: string, zoneId?
   return canEditZoneSettings(actor, zoneId)
 }
 
+export function canWithdrawBoardTreasury(actor: AdminActor, boardId: string, options?: {
+  zoneId?: string | null
+  moderatorsCanWithdrawBoardTreasury?: boolean
+}) {
+  if (isSiteAdmin(actor)) {
+    return true
+  }
+
+  if (!options?.moderatorsCanWithdrawBoardTreasury) {
+    return false
+  }
+
+  return canManageBoard(actor, boardId, options.zoneId)
+}
+
 export function getAvailablePinScopes(actor: AdminActor, options: { zoneId?: string | null; currentPinScope?: PinScope | null }) {
   if (isSiteAdmin(actor)) {
     return [PinScope.NONE, PinScope.BOARD, PinScope.ZONE, PinScope.GLOBAL]

@@ -1,28 +1,25 @@
-import { findPostUnlockUserPoints, findPurchasedPostBlockLog, listPurchasedPostBlockLogReasons, runPostUnlockTransaction } from "@/db/post-unlock-queries"
+import { randomUUID } from "node:crypto"
+
+import { createPostBlockPurchase, findPostUnlockUserPoints, findPurchasedPostBlockPurchase, listPurchasedPostBlockPurchaseBuyersByPost, listPurchasedPostBlockPurchases, runPostUnlockTransaction } from "@/db/post-unlock-queries"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
+import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 import { getSiteSettings } from "@/lib/site-settings"
 
-const PURCHASE_REASON_PREFIX = "[purchase:block]"
-
-function buildReasonPrefix(postId: string, blockId: string) {
-  return `${PURCHASE_REASON_PREFIX} post=${postId} block=${blockId}`
-}
-
-function buildReason(postId: string, blockId: string, pointName: string, price: number) {
-  return `${buildReasonPrefix(postId, blockId)} 购买帖子隐藏内容（${price}${pointName}）`
+function buildReason(_postId: string, _blockId: string, pointName: string, price: number) {
+  return `购买帖子隐藏内容（${price}${pointName}）`
 }
 
 export async function purchasePostBlock(options: { userId: number; postId: string; blockId: string; price: number; sellerId: number }) {
   const settings = await getSiteSettings()
 
   return runPostUnlockTransaction(async (tx) => {
-    const existing = await findPurchasedPostBlockLog({
+    const existingPurchase = await findPurchasedPostBlockPurchase({
       userId: options.userId,
       postId: options.postId,
-      reasonPrefix: buildReasonPrefix(options.postId, options.blockId),
+      blockId: options.blockId,
     }, tx)
 
-    if (existing) {
+    if (existingPurchase) {
       return { alreadyOwned: true }
     }
 
@@ -46,6 +43,19 @@ export async function purchasePostBlock(options: { userId: number; postId: strin
       throw new Error(`当前${settings.pointName}不足`)
     }
 
+    const purchaseRecord = await createPostBlockPurchase({
+      id: `pbp_${randomUUID()}`,
+      postId: options.postId,
+      blockId: options.blockId,
+      buyerId: options.userId,
+      sellerId: options.sellerId,
+      price: options.price,
+    }, tx)
+
+    if (!purchaseRecord) {
+      return { alreadyOwned: true }
+    }
+
     await applyPointDelta({
       tx,
       userId: options.userId,
@@ -54,6 +64,15 @@ export async function purchasePostBlock(options: { userId: number; postId: strin
       pointName: settings.pointName,
       insufficientMessage: `当前${settings.pointName}不足`,
       reason: buildReason(options.postId, options.blockId, settings.pointName, options.price),
+      eventType: POINT_LOG_EVENT_TYPES.POST_BLOCK_PURCHASE_PAID,
+      eventData: {
+        postId: options.postId,
+        blockId: options.blockId,
+        buyerId: options.userId,
+        sellerId: options.sellerId,
+        configuredPrice: options.price,
+        appliedFinalDelta: buyerPreparedDelta.finalDelta,
+      },
       relatedType: "POST",
       relatedId: options.postId,
     })
@@ -65,6 +84,15 @@ export async function purchasePostBlock(options: { userId: number; postId: strin
       prepared: sellerPreparedDelta,
       pointName: settings.pointName,
       reason: "帖子隐藏内容被购买",
+      eventType: POINT_LOG_EVENT_TYPES.POST_BLOCK_PURCHASE_SOLD,
+      eventData: {
+        postId: options.postId,
+        blockId: options.blockId,
+        buyerId: options.userId,
+        sellerId: options.sellerId,
+        configuredPrice: options.price,
+        appliedFinalDelta: sellerPreparedDelta.finalDelta,
+      },
       relatedType: "POST",
       relatedId: options.postId,
     })
@@ -78,11 +106,22 @@ export async function getPurchasedPostBlockIds(postId: string, userId?: number) 
     return new Set<string>()
   }
 
-  const rows = await listPurchasedPostBlockLogReasons(postId, userId)
+  const purchases = await listPurchasedPostBlockPurchases(postId, userId)
 
   return new Set<string>(
-    rows
-      .map((row) => row.reason.match(/block=([^\s]+)/)?.[1])
+    purchases
+      .map((row) => row.blockId)
       .filter((value): value is string => Boolean(value)),
   )
+}
+
+export async function getPurchasedPostBlockBuyerCounts(postId: string) {
+  const purchases = await listPurchasedPostBlockPurchaseBuyersByPost(postId)
+  const counts = new Map<string, number>()
+
+  for (const purchase of purchases) {
+    counts.set(purchase.blockId, (counts.get(purchase.blockId) ?? 0) + 1)
+  }
+
+  return counts
 }

@@ -22,9 +22,11 @@ import {
   buildManagedZoneWhereInput,
   requireAdminActor,
   requireSiteAdminActor,
+  isSiteAdmin,
   type AdminActor,
 } from "@/lib/moderator-permissions"
 import { apiError } from "./api-route"
+import { getAdminBoardApplicationPageData } from "@/lib/board-applications"
 
 export async function requireAdminUser() {
   const currentUser = await getCurrentUser()
@@ -60,12 +62,21 @@ export async function getAdminStructureData(): Promise<AdminStructureData> {
     apiError(403, "无权限访问后台版块数据")
   }
 
-  const data = await getAdminStructureRawData({
-    zoneWhere: buildManagedZoneWhereInput(currentUser),
-    boardWhere: buildManagedBoardWhereInput(currentUser),
-  })
+  const [data, boardApplications] = await Promise.all([
+    getAdminStructureRawData({
+      zoneWhere: buildManagedZoneWhereInput(currentUser),
+      boardWhere: buildManagedBoardWhereInput(currentUser),
+    }),
+    isSiteAdmin(currentUser)
+      ? getAdminBoardApplicationPageData()
+      : Promise.resolve({ pendingCount: 0, items: [] }),
+  ])
 
-  return mapAdminStructureData(data, currentUser)
+  return {
+    ...mapAdminStructureData(data, currentUser),
+    boardApplications: boardApplications.items,
+    canReviewBoardApplications: isSiteAdmin(currentUser),
+  }
 }
 
 export async function getAdminPosts(query: AdminPostQuery = {}): Promise<AdminPostListResult> {

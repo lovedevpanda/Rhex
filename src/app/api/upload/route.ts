@@ -27,7 +27,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
   const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
 
-  if (!extension || extension === "svg" || !allowedExtensions.includes(extension)) {
+  if (!extension || !allowedExtensions.includes(extension)) {
     apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
   }
 

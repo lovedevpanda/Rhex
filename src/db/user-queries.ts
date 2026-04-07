@@ -56,6 +56,7 @@ export function findUserPostsByUsername(username: string) {
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
+      isAnonymous: false,
       author: {
         username,
       },
@@ -75,6 +76,16 @@ export function findUserRepliesByUsername(username: string, limit = 20) {
       },
       post: {
         status: "NORMAL",
+        OR: [
+          { isAnonymous: false },
+          {
+            author: {
+              username: {
+                not: username,
+              },
+            },
+          },
+        ],
       },
     },
     select: {
@@ -110,6 +121,18 @@ export function countUserPosts(userId: number) {
     where: {
       status: "NORMAL",
       authorId: userId,
+    },
+  })
+}
+
+export function countUserPublicPostsByUsername(username: string) {
+  return prisma.post.count({
+    where: {
+      status: "NORMAL",
+      isAnonymous: false,
+      author: {
+        username,
+      },
     },
   })
 }

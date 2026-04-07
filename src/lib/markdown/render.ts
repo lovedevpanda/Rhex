@@ -67,6 +67,41 @@ function upsertAttribute(attrs: Array<[string, string]> | undefined, name: strin
   return nextAttrs
 }
 
+function appendHtmlAttributeIfMissing(attrs: string, name: string, value: string) {
+  const pattern = new RegExp(`\\b${name}\\s*=`, "i")
+  if (pattern.test(attrs)) {
+    return attrs
+  }
+
+  return `${attrs} ${name}="${escapeHtml(value)}"`
+}
+
+function prependHtmlClass(attrs: string, className: string) {
+  if (/\bclass\s*=\s*"([^"]*)"/i.test(attrs)) {
+    return attrs.replace(/\bclass\s*=\s*"([^"]*)"/i, (_matched, existingClassName: string) => `class="${className} ${existingClassName.trim()}"`)
+  }
+
+  return ` class="${className}"${attrs}`
+}
+
+function decorateMarkdownImages(html: string) {
+  return html.replace(/<img\b([^>]*)>/gi, (_matched, rawAttrs: string) => {
+    let attrs = rawAttrs
+    const isEmojiImage = /\bclass\s*=\s*"[^"]*\bmd-emoji-icon\b/i.test(attrs)
+
+    attrs = appendHtmlAttributeIfMissing(attrs, "loading", "lazy")
+    attrs = appendHtmlAttributeIfMissing(attrs, "decoding", "async")
+
+    if (isEmojiImage) {
+      return `<img${attrs}>`
+    }
+
+    attrs = prependHtmlClass(attrs, "my-4 max-w-full rounded-2xl border border-border")
+    attrs = appendHtmlAttributeIfMissing(attrs, "fetchpriority", "low")
+    return `<img${attrs}>`
+  })
+}
+
 function renderIframe(src: string) {
   const normalizedSrc = normalizeMarkdownMediaSrc(src)
   if (!normalizedSrc || !isSupportedMarkdownEmbedSrc(normalizedSrc)) {
@@ -526,7 +561,7 @@ export function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
 
   flushMarkdownBuffer()
 
-  return htmlChunks.join("\n")
+  const html = htmlChunks.join("\n")
     .replace(/<center>/g, '<center class="my-3 block text-center">')
     .replace(/<p>/g, '<p class="my-3 leading-7 text-foreground">')
     .replace(/<p align="left">/g, '<p align="left" class="my-3 leading-7 text-left text-foreground">')
@@ -558,7 +593,6 @@ export function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
     .replace(/<h4 id="([^"]+)">/g, '<h4 id="$1" class="group mt-4 scroll-mt-24 text-lg font-semibold leading-snug text-foreground">')
     .replace(/<h5 id="([^"]+)">/g, '<h5 id="$1" class="group mt-3 scroll-mt-24 text-base font-semibold leading-snug text-foreground">')
     .replace(/<h6 id="([^"]+)">/g, '<h6 id="$1" class="group mt-3 scroll-mt-24 text-sm font-semibold leading-snug text-foreground">')
-    .replace(/<img /g, '<img class="my-4 max-w-full rounded-2xl border border-border" loading="lazy" decoding="async" fetchpriority="low" ')
     .replace(/<dl>/g, '<dl class="my-4 space-y-2">')
     .replace(/<dt>/g, '<dt class="font-semibold text-foreground">')
     .replace(/<dd>/g, '<dd class="ml-0 border-l-2 border-border pl-4 text-muted-foreground">')
@@ -576,4 +610,6 @@ export function renderMarkdown(input: string, emojiItems: MarkdownEmojiItem[]) {
     .replace(/<input class="task-list-item-checkbox" /g, '<input class="task-list-item-checkbox mr-2 mt-1 size-4 rounded border-border accent-primary" disabled ')
     .replace(/<li class="task-list-item">/g, '<li class="task-list-item flex items-start gap-2 leading-7">')
     .replace(/<li class="task-list-item enabled">/g, '<li class="task-list-item enabled flex items-start gap-2 leading-7">')
+
+  return decorateMarkdownImages(html)
 }

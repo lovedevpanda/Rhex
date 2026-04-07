@@ -11,6 +11,7 @@ import {
 } from "@/db/friend-links"
 import { getCurrentUser } from "@/lib/auth"
 import { apiError } from "@/lib/api-route"
+import { normalizeTrimmedText } from "@/lib/shared/normalizers"
 import { getSiteSettings } from "@/lib/site-settings"
 
 
@@ -49,10 +50,6 @@ export interface AdminFriendLinkInput extends FriendLinkSubmissionInput {
   reviewNote?: string
 }
 
-
-function normalizeText(value: unknown, maxLength: number) {
-  return String(value ?? "").trim().slice(0, maxLength)
-}
 
 function normalizeUrl(value: unknown) {
   const url = String(value ?? "").trim()
@@ -147,9 +144,9 @@ export async function submitFriendLinkApplication(input: FriendLinkSubmissionInp
     apiError(400, "当前暂未开放友情链接申请")
   }
 
-  const name = normalizeText(input.name, 40)
+  const name = normalizeTrimmedText(input.name, 40)
   const url = normalizeUrl(input.url)
-  const logoPath = normalizeText(input.logoPath, 300)
+  const logoPath = normalizeTrimmedText(input.logoPath, 300)
 
   if (!name) {
     apiError(400, "请输入网站名称")
@@ -174,10 +171,10 @@ export async function submitFriendLinkApplication(input: FriendLinkSubmissionInp
 
 
 export async function createFriendLinkByAdmin(input: AdminFriendLinkInput) {
-  const name = normalizeText(input.name, 40)
+  const name = normalizeTrimmedText(input.name, 40)
   const url = normalizeUrl(input.url)
-  const logoPath = normalizeText(input.logoPath, 300)
-  const reviewNote = normalizeText(input.reviewNote, 300)
+  const logoPath = normalizeTrimmedText(input.logoPath, 300)
+  const reviewNote = normalizeTrimmedText(input.reviewNote, 300)
   const sortOrder = Math.max(0, Number(input.sortOrder ?? 0) || 0)
 
   if (!name) {
@@ -226,7 +223,7 @@ export async function reviewFriendLink(input: {
   }
 
 
-  const reviewNote = normalizeText(input.reviewNote, 300) || null
+  const reviewNote = normalizeTrimmedText(input.reviewNote, 300) || null
   const sortOrder = Math.max(0, Number(input.sortOrder ?? existing.sortOrder) || 0)
 
   if (input.action === "approve") {
@@ -254,9 +251,9 @@ export async function reviewFriendLink(input: {
     })
   }
 
-  const name = normalizeText(input.name ?? existing.name, 40)
+  const name = normalizeTrimmedText(input.name ?? existing.name, 40)
   const url = normalizeUrl(input.url ?? existing.url)
-  const logoPath = normalizeText(input.logoPath ?? existing.logoPath, 300)
+  const logoPath = normalizeTrimmedText(input.logoPath ?? existing.logoPath, 300)
 
   return updateFriendLink(input.id, {
     name,

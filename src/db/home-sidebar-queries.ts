@@ -32,6 +32,7 @@ export async function findHomeSidebarStats() {
 const POST_INCLUDE = {
   author: {
     select: {
+      id: true,
       username: true,
       nickname: true,
       avatarPath: true,

@@ -4,8 +4,9 @@ import Image from "next/image"
 import { Loader2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { POST_LIST_LOAD_MODE_PAGINATION, type PostListLoadMode } from "@/lib/post-list-load-mode"
+import { POST_LIST_LOAD_MODE_INFINITE, POST_LIST_LOAD_MODE_PAGINATION, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { POST_LIST_DISPLAY_MODE_DEFAULT, POST_LIST_DISPLAY_MODE_GALLERY, type PostListDisplayMode } from "@/lib/post-list-display"
+import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import type { InteractionGateCondition, InteractionGateSettings } from "@/lib/site-settings"
 import type { SiteSearchSettings, SiteTippingGiftItem } from "@/lib/site-settings"
 
@@ -22,6 +23,13 @@ export interface AdminBasicSettingsInitialSettings {
   homeFeedPostPageSize: number
   zonePostPageSize: number
   boardPostPageSize: number
+  commentPageSize: number
+  postTitleMinLength: number
+  postTitleMaxLength: number
+  postContentMinLength: number
+  postContentMaxLength: number
+  commentContentMinLength: number
+  commentContentMaxLength: number
   homeSidebarHotTopicsCount: number
   postSidebarRelatedTopicsCount: number
   homeSidebarStatsCardEnabled: boolean
@@ -35,6 +43,7 @@ export interface AdminBasicSettingsInitialSettings {
   registrationRequireInviteCode: boolean
   registerInviteCodeEnabled: boolean
   inviteCodePurchaseEnabled: boolean
+  boardApplicationEnabled: boolean
   registerCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
   loginCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
   turnstileSiteKey?: string | null
@@ -42,12 +51,21 @@ export interface AdminBasicSettingsInitialSettings {
   postEditableMinutes: number
   commentEditableMinutes: number
   guestCanViewComments: boolean
+  commentInitialVisibleReplies: number
+  anonymousPostEnabled: boolean
+  anonymousPostPrice: number
+  anonymousPostDailyLimit: number
+  anonymousPostMaskUserId: number | null
+  anonymousPostAllowReplySwitch: boolean
+  anonymousPostDefaultReplyAnonymous: boolean
   interactionGates: InteractionGateSettings
   tippingEnabled: boolean
   tippingDailyLimit: number
   tippingPerPostLimit: number
   tippingAmounts: number[]
   tippingGifts: SiteTippingGiftItem[]
+  tipGiftTaxEnabled: boolean
+  tipGiftTaxRateBps: number
   postRedPacketEnabled: boolean
   postRedPacketMaxPoints: number
   postRedPacketDailyLimit: number
@@ -95,7 +113,7 @@ export interface AdminBasicSettingsInitialSettings {
   smtpSecure: boolean
 }
 
-export type AdminBasicSettingsMode = "profile" | "registration" | "interaction"
+export type AdminBasicSettingsMode = "profile" | "registration" | "interaction" | "board-applications"
 
 export interface AdminBasicSettingsDraft {
   siteName: string
@@ -110,6 +128,13 @@ export interface AdminBasicSettingsDraft {
   homeFeedPostPageSize: string
   zonePostPageSize: string
   boardPostPageSize: string
+  commentPageSize: string
+  postTitleMinLength: string
+  postTitleMaxLength: string
+  postContentMinLength: string
+  postContentMaxLength: string
+  commentContentMinLength: string
+  commentContentMaxLength: string
   homeSidebarHotTopicsCount: string
   postSidebarRelatedTopicsCount: string
   homeSidebarStatsCardEnabled: boolean
@@ -119,6 +144,13 @@ export interface AdminBasicSettingsDraft {
   postEditableMinutes: string
   commentEditableMinutes: string
   guestCanViewComments: boolean
+  commentInitialVisibleReplies: string
+  anonymousPostEnabled: boolean
+  anonymousPostPrice: string
+  anonymousPostDailyLimit: string
+  anonymousPostMaskUserId: string
+  anonymousPostAllowReplySwitch: boolean
+  anonymousPostDefaultReplyAnonymous: boolean
   postCreateRequireEmailVerified: boolean
   commentCreateRequireEmailVerified: boolean
   postCreateMinRegisteredMinutes: string
@@ -130,6 +162,7 @@ export interface AdminBasicSettingsDraft {
   registrationRequireInviteCode: boolean
   registerInviteCodeEnabled: boolean
   inviteCodePurchaseEnabled: boolean
+  boardApplicationEnabled: boolean
   registerCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
   loginCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
   turnstileSiteKey: string
@@ -139,6 +172,8 @@ export interface AdminBasicSettingsDraft {
   tippingPerPostLimit: string
   tippingAmounts: string
   tippingGifts: SiteTippingGiftItem[]
+  tipGiftTaxEnabled: boolean
+  tipGiftTaxRateBps: string
   postRedPacketEnabled: boolean
   postRedPacketMaxPoints: string
   postRedPacketDailyLimit: string
@@ -192,96 +227,159 @@ export interface AdminBasicSettingsDraft {
 }
 
 function getRegisteredMinutesConditionValue(settings: InteractionGateSettings, action: "POST_CREATE" | "COMMENT_CREATE") {
-  const condition = settings.actions[action].conditions.find((item): item is Extract<InteractionGateCondition, { type: "REGISTERED_MINUTES" }> => item.type === "REGISTERED_MINUTES")
+  const conditions = settings.actions[action]?.conditions ?? []
+  const condition = conditions.find((item): item is Extract<InteractionGateCondition, { type: "REGISTERED_MINUTES" }> => item.type === "REGISTERED_MINUTES")
   return condition?.value ?? 0
 }
 
+function coerceString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback
+}
+
+function coerceNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function coerceNumberString(value: unknown, fallback = 0) {
+  return String(coerceNumber(value, fallback))
+}
+
+function coerceBoolean(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback
+}
+
+function getDefaultInteractionGates(): InteractionGateSettings {
+  return {
+    version: 1,
+    actions: {
+      POST_CREATE: {
+        enabled: false,
+        conditions: [],
+      },
+      COMMENT_CREATE: {
+        enabled: false,
+        conditions: [],
+      },
+    },
+  }
+}
+
 export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSettingsInitialSettings): AdminBasicSettingsDraft {
-  const postCreateConditions = initialSettings.interactionGates.actions.POST_CREATE.conditions
-  const commentCreateConditions = initialSettings.interactionGates.actions.COMMENT_CREATE.conditions
+  const interactionGates = initialSettings.interactionGates ?? getDefaultInteractionGates()
+  const postCreateConditions = interactionGates.actions.POST_CREATE?.conditions ?? []
+  const commentCreateConditions = interactionGates.actions.COMMENT_CREATE?.conditions ?? []
   const postCreateRequireEmailVerified = postCreateConditions.some((condition) => condition.type === "EMAIL_VERIFIED")
   const commentCreateRequireEmailVerified = commentCreateConditions.some((condition) => condition.type === "EMAIL_VERIFIED")
-  const postCreateMinRegisteredMinutes = getRegisteredMinutesConditionValue(initialSettings.interactionGates, "POST_CREATE")
-  const commentCreateMinRegisteredMinutes = getRegisteredMinutesConditionValue(initialSettings.interactionGates, "COMMENT_CREATE")
+  const postCreateMinRegisteredMinutes = getRegisteredMinutesConditionValue(interactionGates, "POST_CREATE")
+  const commentCreateMinRegisteredMinutes = getRegisteredMinutesConditionValue(interactionGates, "COMMENT_CREATE")
+  const defaultTippingAmounts = String(defaultSiteSettingsCreateInput.tippingAmounts)
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+  const defaultHeatStageThresholds = String(defaultSiteSettingsCreateInput.heatStageThresholds)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const defaultHeatStageColors = String(defaultSiteSettingsCreateInput.heatStageColors)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
 
   return {
-    siteName: initialSettings.siteName,
-    siteSlogan: initialSettings.siteSlogan,
-    siteDescription: initialSettings.siteDescription,
-    siteLogoText: initialSettings.siteLogoText,
+    siteName: coerceString(initialSettings.siteName),
+    siteSlogan: coerceString(initialSettings.siteSlogan),
+    siteDescription: coerceString(initialSettings.siteDescription),
+    siteLogoText: coerceString(initialSettings.siteLogoText),
     siteLogoPath: initialSettings.siteLogoPath ?? "",
     siteSeoKeywords: (initialSettings.siteSeoKeywords ?? []).join(","),
-    postLinkDisplayMode: initialSettings.postLinkDisplayMode,
-    homeFeedPostListDisplayMode: initialSettings.homeFeedPostListDisplayMode,
-    homeFeedPostListLoadMode: initialSettings.homeFeedPostListLoadMode,
-    homeFeedPostPageSize: String(initialSettings.homeFeedPostPageSize),
-    zonePostPageSize: String(initialSettings.zonePostPageSize),
-    boardPostPageSize: String(initialSettings.boardPostPageSize),
-    homeSidebarHotTopicsCount: String(initialSettings.homeSidebarHotTopicsCount),
-    postSidebarRelatedTopicsCount: String(initialSettings.postSidebarRelatedTopicsCount),
-    homeSidebarStatsCardEnabled: initialSettings.homeSidebarStatsCardEnabled,
-    homeSidebarAnnouncementsEnabled: initialSettings.homeSidebarAnnouncementsEnabled,
-    searchEnabled: initialSettings.search.enabled,
+    postLinkDisplayMode: initialSettings.postLinkDisplayMode === "ID" ? "ID" : "SLUG",
+    homeFeedPostListDisplayMode: initialSettings.homeFeedPostListDisplayMode === POST_LIST_DISPLAY_MODE_GALLERY ? POST_LIST_DISPLAY_MODE_GALLERY : POST_LIST_DISPLAY_MODE_DEFAULT,
+    homeFeedPostListLoadMode: initialSettings.homeFeedPostListLoadMode === POST_LIST_LOAD_MODE_INFINITE ? POST_LIST_LOAD_MODE_INFINITE : POST_LIST_LOAD_MODE_PAGINATION,
+    homeFeedPostPageSize: coerceNumberString(initialSettings.homeFeedPostPageSize, 35),
+    zonePostPageSize: coerceNumberString(initialSettings.zonePostPageSize, 20),
+    boardPostPageSize: coerceNumberString(initialSettings.boardPostPageSize, 20),
+    commentPageSize: coerceNumberString(initialSettings.commentPageSize, 15),
+    postTitleMinLength: coerceNumberString(initialSettings.postTitleMinLength, 5),
+    postTitleMaxLength: coerceNumberString(initialSettings.postTitleMaxLength, 100),
+    postContentMinLength: coerceNumberString(initialSettings.postContentMinLength, 10),
+    postContentMaxLength: coerceNumberString(initialSettings.postContentMaxLength, 50000),
+    commentContentMinLength: coerceNumberString(initialSettings.commentContentMinLength, 2),
+    commentContentMaxLength: coerceNumberString(initialSettings.commentContentMaxLength, 2000),
+    homeSidebarHotTopicsCount: coerceNumberString(initialSettings.homeSidebarHotTopicsCount, 5),
+    postSidebarRelatedTopicsCount: coerceNumberString(initialSettings.postSidebarRelatedTopicsCount, 5),
+    homeSidebarStatsCardEnabled: coerceBoolean(initialSettings.homeSidebarStatsCardEnabled, true),
+    homeSidebarAnnouncementsEnabled: coerceBoolean(initialSettings.homeSidebarAnnouncementsEnabled, true),
+    searchEnabled: initialSettings.search?.enabled ?? true,
     analyticsCode: initialSettings.analyticsCode ?? "",
-    postEditableMinutes: String(initialSettings.postEditableMinutes),
-    commentEditableMinutes: String(initialSettings.commentEditableMinutes),
-    guestCanViewComments: initialSettings.guestCanViewComments,
+    postEditableMinutes: coerceNumberString(initialSettings.postEditableMinutes, 10),
+    commentEditableMinutes: coerceNumberString(initialSettings.commentEditableMinutes, 5),
+    guestCanViewComments: coerceBoolean(initialSettings.guestCanViewComments, true),
+    commentInitialVisibleReplies: coerceNumberString(initialSettings.commentInitialVisibleReplies, 10),
+    anonymousPostEnabled: coerceBoolean(initialSettings.anonymousPostEnabled, false),
+    anonymousPostPrice: coerceNumberString(initialSettings.anonymousPostPrice, 0),
+    anonymousPostDailyLimit: coerceNumberString(initialSettings.anonymousPostDailyLimit, 0),
+    anonymousPostMaskUserId: initialSettings.anonymousPostMaskUserId ? String(initialSettings.anonymousPostMaskUserId) : "",
+    anonymousPostAllowReplySwitch: coerceBoolean(initialSettings.anonymousPostAllowReplySwitch, true),
+    anonymousPostDefaultReplyAnonymous: coerceBoolean(initialSettings.anonymousPostDefaultReplyAnonymous, true),
     postCreateRequireEmailVerified,
     commentCreateRequireEmailVerified,
-    postCreateMinRegisteredMinutes: String(postCreateMinRegisteredMinutes),
-    commentCreateMinRegisteredMinutes: String(commentCreateMinRegisteredMinutes),
-    inviteRewardInviter: String(initialSettings.inviteRewardInviter),
-    inviteRewardInvitee: String(initialSettings.inviteRewardInvitee),
-    registerInitialPoints: String(initialSettings.registerInitialPoints),
-    registrationEnabled: initialSettings.registrationEnabled,
-    registrationRequireInviteCode: initialSettings.registrationRequireInviteCode,
-    registerInviteCodeEnabled: initialSettings.registerInviteCodeEnabled,
-    inviteCodePurchaseEnabled: initialSettings.inviteCodePurchaseEnabled,
-    registerCaptchaMode: initialSettings.registerCaptchaMode,
-    loginCaptchaMode: initialSettings.loginCaptchaMode,
+    postCreateMinRegisteredMinutes: coerceNumberString(postCreateMinRegisteredMinutes, 0),
+    commentCreateMinRegisteredMinutes: coerceNumberString(commentCreateMinRegisteredMinutes, 0),
+    inviteRewardInviter: coerceNumberString(initialSettings.inviteRewardInviter, 0),
+    inviteRewardInvitee: coerceNumberString(initialSettings.inviteRewardInvitee, 0),
+    registerInitialPoints: coerceNumberString(initialSettings.registerInitialPoints, 0),
+    registrationEnabled: coerceBoolean(initialSettings.registrationEnabled, true),
+    registrationRequireInviteCode: coerceBoolean(initialSettings.registrationRequireInviteCode, false),
+    registerInviteCodeEnabled: coerceBoolean(initialSettings.registerInviteCodeEnabled, true),
+    inviteCodePurchaseEnabled: coerceBoolean(initialSettings.inviteCodePurchaseEnabled, false),
+    boardApplicationEnabled: coerceBoolean(initialSettings.boardApplicationEnabled, true),
+    registerCaptchaMode: initialSettings.registerCaptchaMode ?? "OFF",
+    loginCaptchaMode: initialSettings.loginCaptchaMode ?? "OFF",
     turnstileSiteKey: initialSettings.turnstileSiteKey ?? "",
     turnstileSecretKey: initialSettings.turnstileSecretKey ?? "",
-    tippingEnabled: initialSettings.tippingEnabled,
-    tippingDailyLimit: String(initialSettings.tippingDailyLimit),
-    tippingPerPostLimit: String(initialSettings.tippingPerPostLimit),
-    tippingAmounts: initialSettings.tippingAmounts.join(","),
-    tippingGifts: initialSettings.tippingGifts,
-    postRedPacketEnabled: initialSettings.postRedPacketEnabled,
-    postRedPacketMaxPoints: String(initialSettings.postRedPacketMaxPoints),
-    postRedPacketDailyLimit: String(initialSettings.postRedPacketDailyLimit),
-    postRedPacketRandomClaimProbability: String(initialSettings.postRedPacketRandomClaimProbability),
-    postJackpotEnabled: initialSettings.postJackpotEnabled,
-    postJackpotMinInitialPoints: String(initialSettings.postJackpotMinInitialPoints),
-    postJackpotMaxInitialPoints: String(initialSettings.postJackpotMaxInitialPoints),
-    postJackpotReplyIncrementPoints: String(initialSettings.postJackpotReplyIncrementPoints),
-    postJackpotHitProbability: String(initialSettings.postJackpotHitProbability),
-    heatViewWeight: String(initialSettings.heatViewWeight),
-    heatCommentWeight: String(initialSettings.heatCommentWeight),
-    heatLikeWeight: String(initialSettings.heatLikeWeight),
-    heatTipCountWeight: String(initialSettings.heatTipCountWeight),
-    heatTipPointsWeight: String(initialSettings.heatTipPointsWeight),
-    homeHotRecentWindowHours: String(initialSettings.homeHotRecentWindowHours),
-    heatStageThresholds: initialSettings.heatStageThresholds.join(","),
-    heatStageColors: initialSettings.heatStageColors,
+    tippingEnabled: coerceBoolean(initialSettings.tippingEnabled, false),
+    tippingDailyLimit: coerceNumberString(initialSettings.tippingDailyLimit, 3),
+    tippingPerPostLimit: coerceNumberString(initialSettings.tippingPerPostLimit, 1),
+    tippingAmounts: Array.isArray(initialSettings.tippingAmounts) ? initialSettings.tippingAmounts.join(",") : defaultTippingAmounts.join(","),
+    tippingGifts: Array.isArray(initialSettings.tippingGifts) ? initialSettings.tippingGifts : [],
+    tipGiftTaxEnabled: initialSettings.tipGiftTaxEnabled ?? false,
+    tipGiftTaxRateBps: String(initialSettings.tipGiftTaxRateBps ?? 0),
+    postRedPacketEnabled: coerceBoolean(initialSettings.postRedPacketEnabled, false),
+    postRedPacketMaxPoints: coerceNumberString(initialSettings.postRedPacketMaxPoints, 100),
+    postRedPacketDailyLimit: coerceNumberString(initialSettings.postRedPacketDailyLimit, 100),
+    postRedPacketRandomClaimProbability: coerceNumberString(initialSettings.postRedPacketRandomClaimProbability, 0),
+    postJackpotEnabled: coerceBoolean(initialSettings.postJackpotEnabled, false),
+    postJackpotMinInitialPoints: coerceNumberString(initialSettings.postJackpotMinInitialPoints, 100),
+    postJackpotMaxInitialPoints: coerceNumberString(initialSettings.postJackpotMaxInitialPoints, 1000),
+    postJackpotReplyIncrementPoints: coerceNumberString(initialSettings.postJackpotReplyIncrementPoints, 25),
+    postJackpotHitProbability: coerceNumberString(initialSettings.postJackpotHitProbability, 15),
+    heatViewWeight: coerceNumberString(initialSettings.heatViewWeight, 1),
+    heatCommentWeight: coerceNumberString(initialSettings.heatCommentWeight, 8),
+    heatLikeWeight: coerceNumberString(initialSettings.heatLikeWeight, 6),
+    heatTipCountWeight: coerceNumberString(initialSettings.heatTipCountWeight, 10),
+    heatTipPointsWeight: coerceNumberString(initialSettings.heatTipPointsWeight, 1),
+    homeHotRecentWindowHours: coerceNumberString(initialSettings.homeHotRecentWindowHours, 72),
+    heatStageThresholds: Array.isArray(initialSettings.heatStageThresholds) ? initialSettings.heatStageThresholds.join(",") : defaultHeatStageThresholds.join(","),
+    heatStageColors: Array.isArray(initialSettings.heatStageColors) && initialSettings.heatStageColors.length > 0 ? initialSettings.heatStageColors : defaultHeatStageColors,
     previewViews: "120",
     previewComments: "18",
     previewLikes: "12",
     previewTipCount: "4",
     previewTipPoints: "160",
-    registerEmailEnabled: initialSettings.registerEmailEnabled,
-    registerEmailRequired: initialSettings.registerEmailRequired,
-    registerEmailVerification: initialSettings.registerEmailVerification,
-    registerPhoneEnabled: initialSettings.registerPhoneEnabled,
-    registerPhoneRequired: initialSettings.registerPhoneRequired,
-    registerPhoneVerification: initialSettings.registerPhoneVerification,
-    registerNicknameEnabled: initialSettings.registerNicknameEnabled,
-    registerNicknameRequired: initialSettings.registerNicknameRequired,
-    registerGenderEnabled: initialSettings.registerGenderEnabled,
-    registerGenderRequired: initialSettings.registerGenderRequired,
-    registerInviterEnabled: initialSettings.registerInviterEnabled,
-    authGithubEnabled: initialSettings.authGithubEnabled,
-    authGoogleEnabled: initialSettings.authGoogleEnabled,
-    authPasskeyEnabled: initialSettings.authPasskeyEnabled,
+    registerEmailEnabled: coerceBoolean(initialSettings.registerEmailEnabled, false),
+    registerEmailRequired: coerceBoolean(initialSettings.registerEmailRequired, false),
+    registerEmailVerification: coerceBoolean(initialSettings.registerEmailVerification, false),
+    registerPhoneEnabled: coerceBoolean(initialSettings.registerPhoneEnabled, false),
+    registerPhoneRequired: coerceBoolean(initialSettings.registerPhoneRequired, false),
+    registerPhoneVerification: coerceBoolean(initialSettings.registerPhoneVerification, false),
+    registerNicknameEnabled: coerceBoolean(initialSettings.registerNicknameEnabled, true),
+    registerNicknameRequired: coerceBoolean(initialSettings.registerNicknameRequired, false),
+    registerGenderEnabled: coerceBoolean(initialSettings.registerGenderEnabled, false),
+    registerGenderRequired: coerceBoolean(initialSettings.registerGenderRequired, false),
+    registerInviterEnabled: coerceBoolean(initialSettings.registerInviterEnabled, true),
+    authGithubEnabled: coerceBoolean(initialSettings.authGithubEnabled, false),
+    authGoogleEnabled: coerceBoolean(initialSettings.authGoogleEnabled, false),
+    authPasskeyEnabled: coerceBoolean(initialSettings.authPasskeyEnabled, false),
     githubClientId: initialSettings.githubClientId ?? "",
     githubClientSecret: initialSettings.githubClientSecret ?? "",
     googleClientId: initialSettings.googleClientId ?? "",
@@ -289,13 +387,13 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     passkeyRpId: initialSettings.passkeyRpId ?? "",
     passkeyRpName: initialSettings.passkeyRpName ?? "",
     passkeyOrigin: initialSettings.passkeyOrigin ?? "",
-    smtpEnabled: initialSettings.smtpEnabled,
+    smtpEnabled: coerceBoolean(initialSettings.smtpEnabled, false),
     smtpHost: initialSettings.smtpHost ?? "",
     smtpPort: initialSettings.smtpPort ? String(initialSettings.smtpPort) : "",
     smtpUser: initialSettings.smtpUser ?? "",
     smtpPass: initialSettings.smtpPass ?? "",
     smtpFrom: initialSettings.smtpFrom ?? "",
-    smtpSecure: initialSettings.smtpSecure,
+    smtpSecure: coerceBoolean(initialSettings.smtpSecure, false),
   }
 }
 
@@ -371,17 +469,40 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
     }
   }
 
+  if (mode === "board-applications") {
+    return {
+      boardApplicationEnabled: draft.boardApplicationEnabled,
+      section: "site-board-applications",
+    }
+  }
+
   return {
     tippingEnabled: draft.tippingEnabled,
     guestCanViewComments: draft.guestCanViewComments,
+    commentInitialVisibleReplies: Number(draft.commentInitialVisibleReplies),
+    anonymousPostEnabled: draft.anonymousPostEnabled,
+    anonymousPostPrice: Number(draft.anonymousPostPrice),
+    anonymousPostDailyLimit: Number(draft.anonymousPostDailyLimit),
+    anonymousPostMaskUserId: Number(draft.anonymousPostMaskUserId),
+    anonymousPostAllowReplySwitch: draft.anonymousPostAllowReplySwitch,
+    anonymousPostDefaultReplyAnonymous: draft.anonymousPostDefaultReplyAnonymous,
     postCreateRequireEmailVerified: draft.postCreateRequireEmailVerified,
     commentCreateRequireEmailVerified: draft.commentCreateRequireEmailVerified,
     postCreateMinRegisteredMinutes: Number(draft.postCreateMinRegisteredMinutes),
     commentCreateMinRegisteredMinutes: Number(draft.commentCreateMinRegisteredMinutes),
+    commentPageSize: Number(draft.commentPageSize),
+    postTitleMinLength: Number(draft.postTitleMinLength),
+    postTitleMaxLength: Number(draft.postTitleMaxLength),
+    postContentMinLength: Number(draft.postContentMinLength),
+    postContentMaxLength: Number(draft.postContentMaxLength),
+    commentContentMinLength: Number(draft.commentContentMinLength),
+    commentContentMaxLength: Number(draft.commentContentMaxLength),
     tippingDailyLimit: Number(draft.tippingDailyLimit),
     tippingPerPostLimit: Number(draft.tippingPerPostLimit),
     tippingAmounts: draft.tippingAmounts,
     tippingGifts: draft.tippingGifts,
+    tipGiftTaxEnabled: draft.tipGiftTaxEnabled,
+    tipGiftTaxRateBps: Number(draft.tipGiftTaxRateBps),
     postRedPacketEnabled: draft.postRedPacketEnabled,
     postRedPacketMaxPoints: Number(draft.postRedPacketMaxPoints),
     postRedPacketDailyLimit: Number(draft.postRedPacketDailyLimit),
@@ -448,20 +569,20 @@ export interface AdminSiteSettingsDraft {
 
 export function createAdminSiteSettingsDraft(initialSettings: AdminSiteSettingsInitialSettings): AdminSiteSettingsDraft {
   return {
-    siteName: initialSettings.siteName,
-    siteSlogan: initialSettings.siteSlogan,
-    siteDescription: initialSettings.siteDescription,
-    siteLogoText: initialSettings.siteLogoText,
+    siteName: coerceString(initialSettings.siteName),
+    siteSlogan: coerceString(initialSettings.siteSlogan),
+    siteDescription: coerceString(initialSettings.siteDescription),
+    siteLogoText: coerceString(initialSettings.siteLogoText),
     siteLogoPath: initialSettings.siteLogoPath ?? "",
-    vipMonthlyPrice: String(initialSettings.vipMonthlyPrice),
-    vipQuarterlyPrice: String(initialSettings.vipQuarterlyPrice),
-    vipYearlyPrice: String(initialSettings.vipYearlyPrice),
-    postOfflinePrice: String(initialSettings.postOfflinePrice),
-    postOfflineVip1Price: String(initialSettings.postOfflineVip1Price),
-    postOfflineVip2Price: String(initialSettings.postOfflineVip2Price),
-    postOfflineVip3Price: String(initialSettings.postOfflineVip3Price),
-    uploadProvider: initialSettings.uploadProvider,
-    uploadLocalPath: initialSettings.uploadLocalPath,
+    vipMonthlyPrice: coerceNumberString(initialSettings.vipMonthlyPrice, 3000),
+    vipQuarterlyPrice: coerceNumberString(initialSettings.vipQuarterlyPrice, 8000),
+    vipYearlyPrice: coerceNumberString(initialSettings.vipYearlyPrice, 30000),
+    postOfflinePrice: coerceNumberString(initialSettings.postOfflinePrice, 0),
+    postOfflineVip1Price: coerceNumberString(initialSettings.postOfflineVip1Price, 0),
+    postOfflineVip2Price: coerceNumberString(initialSettings.postOfflineVip2Price, 0),
+    postOfflineVip3Price: coerceNumberString(initialSettings.postOfflineVip3Price, 0),
+    uploadProvider: coerceString(initialSettings.uploadProvider, defaultSiteSettingsCreateInput.uploadProvider),
+    uploadLocalPath: coerceString(initialSettings.uploadLocalPath, defaultSiteSettingsCreateInput.uploadLocalPath),
     uploadBaseUrl: initialSettings.uploadBaseUrl ?? "",
     uploadOssBucket: initialSettings.uploadOssBucket ?? "",
     uploadOssRegion: initialSettings.uploadOssRegion ?? "",

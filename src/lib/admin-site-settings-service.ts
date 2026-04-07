@@ -1,6 +1,7 @@
 import type { JsonObject } from "@/lib/api-route"
 
 import { createSiteSettingsRecordWithFullData, findSiteSettingsRecordForUpdate } from "@/db/site-settings-write-queries"
+import { updateBoardApplicationSiteSettingsSection } from "@/lib/admin-site-settings-board-applications"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { updateInteractionSiteSettingsSection } from "@/lib/admin-site-settings-interaction"
 import { updateProfileSiteSettingsSection } from "@/lib/admin-site-settings-profile"
@@ -25,6 +26,7 @@ export async function updateSiteSettingsBySection(body: JsonObject) {
   const handlers = [
     updateProfileSiteSettingsSection,
     updateRegistrationSiteSettingsSection,
+    updateBoardApplicationSiteSettingsSection,
     updateInteractionSiteSettingsSection,
     updateVipSiteSettingsSection,
     updateUploadSiteSettingsSection,

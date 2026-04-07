@@ -14,6 +14,7 @@ interface ForumPageShellZoneItem {
   slug: string
   name: string
   icon: string
+  hiddenFromSidebar?: boolean
   minViewPoints?: number
   minViewLevel?: number
   vipViewOnly?: boolean

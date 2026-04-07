@@ -94,12 +94,23 @@ export interface PostPageSizeSettings {
   homeFeed: number
   zonePosts: number
   boardPosts: number
+  comments: number
   hotTopics: number
   postRelatedTopics: number
 }
 
 export interface CommentAccessSettings {
   guestCanView: boolean
+  initialVisibleReplies: number
+}
+
+export interface PostContentLengthSettings {
+  postTitleMinLength: number
+  postTitleMaxLength: number
+  postContentMinLength: number
+  postContentMaxLength: number
+  commentContentMinLength: number
+  commentContentMaxLength: number
 }
 
 export type InteractionGateAction = "POST_CREATE" | "COMMENT_CREATE"
@@ -150,6 +161,24 @@ export interface PostJackpotSettings {
 
 export interface PostRedPacketSettings {
   randomClaimProbability: number
+}
+
+export interface AnonymousPostSettings {
+  enabled: boolean
+  price: number
+  dailyLimit: number
+  maskUserId: number | null
+  allowReplySwitch: boolean
+  defaultReplyAnonymous: boolean
+}
+
+export interface BoardTreasurySettings {
+  tipGiftTaxEnabled: boolean
+  tipGiftTaxRateBps: number
+}
+
+export interface BoardApplicationSettings {
+  enabled: boolean
 }
 
 export function resolveTippingGiftSettings(options: {
@@ -549,6 +578,7 @@ export function resolvePostPageSizeSettings(options: {
   homeFeedFallback?: number
   zonePostsFallback?: number
   boardPostsFallback?: number
+  commentsFallback?: number
   hotTopicsFallback?: number
   postRelatedTopicsFallback?: number
 } = {}): PostPageSizeSettings {
@@ -561,6 +591,7 @@ export function resolvePostPageSizeSettings(options: {
     homeFeed: Math.min(100, Math.max(1, normalizeNonNegativeInteger(postPageSizes.homeFeed, normalizeNonNegativeInteger(options.homeFeedFallback, 35)))),
     zonePosts: Math.min(100, Math.max(1, normalizeNonNegativeInteger(postPageSizes.zonePosts, normalizeNonNegativeInteger(options.zonePostsFallback, 20)))),
     boardPosts: Math.min(100, Math.max(1, normalizeNonNegativeInteger(postPageSizes.boardPosts, normalizeNonNegativeInteger(options.boardPostsFallback, 20)))),
+    comments: Math.min(100, Math.max(1, normalizeNonNegativeInteger(postPageSizes.comments, normalizeNonNegativeInteger(options.commentsFallback, 15)))),
     hotTopics: Math.min(30, Math.max(1, normalizeNonNegativeInteger(postPageSizes.hotTopics, normalizeNonNegativeInteger(options.hotTopicsFallback, 5)))),
     postRelatedTopics: Math.min(30, Math.max(1, normalizeNonNegativeInteger(postPageSizes.postRelatedTopics, normalizeNonNegativeInteger(options.postRelatedTopicsFallback, 5)))),
   }
@@ -579,6 +610,7 @@ export function mergePostPageSizeSettings(
       homeFeed: Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.homeFeed, 35))),
       zonePosts: Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.zonePosts, 20))),
       boardPosts: Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.boardPosts, 20))),
+      comments: Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.comments, 15))),
       hotTopics: Math.min(30, Math.max(1, normalizeNonNegativeInteger(input.hotTopics, 5))),
       postRelatedTopics: Math.min(30, Math.max(1, normalizeNonNegativeInteger(input.postRelatedTopics, 5))),
     },
@@ -590,6 +622,7 @@ export function mergePostPageSizeSettings(
 export function resolveCommentAccessSettings(options: {
   appStateJson?: string | null
   guestCanViewFallback?: boolean
+  initialVisibleRepliesFallback?: number
 } = {}): CommentAccessSettings {
   const siteSettingsState = readSiteSettingsState(options.appStateJson)
   const commentAccess = isRecord(siteSettingsState.commentAccess)
@@ -600,6 +633,16 @@ export function resolveCommentAccessSettings(options: {
     guestCanView: typeof commentAccess.guestCanView === "boolean"
       ? commentAccess.guestCanView
       : options.guestCanViewFallback ?? true,
+    initialVisibleReplies: Math.min(
+      100,
+      Math.max(
+        1,
+        normalizeNonNegativeInteger(
+          commentAccess.initialVisibleReplies,
+          normalizeNonNegativeInteger(options.initialVisibleRepliesFallback, 10),
+        ),
+      ),
+    ),
   }
 }
 
@@ -614,6 +657,7 @@ export function mergeCommentAccessSettings(
     ...siteSettingsState,
     commentAccess: {
       guestCanView: input.guestCanView,
+      initialVisibleReplies: Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.initialVisibleReplies, 10))),
     },
   }
 
@@ -857,6 +901,243 @@ export function mergePostRedPacketSettings(
     ...siteSettingsState,
     postRedPacket: {
       randomClaimProbability: Math.max(0, Math.min(100, normalizeNonNegativeInteger(input.randomClaimProbability, 0))),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolvePostContentLengthSettings(options: {
+  appStateJson?: string | null
+  postTitleMinLengthFallback?: number
+  postTitleMaxLengthFallback?: number
+  postContentMinLengthFallback?: number
+  postContentMaxLengthFallback?: number
+  commentContentMinLengthFallback?: number
+  commentContentMaxLengthFallback?: number
+} = {}): PostContentLengthSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const postContentLengths = isRecord(siteSettingsState.postContentLengths)
+    ? siteSettingsState.postContentLengths
+    : {}
+  const postTitleMinLength = Math.min(
+    100,
+    Math.max(
+      1,
+      normalizeNonNegativeInteger(
+        postContentLengths.postTitleMinLength,
+        normalizeNonNegativeInteger(options.postTitleMinLengthFallback, 5),
+      ),
+    ),
+  )
+  const postContentMinLength = Math.min(
+    1000,
+    Math.max(
+      1,
+      normalizeNonNegativeInteger(
+        postContentLengths.postContentMinLength,
+        normalizeNonNegativeInteger(options.postContentMinLengthFallback, 10),
+      ),
+    ),
+  )
+  const commentContentMinLength = Math.min(
+    500,
+    Math.max(
+      1,
+      normalizeNonNegativeInteger(
+        postContentLengths.commentContentMinLength,
+        normalizeNonNegativeInteger(options.commentContentMinLengthFallback, 2),
+      ),
+    ),
+  )
+
+  return {
+    postTitleMinLength,
+    postTitleMaxLength: Math.min(
+      500,
+      Math.max(
+        postTitleMinLength,
+        normalizeNonNegativeInteger(
+          postContentLengths.postTitleMaxLength,
+          normalizeNonNegativeInteger(options.postTitleMaxLengthFallback, 100),
+        ),
+      ),
+    ),
+    postContentMinLength,
+    postContentMaxLength: Math.min(
+      100000,
+      Math.max(
+        postContentMinLength,
+        normalizeNonNegativeInteger(
+          postContentLengths.postContentMaxLength,
+          normalizeNonNegativeInteger(options.postContentMaxLengthFallback, 50000),
+        ),
+      ),
+    ),
+    commentContentMinLength,
+    commentContentMaxLength: Math.min(
+      20000,
+      Math.max(
+        commentContentMinLength,
+        normalizeNonNegativeInteger(
+          postContentLengths.commentContentMaxLength,
+          normalizeNonNegativeInteger(options.commentContentMaxLengthFallback, 2000),
+        ),
+      ),
+    ),
+  }
+}
+
+export function mergePostContentLengthSettings(
+  appStateJson: string | null | undefined,
+  input: PostContentLengthSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+  const postTitleMinLength = Math.min(100, Math.max(1, normalizeNonNegativeInteger(input.postTitleMinLength, 5)))
+  const postContentMinLength = Math.min(1000, Math.max(1, normalizeNonNegativeInteger(input.postContentMinLength, 10)))
+  const commentContentMinLength = Math.min(500, Math.max(1, normalizeNonNegativeInteger(input.commentContentMinLength, 2)))
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    postContentLengths: {
+      postTitleMinLength,
+      postTitleMaxLength: Math.min(500, Math.max(postTitleMinLength, normalizeNonNegativeInteger(input.postTitleMaxLength, 100))),
+      postContentMinLength,
+      postContentMaxLength: Math.min(100000, Math.max(postContentMinLength, normalizeNonNegativeInteger(input.postContentMaxLength, 50000))),
+      commentContentMinLength,
+      commentContentMaxLength: Math.min(20000, Math.max(commentContentMinLength, normalizeNonNegativeInteger(input.commentContentMaxLength, 2000))),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveBoardTreasurySettings(options: {
+  appStateJson?: string | null
+  tipGiftTaxEnabledFallback?: boolean
+  tipGiftTaxRateBpsFallback?: number
+} = {}): BoardTreasurySettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const boardTreasury = isRecord(siteSettingsState.boardTreasury)
+    ? siteSettingsState.boardTreasury
+    : {}
+
+  return {
+    tipGiftTaxEnabled: typeof boardTreasury.tipGiftTaxEnabled === "boolean"
+      ? boardTreasury.tipGiftTaxEnabled
+      : options.tipGiftTaxEnabledFallback ?? false,
+    tipGiftTaxRateBps: Math.min(
+      10000,
+      normalizeNonNegativeInteger(
+        boardTreasury.tipGiftTaxRateBps,
+        normalizeNonNegativeInteger(options.tipGiftTaxRateBpsFallback, 0),
+      ),
+    ),
+  }
+}
+
+export function mergeBoardTreasurySettings(
+  appStateJson: string | null | undefined,
+  input: BoardTreasurySettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    boardTreasury: {
+      tipGiftTaxEnabled: Boolean(input.tipGiftTaxEnabled),
+      tipGiftTaxRateBps: Math.min(10000, normalizeNonNegativeInteger(input.tipGiftTaxRateBps, 0)),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveBoardApplicationSettings(options: {
+  appStateJson?: string | null
+  enabledFallback?: boolean
+} = {}): BoardApplicationSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const boardApplications = isRecord(siteSettingsState.boardApplications)
+    ? siteSettingsState.boardApplications
+    : {}
+
+  return {
+    enabled: typeof boardApplications.enabled === "boolean"
+      ? boardApplications.enabled
+      : options.enabledFallback ?? true,
+  }
+}
+
+export function mergeBoardApplicationSettings(
+  appStateJson: string | null | undefined,
+  input: BoardApplicationSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    boardApplications: {
+      enabled: Boolean(input.enabled),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveAnonymousPostSettings(options: {
+  appStateJson?: string | null
+  enabledFallback?: boolean
+  priceFallback?: number
+  dailyLimitFallback?: number
+  maskUserIdFallback?: number | null
+  allowReplySwitchFallback?: boolean
+  defaultReplyAnonymousFallback?: boolean
+} = {}): AnonymousPostSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const anonymousPost = isRecord(siteSettingsState.anonymousPost)
+    ? siteSettingsState.anonymousPost
+    : {}
+  const rawMaskUserId = parseNonNegativeSafeInteger(anonymousPost.maskUserId)
+
+  return {
+    enabled: typeof anonymousPost.enabled === "boolean"
+      ? anonymousPost.enabled
+      : options.enabledFallback ?? false,
+    price: normalizeNonNegativeInteger(anonymousPost.price, normalizeNonNegativeInteger(options.priceFallback, 0)),
+    dailyLimit: normalizeNonNegativeInteger(anonymousPost.dailyLimit, normalizeNonNegativeInteger(options.dailyLimitFallback, 0)),
+    maskUserId: typeof rawMaskUserId === "number" && rawMaskUserId > 0
+      ? rawMaskUserId
+      : (typeof options.maskUserIdFallback === "number" && options.maskUserIdFallback > 0 ? options.maskUserIdFallback : null),
+    allowReplySwitch: typeof anonymousPost.allowReplySwitch === "boolean"
+      ? anonymousPost.allowReplySwitch
+      : options.allowReplySwitchFallback ?? true,
+    defaultReplyAnonymous: typeof anonymousPost.defaultReplyAnonymous === "boolean"
+      ? anonymousPost.defaultReplyAnonymous
+      : options.defaultReplyAnonymousFallback ?? true,
+  }
+}
+
+export function mergeAnonymousPostSettings(
+  appStateJson: string | null | undefined,
+  input: AnonymousPostSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+  const maskUserId = parseNonNegativeSafeInteger(input.maskUserId)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    anonymousPost: {
+      enabled: Boolean(input.enabled),
+      price: normalizeNonNegativeInteger(input.price, 0),
+      dailyLimit: normalizeNonNegativeInteger(input.dailyLimit, 0),
+      maskUserId: typeof maskUserId === "number" && maskUserId > 0 ? maskUserId : null,
+      allowReplySwitch: Boolean(input.allowReplySwitch),
+      defaultReplyAnonymous: Boolean(input.defaultReplyAnonymous),
     },
   }
 

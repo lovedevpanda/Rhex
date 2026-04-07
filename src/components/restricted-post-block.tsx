@@ -17,22 +17,26 @@ interface RestrictedPostBlockProps {
   pointName: string
   replyThreshold?: number
   price?: number
+  purchaseCount?: number
   userReplyCount?: number
   isOwnerOrAdmin?: boolean
   markdownEmojiMap?: MarkdownEmojiItem[]
 }
 
-function UnlockedContentFrame({ title, content }: { title: string; content: string; markdownEmojiMap?: MarkdownEmojiItem[] }) {
+function UnlockedContentFrame({ title, content, summary }: { title: string; content: string; summary?: string; markdownEmojiMap?: MarkdownEmojiItem[] }) {
 
   return (
     <div className="rounded-[20px] border border-border bg-secondary/35 p-5">
-      <div className="mb-3 text-sm font-medium text-foreground">{title}</div>
+      <div className="mb-3 space-y-1">
+        <div className="text-sm font-medium text-foreground">{title}</div>
+        {summary ? <div className="text-xs text-muted-foreground">{summary}</div> : null}
+      </div>
       <MarkdownContent content={content} />
     </div>
   )
 }
 
-export function RestrictedPostBlock({ type, postId, blockId, text, visible, currentUserId, pointName, replyThreshold, price, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
+export function RestrictedPostBlock({ type, postId, blockId, text, visible, currentUserId, pointName, replyThreshold, price, purchaseCount = 0, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
 
   const [scrolling, setScrolling] = useState(false)
 
@@ -45,7 +49,7 @@ export function RestrictedPostBlock({ type, postId, blockId, text, visible, curr
 
 
   if (visible && text) {
-    return <UnlockedContentFrame title={type === "REPLY_UNLOCK" ? "回复后已解锁内容" : "购买后已解锁内容"} content={text} markdownEmojiMap={markdownEmojiMap} />
+    return <UnlockedContentFrame title={type === "REPLY_UNLOCK" ? "回复后已解锁内容" : "购买后已解锁内容"} content={text} summary={type === "PURCHASE_UNLOCK" ? `已有 ${purchaseCount} 人购买` : undefined} markdownEmojiMap={markdownEmojiMap} />
 
   }
 
@@ -79,6 +83,7 @@ export function RestrictedPostBlock({ type, postId, blockId, text, visible, curr
       <div className="space-y-1">
         <p className="font-medium">购买后可见内容</p>
         <p>这部分内容需要单独购买后查看。</p>
+        <p className="text-xs text-emerald-700/80">已有 {purchaseCount} 人购买</p>
       </div>
       {currentUserId ? <PurchaseUnlockButton postId={postId} blockId={blockId} price={price ?? 0} pointName={pointName} /> : <p>请先登录后再购买解锁。</p>}
     </div>

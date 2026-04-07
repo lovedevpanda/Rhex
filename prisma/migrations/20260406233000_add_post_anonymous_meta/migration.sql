@@ -1,0 +1,5 @@
+ALTER TABLE "Post"
+ADD COLUMN "isAnonymous" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "Comment"
+ADD COLUMN "useAnonymousIdentity" BOOLEAN NOT NULL DEFAULT false;

@@ -36,10 +36,11 @@ import { getPostDetailBySlug, getPostSeoBySlug, incrementPostViewCount } from "@
 
 import { getPostSidebarData } from "@/lib/post-sidebar"
 import { getPostRedPacketSummary } from "@/lib/post-red-packets"
+import { canUseAnonymousIdentityForPostReply, getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { getPostTipSummary } from "@/lib/post-tips"
 import { getPostOfflineActionMeta } from "@/lib/post-offline"
 
-import { getPurchasedPostBlockIds } from "@/lib/post-unlock"
+import { getPurchasedPostBlockBuyerCounts, getPurchasedPostBlockIds } from "@/lib/post-unlock"
 
 import { buildArticleJsonLd, buildMetadataKeywords } from "@/lib/seo"
 import { readSearchParam } from "@/lib/search-params"
@@ -85,6 +86,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const currentSort = readSearchParam(searchParams?.sort) === "newest" ? "newest" : "oldest"
+  const currentCommentView = readSearchParam(searchParams?.view) === "flat" ? "flat" : "tree"
   const currentPage = Math.max(1, Number(readSearchParam(searchParams?.page) ?? "1") || 1)
 
 
@@ -139,31 +141,48 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
 
   const userReplyCountPromise = canViewRestrictedPost ? getUserReplyCountByPost(basePost.id, currentUser?.id) : Promise.resolve(0)
   const canViewComments = Boolean(currentUser) || settings.guestCanViewComments
+  const canReplyAsAnonymous = Boolean(
+    currentUser
+    && typeof basePost.authorId === "number"
+    && canUseAnonymousIdentityForPostReply({
+      post: {
+        isAnonymous: basePost.isAnonymous,
+        authorId: basePost.authorId,
+      },
+      currentUserId: currentUser.id,
+    }),
+  )
 
   const purchasedBlockIdsPromise = canViewRestrictedPost ? getPurchasedPostBlockIds(basePost.id, currentUser?.id) : Promise.resolve(new Set<string>())
+  const purchasedBlockBuyerCountsPromise = canViewRestrictedPost ? getPurchasedPostBlockBuyerCounts(basePost.id) : Promise.resolve(new Map<string, number>())
   const tipSummaryPromise = canViewRestrictedPost ? getPostTipSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
   const redPacketSummaryPromise = canViewRestrictedPost ? getPostRedPacketSummary(basePost.id, currentUser?.id) : Promise.resolve(undefined)
   const postOfflineMetaPromise = currentUser?.id === basePost.authorId ? getPostOfflineActionMeta(basePost.id) : Promise.resolve(null)
+  const anonymousMaskIdentityPromise = basePost.isAnonymous ? getAnonymousMaskDisplayIdentity() : Promise.resolve(null)
   const commentResultPromise = canViewComments
-    ? getCommentsByPostId(basePost.id, { sort: currentSort, page: currentPage, pageSize: 15 }, {
+    ? getCommentsByPostId(basePost.id, { sort: currentSort, page: currentPage, pageSize: settings.commentPageSize, viewMode: currentCommentView }, {
       userId: currentUser?.id,
       isAdmin: canManageThisPost,
       postAuthorId: basePost.authorId,
+      postIsAnonymous: basePost.isAnonymous,
       commentsVisibleToAuthorOnly: basePost.commentsVisibleToAuthorOnly,
+      anonymousPostAuthor: await anonymousMaskIdentityPromise,
     })
     : Promise.resolve({
       items: [],
+      flatItems: [],
       total: 0,
       page: currentPage,
-      pageSize: 15,
+      pageSize: settings.commentPageSize,
+      viewMode: currentCommentView,
     })
 
-
-  const [userReplyCount, purchasedBlockIds, tipSummary, redPacketSummary, postOfflineMeta, commentResult, sidebarData, boards, zones] = await Promise.all([
+  const [userReplyCount, purchasedBlockIds, purchasedBlockBuyerCounts, tipSummary, redPacketSummary, postOfflineMeta, commentResult, sidebarData, boards, zones] = await Promise.all([
 
 
     userReplyCountPromise,
     purchasedBlockIdsPromise,
+    purchasedBlockBuyerCountsPromise,
     tipSummaryPromise,
     redPacketSummaryPromise,
     postOfflineMetaPromise,
@@ -207,6 +226,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
         return {
           ...block,
           visible,
+          purchaseCount: block.type === "PURCHASE_UNLOCK" ? (purchasedBlockBuyerCounts.get(block.id) ?? 0) : block.purchaseCount,
         }
       }) }
     : basePost
@@ -388,6 +408,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                                   pointName={settings.pointName}
                                   replyThreshold={block.replyThreshold}
                                   price={block.price}
+                                  purchaseCount={block.purchaseCount}
                                   userReplyCount={userReplyCount}
                                   isOwnerOrAdmin={isOwnerOrManager}
 
@@ -465,7 +486,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
 
 
 
-                <Card id="comments">
+                <Card id="comments" className="scroll-mt-20 sm:scroll-mt-24">
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle>回复讨论</CardTitle>
@@ -502,14 +523,20 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                         pageSize={commentResult.pageSize}
                         total={commentResult.total}
                         currentSort={currentSort}
+                        currentDisplayMode={currentCommentView}
+                        flatComments={commentResult.flatItems}
                         currentUserId={currentUser?.id}
                         canAcceptAnswer={displayPost.type === "BOUNTY" && currentUser?.id === displayPost.authorId && !displayPost.bounty?.isResolved}
                         commentsVisibleToAuthorOnly={displayPost.commentsVisibleToAuthorOnly}
+                        anonymousReplyEnabled={canReplyAsAnonymous}
+                        anonymousReplyDefaultChecked={settings.anonymousPostDefaultReplyAnonymous}
+                        anonymousReplySwitchVisible={canReplyAsAnonymous && settings.anonymousPostAllowReplySwitch}
                         isAdmin={canManageThisPost}
                         adminRole={adminActor?.role ?? null}
                         canPinComment={Boolean(currentUser?.id === displayPost.authorId || isSiteAdmin)}
                         markdownEmojiMap={settings.markdownEmojiMap}
                         commentEditWindowMinutes={settings.commentEditableMinutes}
+                        initialVisibleReplies={settings.commentInitialVisibleReplies}
                       />
                     ) : null}
 

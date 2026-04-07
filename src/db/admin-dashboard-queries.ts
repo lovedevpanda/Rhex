@@ -135,6 +135,7 @@ async function getAdminDashboardRawDataUncached() {
     prisma.$queryRaw<Array<{
       boardCount: NumericLike
       zoneCount: NumericLike
+      pendingBoardApplicationCount: NumericLike
       pendingVerificationCount: NumericLike
       pendingFriendLinkCount: NumericLike
       totalFollowerCount: NumericLike
@@ -143,6 +144,7 @@ async function getAdminDashboardRawDataUncached() {
       SELECT
         (SELECT COUNT(*) FROM "Board") AS "boardCount",
         (SELECT COUNT(*) FROM "Zone") AS "zoneCount",
+        (SELECT COUNT(*) FROM "BoardApplication" WHERE status = 'PENDING') AS "pendingBoardApplicationCount",
         (SELECT COUNT(*) FROM "UserVerification" WHERE status = 'PENDING') AS "pendingVerificationCount",
         (SELECT COUNT(*) FROM "FriendLink" WHERE status = 'PENDING') AS "pendingFriendLinkCount",
         (SELECT COALESCE(SUM("followerCount"), 0) FROM "Board") AS "totalFollowerCount",
@@ -203,6 +205,7 @@ async function getAdminDashboardRawDataUncached() {
       resolvedReportCount: toNumber(resolvedReportStats?.resolvedReportCount),
       pendingPostCount: toNumber(resolvedPostStats?.pendingPostCount),
       offlinePostCount: toNumber(resolvedPostStats?.offlinePostCount),
+      pendingBoardApplicationCount: toNumber(resolvedSiteStats?.pendingBoardApplicationCount),
       pendingVerificationCount: toNumber(resolvedSiteStats?.pendingVerificationCount),
       pendingFriendLinkCount: toNumber(resolvedSiteStats?.pendingFriendLinkCount),
       pendingAdOrderCount,
@@ -262,6 +265,7 @@ export async function getAdminStructureRawData(options?: {
         description: true,
         icon: true,
         sortOrder: true,
+        hiddenFromSidebar: true,
         requirePostReview: true,
         postPointDelta: true,
         replyPointDelta: true,
@@ -291,11 +295,13 @@ export async function getAdminStructureRawData(options?: {
         slug: true,
         description: true,
         iconPath: true,
+        configJson: true,
         sortOrder: true,
         status: true,
         allowPost: true,
         postCount: true,
         followerCount: true,
+        treasuryPoints: true,
         requirePostReview: true,
         postPointDelta: true,
         replyPointDelta: true,

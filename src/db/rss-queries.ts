@@ -8,6 +8,7 @@ const rssPostSelect = {
   id: true,
   slug: true,
   title: true,
+  isAnonymous: true,
   summary: true,
   content: true,
   publishedAt: true,
@@ -91,6 +92,7 @@ export function findUserRssPosts(username: string, limit = RSS_POST_LIMIT) {
   return prisma.post.findMany({
     where: {
       status: "NORMAL",
+      isAnonymous: false,
       author: {
         username,
       },

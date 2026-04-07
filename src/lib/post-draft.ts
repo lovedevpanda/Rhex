@@ -3,6 +3,7 @@ export type PostDraftMode = "create" | "edit"
 export interface LocalPostDraft {
   title: string
   content: string
+  isAnonymous: boolean
   coverPath: string
   boardSlug: string
   postType: string
@@ -46,6 +47,7 @@ export function createEmptyLocalPostDraft(boardSlug = ""): LocalPostDraft {
   return {
     title: "",
     content: "",
+    isAnonymous: false,
     coverPath: "",
     boardSlug,
     postType: "NORMAL",

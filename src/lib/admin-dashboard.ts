@@ -1,6 +1,7 @@
 import { BoardStatus, CommentStatus, PostStatus, UserRole } from "@/db/types"
 
 import { getAdminDashboardRawData, getAdminStructureRawData } from "@/db/admin-dashboard-queries"
+import { normalizeBoardSidebarConfig, type BoardSidebarLinkItem } from "@/lib/board-sidebar-config"
 import { resolveBoardSettings } from "@/lib/board-settings"
 import { serializeDateTime } from "@/lib/formatters"
 import {
@@ -23,6 +24,7 @@ export interface AdminDashboardData {
     resolvedReportCount: number
     pendingPostCount: number
     offlinePostCount: number
+    pendingBoardApplicationCount: number
     pendingVerificationCount: number
     pendingFriendLinkCount: number
     pendingAdOrderCount: number
@@ -84,6 +86,7 @@ export interface AdminStructureData {
     description: string
     icon: string
     sortOrder: number
+    hiddenFromSidebar: boolean
     boardCount: number
     postCount: number
     followerCount: number
@@ -111,11 +114,15 @@ export interface AdminStructureData {
     name: string
     slug: string
     description: string
+    sidebarLinks: BoardSidebarLinkItem[]
+    rulesMarkdown: string | null
+    moderatorsCanWithdrawTreasury: boolean
     status: BoardStatus
     postCount: number
     followerCount: number
     todayPostCount: number
     allowPost: boolean
+    treasuryPoints: number
     zoneId: string | null
     zoneName: string | null
     icon: string
@@ -145,6 +152,44 @@ export interface AdminStructureData {
     canDeleteZone: boolean
     canDeleteBoard: boolean
   }
+  boardApplications: Array<{
+    id: string
+    applicantId: number
+    zoneId: string
+    boardId: string | null
+    name: string
+    slug: string
+    description: string
+    icon: string
+    reason: string
+    status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+    reviewNote: string
+    reviewedAt: string | null
+    createdAt: string
+    applicant: {
+      id: number
+      username: string
+      displayName: string
+      role: "USER" | "MODERATOR" | "ADMIN"
+      status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+    }
+    reviewer: {
+      id: number
+      displayName: string
+    } | null
+    zone: {
+      id: string
+      name: string
+      slug: string
+    }
+    board: {
+      id: string
+      name: string
+      slug: string
+      treasuryPoints: number
+    } | null
+  }>
+  canReviewBoardApplications: boolean
 }
 
 type AdminDashboardRawData = Awaited<ReturnType<typeof getAdminDashboardRawData>>
@@ -217,6 +262,7 @@ export function mapAdminStructureData(data: AdminStructureRawData, actor: AdminA
         description: zone.description ?? "",
         icon: zone.icon ?? "📚",
         sortOrder: zone.sortOrder,
+        hiddenFromSidebar: zone.hiddenFromSidebar,
         boardCount: zone._count.boards,
         postCount: relatedBoards.reduce((total, board) => total + board.postCount, 0),
         followerCount: relatedBoards.reduce((total, board) => total + board.followerCount, 0),
@@ -240,44 +286,54 @@ export function mapAdminStructureData(data: AdminStructureRawData, actor: AdminA
         canEditSettings: canEditZoneSettings(actor, zone.id),
       }
     }),
-    boardStatus: data.boards.map((board) => ({
-      id: board.id,
-      name: board.name,
-      slug: board.slug,
-      description: board.description ?? "",
-      status: board.status,
-      postCount: board.postCount,
-      followerCount: board.followerCount,
-      todayPostCount: todayBoardPostCountMap.get(board.id) ?? 0,
-      allowPost: board.allowPost,
-      zoneId: board.zoneId ?? null,
-      zoneName: board.zone?.name ?? null,
-      icon: board.iconPath ?? "💬",
-      sortOrder: board.sortOrder,
-      postPointDelta: board.postPointDelta ?? null,
-      replyPointDelta: board.replyPointDelta ?? null,
-      postIntervalSeconds: board.postIntervalSeconds ?? null,
-      replyIntervalSeconds: board.replyIntervalSeconds ?? null,
-      allowedPostTypes: board.allowedPostTypes ?? null,
-      minViewPoints: board.minViewPoints ?? null,
-      minViewLevel: board.minViewLevel ?? null,
-      minPostPoints: board.minPostPoints ?? null,
-      minPostLevel: board.minPostLevel ?? null,
-      minReplyPoints: board.minReplyPoints ?? null,
-      minReplyLevel: board.minReplyLevel ?? null,
-      minViewVipLevel: board.minViewVipLevel ?? null,
-      minPostVipLevel: board.minPostVipLevel ?? null,
-      minReplyVipLevel: board.minReplyVipLevel ?? null,
-      requirePostReview: board.requirePostReview ?? null,
-      postListDisplayMode: board.postListDisplayMode ?? null,
-      postListLoadMode: board.postListLoadMode ?? null,
-      canEditSettings: canEditBoardSettings(actor, board.id, board.zoneId),
-    })),
+    boardStatus: data.boards.map((board) => {
+      const sidebarConfig = normalizeBoardSidebarConfig(board.configJson)
+
+      return {
+        id: board.id,
+        name: board.name,
+        slug: board.slug,
+        description: board.description ?? "",
+        sidebarLinks: sidebarConfig.links,
+        rulesMarkdown: sidebarConfig.rulesMarkdown,
+        moderatorsCanWithdrawTreasury: sidebarConfig.moderatorsCanWithdrawTreasury,
+        status: board.status,
+        postCount: board.postCount,
+        followerCount: board.followerCount,
+        todayPostCount: todayBoardPostCountMap.get(board.id) ?? 0,
+        allowPost: board.allowPost,
+        treasuryPoints: board.treasuryPoints,
+        zoneId: board.zoneId ?? null,
+        zoneName: board.zone?.name ?? null,
+        icon: board.iconPath ?? "💬",
+        sortOrder: board.sortOrder,
+        postPointDelta: board.postPointDelta ?? null,
+        replyPointDelta: board.replyPointDelta ?? null,
+        postIntervalSeconds: board.postIntervalSeconds ?? null,
+        replyIntervalSeconds: board.replyIntervalSeconds ?? null,
+        allowedPostTypes: board.allowedPostTypes ?? null,
+        minViewPoints: board.minViewPoints ?? null,
+        minViewLevel: board.minViewLevel ?? null,
+        minPostPoints: board.minPostPoints ?? null,
+        minPostLevel: board.minPostLevel ?? null,
+        minReplyPoints: board.minReplyPoints ?? null,
+        minReplyLevel: board.minReplyLevel ?? null,
+        minViewVipLevel: board.minViewVipLevel ?? null,
+        minPostVipLevel: board.minPostVipLevel ?? null,
+        minReplyVipLevel: board.minReplyVipLevel ?? null,
+        requirePostReview: board.requirePostReview ?? null,
+        postListDisplayMode: board.postListDisplayMode ?? null,
+        postListLoadMode: board.postListLoadMode ?? null,
+        canEditSettings: canEditBoardSettings(actor, board.id, board.zoneId),
+      }
+    }),
     permissions: {
       canCreateZone: actor.role === UserRole.ADMIN,
       canCreateBoard: actor.role === UserRole.ADMIN,
       canDeleteZone: actor.role === UserRole.ADMIN,
       canDeleteBoard: actor.role === UserRole.ADMIN,
     },
+    boardApplications: [],
+    canReviewBoardApplications: false,
   }
 }

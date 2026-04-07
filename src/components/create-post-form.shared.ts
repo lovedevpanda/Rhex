@@ -154,6 +154,7 @@ export interface CreatePostFormBoardGroup {
 export interface CreatePostFormInitialValues {
   title: string
   content: string
+  isAnonymous?: boolean
   coverPath?: string | null
   boardSlug: string
   postType: LocalPostType
@@ -193,6 +194,8 @@ export interface CreatePostFormInitialValues {
 export interface CreatePostFormProps {
   boardOptions: CreatePostFormBoardGroup[]
   pointName: string
+  anonymousPostEnabled?: boolean
+  anonymousPostPrice?: number
   postRedPacketEnabled?: boolean
   postRedPacketMaxPoints?: number
   postJackpotEnabled?: boolean
@@ -351,6 +354,7 @@ export function buildInitialPostDraft(
   return {
     title: initialValues.title,
     content: initialValues.content,
+    isAnonymous: Boolean(initialValues.isAnonymous),
     coverPath: initialValues.coverPath ?? "",
     boardSlug: initialValues.boardSlug,
     postType: normalizePostType(initialValues.postType, DEFAULT_POST_TYPE),
@@ -388,6 +392,7 @@ export function normalizeDraftData(draft: LocalPostDraft, pointName: string, fal
     ...emptyDraft,
     ...draft,
     boardSlug: draft.boardSlug || fallbackBoardSlug,
+    isAnonymous: Boolean(draft.isAnonymous),
     postType: normalizePostType(draft.postType, DEFAULT_POST_TYPE),
     pollOptions: Array.isArray(draft.pollOptions) && draft.pollOptions.length > 0 ? draft.pollOptions : emptyDraft.pollOptions,
     manualTags: normalizeManualTags(draft.manualTags),
@@ -453,6 +458,7 @@ export function buildSubmitRequest({
   const commonPayload = {
     title: draft.title,
     content: draft.content,
+    isAnonymous: draft.isAnonymous,
     coverPath: draft.coverPath.trim() || undefined,
     commentsVisibleToAuthorOnly: draft.commentsVisibleToAuthorOnly,
     replyUnlockContent: draft.replyUnlockContent,

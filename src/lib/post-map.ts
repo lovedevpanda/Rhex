@@ -1,4 +1,6 @@
 import { LotteryStatus, LotteryTriggerMode } from "@/db/types"
+import type { AnonymousDisplayIdentity } from "@/lib/post-anonymous"
+import { applyAnonymousIdentityToPost } from "@/lib/post-anonymous"
 
 import { formatRelativeTime } from "@/lib/formatters"
 
@@ -59,6 +61,7 @@ interface ListPostSource {
   coverPath?: string | null
   type: string
   status: string
+  isAnonymous?: boolean
   reviewNote?: string | null
   isPinned: boolean
   pinScope?: string | null
@@ -90,11 +93,11 @@ interface ListPostSource {
   author: ListPostAuthor
 }
 
-export function mapListPost(post: ListPostSource) {
+export function mapListPost(post: ListPostSource, anonymousMaskIdentity: AnonymousDisplayIdentity | null = null) {
   const publicContent = getPublicPostContentText(post.content)
   const rewardPoolConfig = post.redPacket ? parsePostRewardPoolConfigFromContent(post.content) : null
 
-  return {
+  return applyAnonymousIdentityToPost({
     id: post.id,
     slug: post.slug,
     title: post.title,
@@ -102,6 +105,7 @@ export function mapListPost(post: ListPostSource) {
     board: post.board.name,
     boardIcon: post.board.iconPath ?? "💬",
     boardSlug: post.board.slug,
+    isAnonymous: Boolean(post.isAnonymous),
     author: getUserDisplayName(post.author),
     authorId: post.author.id,
 
@@ -187,7 +191,7 @@ export function mapListPost(post: ListPostSource) {
       tips: post.tipCount ?? 0,
       tipPoints: post.tipTotalPoints ?? 0,
     },
-  }
+  }, anonymousMaskIdentity)
 }
 
 

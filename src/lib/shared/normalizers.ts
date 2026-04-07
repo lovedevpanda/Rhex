@@ -53,6 +53,10 @@ export function normalizeText(value: unknown, fallback = "") {
   return resolved || fallback
 }
 
+export function normalizeTrimmedText(value: unknown, maxLength: number, fallback = "") {
+  return String(value ?? fallback).trim().slice(0, maxLength)
+}
+
 export function normalizeTippingAmounts(value: unknown) {
   const values = String(value ?? "")
     .split(/[，,\s]+/)

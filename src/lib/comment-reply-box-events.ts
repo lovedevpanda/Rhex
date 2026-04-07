@@ -3,6 +3,7 @@
 export interface CommentReplyTarget {
   parentId: string
   replyToUserName: string
+  replyToCommentId?: string
 }
 
 export interface CommentReplyToggleDetail {

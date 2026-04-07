@@ -181,6 +181,13 @@ enum FriendLinkStatus {
   DISABLED
 }
 
+enum BoardApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum BadgeRuleType {
   REGISTER_DAYS
   REGISTER_TIME_RANGE
@@ -311,6 +318,8 @@ model User {
   reports                    Report[]                    @relation("reporter")
   handledReports             Report[]                    @relation("handler")
   pointLogs                  PointLog[]
+  postBlockPurchases         PostBlockPurchase[]         @relation("PostBlockPurchaseBuyer")
+  postBlockSales             PostBlockPurchase[]         @relation("PostBlockPurchaseSeller")
   vipOrders                  VipOrder[]
   postTipsSent               PostTip[]                   @relation("PostTipSender")
   postTipsReceived           PostTip[]                   @relation("PostTipReceiver")
@@ -345,6 +354,8 @@ model User {
   yinYangChallengeDailyStats YinYangChallengeDailyStat[]
   moderatedZoneScopes        ModeratorZoneScope[]
   moderatedBoardScopes       ModeratorBoardScope[]
+  boardApplications          BoardApplication[]          @relation("boardApplicationApplicant")
+  reviewedBoardApplications  BoardApplication[]          @relation("boardApplicationReviewer")
 
   @@index([role])
   @@index([status])
@@ -542,6 +553,7 @@ model Zone {
   description          String?
   icon                 String?
   sortOrder            Int                  @default(0)
+  hiddenFromSidebar    Boolean              @default(false)
   requirePostReview    Boolean              @default(false)
   postPointDelta       Int                  @default(0)
   replyPointDelta      Int                  @default(0)
@@ -563,6 +575,7 @@ model Zone {
   updatedAt            DateTime             @updatedAt @db.Timestamptz(3)
   boards               Board[]
   moderatorScopes      ModeratorZoneScope[]
+  boardApplications    BoardApplication[]
 
   @@index([sortOrder])
 }
@@ -575,6 +588,7 @@ model Board {
   description          String?
   iconPath             String?
   coverPath            String?
+  configJson           Json?
   sortOrder            Int                   @default(0)
   status               BoardStatus           @default(ACTIVE)
   allowPost            Boolean               @default(true)
@@ -596,6 +610,7 @@ model Board {
   postListDisplayMode  String?
   postListLoadMode     String?
   postCount            Int                   @default(0)
+  treasuryPoints       Int                   @default(0)
   followerCount        Int                   @default(0)
   createdAt            DateTime              @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime              @updatedAt @db.Timestamptz(3)
@@ -603,6 +618,7 @@ model Board {
   posts                Post[]
   followers            BoardFollow[]
   moderatorScopes      ModeratorBoardScope[]
+  boardApplications    BoardApplication[]
 
   @@index([zoneId])
   @@index([status])
@@ -697,6 +713,7 @@ model Post {
   type                        PostType                @default(NORMAL)
   status                      PostStatus              @default(NORMAL)
   reviewNote                  String?
+  isAnonymous                 Boolean                 @default(false)
   isPinned                    Boolean                 @default(false)
   pinScope                    PinScope                @default(NONE)
   isFeatured                  Boolean                 @default(false)
@@ -750,6 +767,7 @@ model Post {
   giftStats                   PostGiftStats[]
   redPacket                   PostRedPacket?
   redPacketClaims             PostRedPacketClaim[]
+  blockPurchases              PostBlockPurchase[]
   commentEffectFeedbacks      CommentEffectFeedback[]
   followers                   PostFollow[]
 
@@ -838,6 +856,8 @@ model Comment {
   userId                Int
   parentId              String?
   replyToUserId         Int?
+  replyToCommentId      String?
+  useAnonymousIdentity   Boolean                @default(false)
   content               String
   status                CommentStatus          @default(NORMAL)
   likeCount             Int                    @default(0)
@@ -852,6 +872,8 @@ model Comment {
   parent                Comment?               @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies               Comment[]              @relation("CommentReplies")
   replyToUser           User?                  @relation("replyToUser", fields: [replyToUserId], references: [id])
+  replyToComment        Comment?               @relation("CommentReplyTargets", fields: [replyToCommentId], references: [id], onDelete: SetNull)
+  quotedReplies         Comment[]              @relation("CommentReplyTargets")
   likes                 Like[]
   pollVotes             PollVote[]
   lotteryParticipants   LotteryParticipant[]
@@ -861,6 +883,7 @@ model Comment {
   @@index([postId])
   @@index([userId])
   @@index([parentId])
+  @@index([replyToCommentId])
   @@index([postId, status, createdAt])
   @@index([postId, status, parentId, createdAt])
 }
@@ -1212,6 +1235,8 @@ model PointLog {
   changeType  ChangeType
   changeValue Int
   reason      String
+  eventType   String       @default("GENERIC")
+  eventData   Json?
   relatedType RelatedType?
   relatedId   String?
   createdAt   DateTime     @default(now()) @db.Timestamptz(3)
@@ -1219,6 +1244,27 @@ model PointLog {
 
   @@index([userId])
   @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([relatedType, relatedId, createdAt])
+  @@index([createdAt])
+}
+
+model PostBlockPurchase {
+  id        String   @id
+  postId    String
+  blockId   String
+  buyerId   Int
+  sellerId  Int
+  price     Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  buyer     User     @relation("PostBlockPurchaseBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller    User     @relation("PostBlockPurchaseSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, blockId, buyerId])
+  @@index([postId, blockId])
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
   @@index([createdAt])
 }
 
@@ -1300,6 +1346,34 @@ model FriendLink {
 
   @@index([status, sortOrder, createdAt])
   @@index([createdAt])
+}
+
+model BoardApplication {
+  id           String                 @id @default(cuid())
+  applicantId  Int
+  zoneId       String
+  boardId      String?
+  name         String
+  slug         String
+  description  String?
+  icon         String?
+  reason       String?
+  status       BoardApplicationStatus @default(PENDING)
+  reviewNote   String?
+  reviewedById Int?
+  reviewedAt   DateTime?              @db.Timestamptz(3)
+  createdAt    DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime               @updatedAt @db.Timestamptz(3)
+  applicant    User                   @relation("boardApplicationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  zone         Zone                   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  board        Board?                 @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  reviewer     User?                  @relation("boardApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([applicantId, status, createdAt])
+  @@index([zoneId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([reviewedById, reviewedAt])
+  @@index([boardId])
 }
 
 model Announcement {

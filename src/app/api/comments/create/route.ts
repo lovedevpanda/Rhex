@@ -55,6 +55,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     navigation: {
       page: result.targetPage,
       sort: "oldest",
+      view: result.commentView,
       anchor: `comment-${result.created.id}`,
     },
   }, result.contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : result.normalizedReplyToUserName ? `已回复 @${result.normalizedReplyToUserName}${redPacketMessage}` : `回复成功${redPacketMessage}`)

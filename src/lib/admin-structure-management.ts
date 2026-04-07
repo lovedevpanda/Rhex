@@ -5,6 +5,7 @@ export interface ZoneItem {
   description: string
   icon: string
   sortOrder: number
+  hiddenFromSidebar: boolean
   boardCount: number
   postCount: number
   followerCount: number
@@ -35,6 +36,14 @@ export interface BoardItem {
   slug: string
   description: string
   icon: string
+  sidebarLinks: Array<{
+    title: string
+    url: string
+    icon: string | null
+    titleColor: string | null
+  }>
+  rulesMarkdown: string | null
+  moderatorsCanWithdrawTreasury: boolean
   sortOrder: number
   zoneId: string | null
   zoneName: string | null
@@ -43,6 +52,7 @@ export interface BoardItem {
   postCount: number
   followerCount: number
   todayPostCount: number
+  treasuryPoints: number
   requirePostReview: boolean | null
   postPointDelta: number | null
   replyPointDelta: number | null
@@ -73,6 +83,44 @@ export interface StructureManagerData {
     canDeleteZone: boolean
     canDeleteBoard: boolean
   }
+  boardApplications: Array<{
+    id: string
+    applicantId: number
+    zoneId: string
+    boardId: string | null
+    name: string
+    slug: string
+    description: string
+    icon: string
+    reason: string
+    status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+    reviewNote: string
+    reviewedAt: string | null
+    createdAt: string
+    applicant: {
+      id: number
+      username: string
+      displayName: string
+      role: "USER" | "MODERATOR" | "ADMIN"
+      status: "ACTIVE" | "MUTED" | "BANNED" | "INACTIVE"
+    }
+    reviewer: {
+      id: number
+      displayName: string
+    } | null
+    zone: {
+      id: string
+      name: string
+      slug: string
+    }
+    board: {
+      id: string
+      name: string
+      slug: string
+      treasuryPoints: number
+    } | null
+  }>
+  canReviewBoardApplications: boolean
   filters: {
     keyword: string
     zoneId: string

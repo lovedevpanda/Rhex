@@ -4,6 +4,9 @@ export const FONT_SIZE_PRESET_STORAGE_KEY = "rhex-font-size-preset"
 export const CUSTOM_THEME_STORAGE_KEY = "rhex-custom-theme"
 export const CUSTOM_THEME_VARIABLES_STORAGE_KEY = "rhex-custom-theme-variables"
 export const THEME_SETTINGS_CHANGE_EVENT = "rhex-theme-settings-change"
+export const CUSTOM_THEME_STYLE_ELEMENT_ID = "rhex-custom-theme-style"
+export const DEFAULT_THEME_FONT_FAMILY = "\"Microsoft YaHei\", \"PingFang SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+export const DEFAULT_THEME_FONT_SIZE = "16px"
 
 export type ThemeMode = "light" | "dark"
 export type ThemePreference = ThemeMode | "system"
@@ -20,9 +23,16 @@ interface CustomThemeModeConfig {
   border: string
 }
 
+interface CustomThemeTypographyConfig {
+  fontFamily: string
+  fontSize: string
+}
+
 export interface CustomThemeConfig {
   light: CustomThemeModeConfig
   dark: CustomThemeModeConfig
+  typography: CustomThemeTypographyConfig
+  customCss: string
 }
 
 type ThemePresetDefinition = {
@@ -249,6 +259,11 @@ export const DEFAULT_CUSTOM_THEME_CONFIG: CustomThemeConfig = {
     accent: "#2a3240",
     border: "#303949",
   },
+  typography: {
+    fontFamily: DEFAULT_THEME_FONT_FAMILY,
+    fontSize: DEFAULT_THEME_FONT_SIZE,
+  },
+  customCss: "",
 }
 
 function isBrowser() {
@@ -258,6 +273,40 @@ function isBrowser() {
 function normalizeHexColor(value: unknown, fallback: string) {
   const normalized = String(value ?? "").trim()
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : fallback
+}
+
+function normalizeCustomThemeFontFamily(value: unknown, fallback: string) {
+  const normalized = String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+
+  return normalized || fallback
+}
+
+function normalizeCustomThemeFontSize(value: unknown, fallback: string) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `${Math.max(12, Math.min(24, Math.round(value)))}px`
+  }
+
+  const normalized = String(value ?? "").trim().toLowerCase()
+  const numeric = normalized.endsWith("px") ? Number.parseFloat(normalized.slice(0, -2)) : Number.parseFloat(normalized)
+  if (Number.isFinite(numeric)) {
+    return `${Math.max(12, Math.min(24, Math.round(numeric)))}px`
+  }
+
+  return fallback
+}
+
+function normalizeCustomThemeCss(value: unknown, fallback: string) {
+  if (typeof value !== "string") {
+    return fallback
+  }
+
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\u0000/g, "")
+    .trim()
 }
 
 function normalizeCustomThemeModeConfig(value: unknown, fallback: CustomThemeModeConfig): CustomThemeModeConfig {
@@ -286,6 +335,11 @@ export function resolveStoredCustomThemeConfig(value: unknown): CustomThemeConfi
   return {
     light: normalizeCustomThemeModeConfig(candidate.light, DEFAULT_CUSTOM_THEME_CONFIG.light),
     dark: normalizeCustomThemeModeConfig(candidate.dark, DEFAULT_CUSTOM_THEME_CONFIG.dark),
+    typography: {
+      fontFamily: normalizeCustomThemeFontFamily(candidate.typography && typeof candidate.typography === "object" ? (candidate.typography as Record<string, unknown>).fontFamily : null, DEFAULT_CUSTOM_THEME_CONFIG.typography.fontFamily),
+      fontSize: normalizeCustomThemeFontSize(candidate.typography && typeof candidate.typography === "object" ? (candidate.typography as Record<string, unknown>).fontSize : null, DEFAULT_CUSTOM_THEME_CONFIG.typography.fontSize),
+    },
+    customCss: normalizeCustomThemeCss(candidate.customCss, DEFAULT_CUSTOM_THEME_CONFIG.customCss),
   }
 }
 
@@ -385,6 +439,49 @@ export function buildCustomThemeVariables(config: CustomThemeConfig) {
     light: buildCustomThemeVariableMap(config.light, "light"),
     dark: buildCustomThemeVariableMap(config.dark, "dark"),
   } satisfies Record<ThemeMode, ThemeVariableMap>
+}
+
+function buildCustomThemeCssBlock(selector: string, variables: ThemeVariableMap, typography?: CustomThemeTypographyConfig) {
+  const lines = [selector, "{"]
+
+  if (typography) {
+    lines.push(`  --theme-font-family: ${typography.fontFamily};`)
+    lines.push(`  font-size: ${typography.fontSize};`)
+  }
+
+  for (const variableName of THEME_VARIABLE_NAMES) {
+    const variableValue = variables[variableName]
+    if (typeof variableValue === "string" && variableValue.trim()) {
+      lines.push(`  --${variableName}: ${variableValue};`)
+    }
+  }
+
+  lines.push("}")
+
+  return lines.join("\n")
+}
+
+export function buildCustomThemeRawCss(config: CustomThemeConfig) {
+  const normalizedConfig = resolveStoredCustomThemeConfig(config)
+  const variables = buildCustomThemeVariables(normalizedConfig)
+  const customCssBlock = normalizedConfig.customCss
+    ? [
+        "",
+        "/* Custom CSS */",
+        normalizedConfig.customCss,
+      ]
+    : []
+
+  return [
+    buildCustomThemeCssBlock(":root", variables.light, normalizedConfig.typography),
+    "",
+    buildCustomThemeCssBlock(".dark", variables.dark),
+    "",
+    "body {",
+    "  font-family: var(--theme-font-family, \"Microsoft YaHei\", \"PingFang SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif);",
+    "}",
+    ...customCssBlock,
+  ].join("\n")
 }
 
 function normalizeCustomThemeVariables(value: unknown) {
@@ -644,13 +741,45 @@ function applyFontSizePreset(fontSizePreset: FontSizePreset) {
   root.style.fontSize = FONT_SIZE_PRESETS[fontSizePreset].size
 }
 
+function applyCustomThemeTypography(config: CustomThemeConfig) {
+  const root = document.documentElement
+  root.style.setProperty("--theme-font-family", config.typography.fontFamily)
+  root.style.fontSize = config.typography.fontSize
+}
+
+function applyCustomThemeCss(config: CustomThemeConfig) {
+  const existingElement = document.getElementById(CUSTOM_THEME_STYLE_ELEMENT_ID)
+
+  if (!config.customCss.trim()) {
+    existingElement?.remove()
+    return
+  }
+
+  const styleElement = existingElement instanceof HTMLStyleElement
+    ? existingElement
+    : Object.assign(document.createElement("style"), { id: CUSTOM_THEME_STYLE_ELEMENT_ID })
+
+  styleElement.textContent = config.customCss
+  if (!styleElement.parentNode) {
+    document.head.appendChild(styleElement)
+  }
+}
+
 export function applyTheme(preference: ThemePreference, preset: ThemePreset = "default", fontSizePreset: FontSizePreset = "normal") {
   const resolvedTheme = resolveThemeMode(preference)
   const root = document.documentElement
   root.classList.toggle("dark", resolvedTheme === "dark")
   root.style.colorScheme = resolvedTheme
   applyThemePreset(preset, resolvedTheme)
-  applyFontSizePreset(fontSizePreset)
+  if (preset === "custom") {
+    const customThemeConfig = readStoredCustomThemeConfig()
+    applyCustomThemeTypography(customThemeConfig)
+    applyCustomThemeCss(customThemeConfig)
+  } else {
+    root.style.removeProperty("--theme-font-family")
+    document.getElementById(CUSTOM_THEME_STYLE_ELEMENT_ID)?.remove()
+    applyFontSizePreset(fontSizePreset)
+  }
 }
 
 export function getThemeInitScript() {
@@ -663,5 +792,5 @@ export function getThemeInitScript() {
 
   const defaultCustomVariables = buildCustomThemeVariables(DEFAULT_CUSTOM_THEME_CONFIG)
 
-  return `(function(){try{var themeStorageKey="${THEME_STORAGE_KEY}";var presetStorageKey="${THEME_PRESET_STORAGE_KEY}";var fontSizeStorageKey="${FONT_SIZE_PRESET_STORAGE_KEY}";var customThemeVariablesStorageKey="${CUSTOM_THEME_VARIABLES_STORAGE_KEY}";var presetMap=${JSON.stringify(themePresetValues)};var fontSizeMap=${JSON.stringify(fontSizePresetValues)};var defaultCustomVariables=${JSON.stringify(defaultCustomVariables)};var variableNames=${JSON.stringify(THEME_VARIABLE_NAMES)};var storedTheme=window.localStorage.getItem(themeStorageKey);var preference=storedTheme==="dark"||storedTheme==="light"||storedTheme==="system"?storedTheme:"light";var storedPreset=window.localStorage.getItem(presetStorageKey);var preset=storedPreset==="custom"||storedPreset&&presetMap[storedPreset]?storedPreset:"default";var storedFontSize=window.localStorage.getItem(fontSizeStorageKey);var fontSizePreset=storedFontSize&&fontSizeMap[storedFontSize]?storedFontSize:"normal";var media=window.matchMedia("(prefers-color-scheme: dark)");var resolvedTheme=preference==="system"?(media.matches?"dark":"light"):preference;var root=document.documentElement;root.classList.toggle("dark",resolvedTheme==="dark");root.style.colorScheme=resolvedTheme;root.dataset.themePreset=preset;root.dataset.fontSizePreset=fontSizePreset;root.style.fontSize=fontSizeMap[fontSizePreset]||fontSizeMap.normal||"16px";var customVariablesRaw=window.localStorage.getItem(customThemeVariablesStorageKey);var customVariables=defaultCustomVariables;try{if(customVariablesRaw){customVariables=JSON.parse(customVariablesRaw)||defaultCustomVariables;}}catch(innerError){customVariables=defaultCustomVariables;}var values=preset==="custom"?((customVariables&&customVariables[resolvedTheme])||defaultCustomVariables[resolvedTheme]||{}):((presetMap[preset]&&presetMap[preset][resolvedTheme])||{});for(var i=0;i<variableNames.length;i++){var key=variableNames[i];var value=values[key];if(typeof value==="string"&&value.length>0){root.style.setProperty("--"+key,value);}else{root.style.removeProperty("--"+key);}}}catch(error){document.documentElement.style.colorScheme="light";document.documentElement.style.fontSize="16px";}})();`
+  return `(function(){try{var themeStorageKey="${THEME_STORAGE_KEY}";var presetStorageKey="${THEME_PRESET_STORAGE_KEY}";var fontSizeStorageKey="${FONT_SIZE_PRESET_STORAGE_KEY}";var customThemeStorageKey="${CUSTOM_THEME_STORAGE_KEY}";var customThemeVariablesStorageKey="${CUSTOM_THEME_VARIABLES_STORAGE_KEY}";var customThemeStyleElementId="${CUSTOM_THEME_STYLE_ELEMENT_ID}";var presetMap=${JSON.stringify(themePresetValues)};var fontSizeMap=${JSON.stringify(fontSizePresetValues)};var defaultCustomVariables=${JSON.stringify(defaultCustomVariables)};var defaultCustomConfig=${JSON.stringify(DEFAULT_CUSTOM_THEME_CONFIG)};var variableNames=${JSON.stringify(THEME_VARIABLE_NAMES)};var storedTheme=window.localStorage.getItem(themeStorageKey);var preference=storedTheme==="dark"||storedTheme==="light"||storedTheme==="system"?storedTheme:"light";var storedPreset=window.localStorage.getItem(presetStorageKey);var preset=storedPreset==="custom"||storedPreset&&presetMap[storedPreset]?storedPreset:"default";var storedFontSize=window.localStorage.getItem(fontSizeStorageKey);var fontSizePreset=storedFontSize&&fontSizeMap[storedFontSize]?storedFontSize:"normal";var media=window.matchMedia("(prefers-color-scheme: dark)");var resolvedTheme=preference==="system"?(media.matches?"dark":"light"):preference;var root=document.documentElement;root.classList.toggle("dark",resolvedTheme==="dark");root.style.colorScheme=resolvedTheme;root.dataset.themePreset=preset;root.dataset.fontSizePreset=fontSizePreset;var customConfigRaw=window.localStorage.getItem(customThemeStorageKey);var customTypography=defaultCustomConfig.typography;var customCss=defaultCustomConfig.customCss||\"\";try{if(customConfigRaw){var parsedConfig=JSON.parse(customConfigRaw)||defaultCustomConfig;var parsedTypography=parsedConfig&&parsedConfig.typography&&typeof parsedConfig.typography===\"object\"?parsedConfig.typography:null;customTypography={fontFamily:parsedTypography&&typeof parsedTypography.fontFamily===\"string\"&&parsedTypography.fontFamily.trim()?parsedTypography.fontFamily:defaultCustomConfig.typography.fontFamily,fontSize:parsedTypography&&typeof parsedTypography.fontSize===\"string\"&&/^[0-9]+px$/i.test(parsedTypography.fontSize.trim())?parsedTypography.fontSize.trim():defaultCustomConfig.typography.fontSize};customCss=parsedConfig&&typeof parsedConfig.customCss===\"string\"?parsedConfig.customCss.replace(/\\r\\n/g,\"\\n\").replace(/\\u0000/g,\"\").trim():\"\";}}catch(configError){customTypography=defaultCustomConfig.typography;customCss=defaultCustomConfig.customCss||\"\";}var styleElement=document.getElementById(customThemeStyleElementId);if(preset===\"custom\"){root.style.setProperty(\"--theme-font-family\",customTypography.fontFamily);root.style.fontSize=customTypography.fontSize;if(customCss){if(!styleElement){styleElement=document.createElement(\"style\");styleElement.id=customThemeStyleElementId;document.head.appendChild(styleElement);}styleElement.textContent=customCss;}else if(styleElement){styleElement.remove();}}else{root.style.removeProperty(\"--theme-font-family\");root.style.fontSize=fontSizeMap[fontSizePreset]||fontSizeMap.normal||\"${DEFAULT_THEME_FONT_SIZE}\";if(styleElement){styleElement.remove();}}var customVariablesRaw=window.localStorage.getItem(customThemeVariablesStorageKey);var customVariables=defaultCustomVariables;try{if(customVariablesRaw){customVariables=JSON.parse(customVariablesRaw)||defaultCustomVariables;}}catch(innerError){customVariables=defaultCustomVariables;}var values=preset===\"custom\"?((customVariables&&customVariables[resolvedTheme])||defaultCustomVariables[resolvedTheme]||{}):((presetMap[preset]&&presetMap[preset][resolvedTheme])||{});for(var i=0;i<variableNames.length;i++){var key=variableNames[i];var value=values[key];if(typeof value===\"string\"&&value.length>0){root.style.setProperty(\"--\"+key,value);}else{root.style.removeProperty(\"--\"+key);}}}catch(error){document.documentElement.style.colorScheme=\"light\";document.documentElement.style.fontSize=\"${DEFAULT_THEME_FONT_SIZE}\";document.documentElement.style.removeProperty(\"--theme-font-family\");var fallbackStyleElement=document.getElementById(\"${CUSTOM_THEME_STYLE_ELEMENT_ID}\");if(fallbackStyleElement){fallbackStyleElement.remove();}}})();`
 }

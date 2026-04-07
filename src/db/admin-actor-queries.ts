@@ -135,6 +135,7 @@ export function findManagedBoardContext(boardId: string) {
       id: true,
       slug: true,
       name: true,
+      configJson: true,
       zoneId: true,
       status: true,
       allowPost: true,
