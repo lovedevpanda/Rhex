@@ -5,6 +5,7 @@ import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { LevelIcon } from "@/components/level-icon"
 import { MarkdownContent } from "@/components/markdown-content"
 import { UserAvatar } from "@/components/user-avatar"
+import type { AnnouncementItem } from "@/lib/announcements"
 import type { SiteBoardItem, BoardModeratorItem } from "@/lib/boards"
 import type { SidebarUserCardData } from "@/components/sidebar-user-card"
 import type { HomeSidebarPanelItem } from "@/lib/home-sidebar-layout"
@@ -25,6 +26,8 @@ interface BoardSidebarPanelsProps {
   hotTopics: HotTopicItem[]
   board: Pick<SiteBoardItem, "name" | "slug" | "sidebarLinks" | "rulesMarkdown">
   moderators: BoardModeratorItem[]
+  announcements?: AnnouncementItem[]
+  showAnnouncements?: boolean
   postLinkDisplayMode?: "SLUG" | "ID"
   createPostHref?: string
   siteName?: string
@@ -150,7 +153,7 @@ function BoardLinksPanel({ links }: { links: BoardSidebarLinkItem[] }) {
   )
 }
 
-export function BoardSidebarPanels({ user, hotTopics, board, moderators, postLinkDisplayMode = "SLUG", createPostHref, siteName, siteDescription, siteLogoPath }: BoardSidebarPanelsProps) {
+export function BoardSidebarPanels({ user, hotTopics, board, moderators, announcements = [], showAnnouncements = true, postLinkDisplayMode = "SLUG", createPostHref, siteName, siteDescription, siteLogoPath }: BoardSidebarPanelsProps) {
   const topPanels: HomeSidebarPanelItem[] = []
 
   if (board.sidebarLinks.length > 0) {
@@ -174,7 +177,8 @@ export function BoardSidebarPanels({ user, hotTopics, board, moderators, postLin
       user={user}
       hotTopics={hotTopics}
       postLinkDisplayMode={postLinkDisplayMode}
-      showAnnouncements={false}
+      announcements={announcements}
+      showAnnouncements={showAnnouncements}
       createPostHref={createPostHref}
       siteName={siteName}
       siteDescription={siteDescription}

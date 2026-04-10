@@ -37,6 +37,11 @@ export interface CaptchaSensitiveConfig {
   turnstileSecretKey: string | null
 }
 
+export interface UploadStorageSensitiveConfig {
+  accessKeyId: string | null
+  secretAccessKey: string | null
+}
+
 function normalizeNullableString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
@@ -66,6 +71,18 @@ export function resolveCaptchaSensitiveConfig(sensitiveStateJson?: string | null
 
   return {
     turnstileSecretKey: normalizeNullableString(captchaConfig.turnstileSecretKey),
+  }
+}
+
+export function resolveUploadStorageSensitiveConfig(sensitiveStateJson?: string | null): UploadStorageSensitiveConfig {
+  const state = readSensitiveSiteSettingsState(sensitiveStateJson)
+  const uploadStorageConfig = isRecord(state.uploadStorageConfig)
+    ? state.uploadStorageConfig
+    : {}
+
+  return {
+    accessKeyId: normalizeNullableString(uploadStorageConfig.accessKeyId),
+    secretAccessKey: normalizeNullableString(uploadStorageConfig.secretAccessKey),
   }
 }
 
@@ -103,6 +120,24 @@ export function mergeCaptchaSensitiveConfig(
     ...state,
     captchaConfig: {
       turnstileSecretKey: normalizeNullableString(input.turnstileSecretKey),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function mergeUploadStorageSensitiveConfig(
+  sensitiveStateJson: string | null | undefined,
+  input: UploadStorageSensitiveConfig,
+) {
+  const root = parseSensitiveStateRoot(sensitiveStateJson)
+  const state = readSensitiveSiteSettingsState(sensitiveStateJson)
+
+  root[SITE_SETTINGS_SENSITIVE_KEY] = {
+    ...state,
+    uploadStorageConfig: {
+      accessKeyId: normalizeNullableString(input.accessKeyId),
+      secretAccessKey: normalizeNullableString(input.secretAccessKey),
     },
   }
 

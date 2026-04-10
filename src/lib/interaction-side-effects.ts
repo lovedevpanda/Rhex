@@ -32,6 +32,13 @@ registerInteractionEffectHooks({
         ? swallowSideEffect(`post-like:sync-likes:${input.postId}:${input.userId}`, () => syncUserReceivedLikes(targetUserId, { notifyOnUpgrade: true }))
         : Promise.resolve(null),
       input.liked
+        ? swallowSideEffect(`post-like:red-packet:${input.postId}:${input.userId}`, () => tryTriggerPostRewardPool({
+            postId: input.postId,
+            userId: input.userId,
+            triggerType: "LIKE",
+          }))
+        : Promise.resolve(null),
+      input.liked
         ? swallowSideEffect(`post-like:lottery:${input.postId}:${input.userId}`, () => enrollUserInLotteryPool({ postId: input.postId, userId: input.userId }))
         : Promise.resolve(null),
     ])
@@ -42,17 +49,32 @@ registerInteractionEffectHooks({
       return
     }
 
-    await swallowSideEffect(`post-favorite:lottery:${input.postId}:${input.userId}`, () => enrollUserInLotteryPool({
-      postId: input.postId,
-      userId: input.userId,
-    }))
+    await Promise.all([
+      swallowSideEffect(`post-favorite:red-packet:${input.postId}:${input.userId}`, () => tryTriggerPostRewardPool({
+        postId: input.postId,
+        userId: input.userId,
+        triggerType: "FAVORITE",
+      })),
+      swallowSideEffect(`post-favorite:lottery:${input.postId}:${input.userId}`, () => enrollUserInLotteryPool({
+        postId: input.postId,
+        userId: input.userId,
+      })),
+    ])
   },
   async onCommentCreate(input) {
-    await swallowSideEffect(`comment-create:lottery:${input.commentId}`, () => enrollUserInLotteryPool({
-      postId: input.postId,
-      userId: input.userId,
-      replyCommentId: input.commentId,
-    }))
+    await Promise.all([
+      swallowSideEffect(`comment-create:red-packet:${input.commentId}`, () => tryTriggerPostRewardPool({
+        postId: input.postId,
+        userId: input.userId,
+        triggerType: "REPLY",
+        triggerCommentId: input.commentId,
+      })),
+      swallowSideEffect(`comment-create:lottery:${input.commentId}`, () => enrollUserInLotteryPool({
+        postId: input.postId,
+        userId: input.userId,
+        replyCommentId: input.commentId,
+      })),
+    ])
   },
 })
 
@@ -62,24 +84,12 @@ export async function handlePostLikeSideEffects(input: {
   userId: number
   targetUserId: number | null
 }) {
-  const redPacketClaim = input.liked
-    ? await swallowSideEffect(`post-like:red-packet:${input.postId}:${input.userId}`, () => tryTriggerPostRewardPool({
-        postId: input.postId,
-        userId: input.userId,
-        triggerType: "LIKE",
-      }))
-    : null
-
   void enqueuePostLikeEffects({
     postId: input.postId,
     userId: input.userId,
     targetUserId: input.targetUserId,
     liked: input.liked,
   })
-
-  return {
-    redPacketClaim,
-  }
 }
 
 export async function handlePostFavoriteSideEffects(input: {
@@ -87,26 +97,12 @@ export async function handlePostFavoriteSideEffects(input: {
   postId: string
   userId: number
 }) {
-  if (!input.favored) {
-    return {
-      redPacketClaim: null,
-    }
-  }
-
-  const redPacketClaim = await swallowSideEffect(`post-favorite:red-packet:${input.postId}:${input.userId}`, () => tryTriggerPostRewardPool({
-    postId: input.postId,
-    userId: input.userId,
-    triggerType: "FAVORITE",
-  }))
-
-  void enqueuePostFavoriteEffects({
-    postId: input.postId,
-    userId: input.userId,
-    favored: input.favored,
-  })
-
-  return {
-    redPacketClaim,
+  if (input.favored) {
+    void enqueuePostFavoriteEffects({
+      postId: input.postId,
+      userId: input.userId,
+      favored: input.favored,
+    })
   }
 }
 
@@ -115,20 +111,9 @@ export async function handleCommentCreateSideEffects(input: {
   userId: number
   commentId: string
 }) {
-  const redPacketClaim = await swallowSideEffect(`comment-create:red-packet:${input.commentId}`, () => tryTriggerPostRewardPool({
-    postId: input.postId,
-    userId: input.userId,
-    triggerType: "REPLY",
-    triggerCommentId: input.commentId,
-  }))
-
   void enqueueCommentCreateEffects({
     postId: input.postId,
     userId: input.userId,
     commentId: input.commentId,
   })
-
-  return {
-    redPacketClaim,
-  }
 }

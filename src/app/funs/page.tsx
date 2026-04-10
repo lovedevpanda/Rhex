@@ -6,10 +6,10 @@ import { SiteHeader } from "@/components/site-header"
 import { LevelIcon } from "@/components/level-icon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
+import { getHomeAnnouncements } from "@/lib/announcements"
 import { getCurrentUser } from "@/lib/auth"
 import { getBoards } from "@/lib/boards"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
-
 import { getSiteSettings } from "@/lib/site-settings"
 import { getZones } from "@/lib/zones"
 
@@ -24,11 +24,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function FunsPage() {
   const settingsPromise = getSiteSettings()
-  const [boards, zones, currentUser, hotTopics, settings] = await Promise.all([
+  const [boards, zones, currentUser, hotTopics, announcements, settings] = await Promise.all([
     getBoards(),
     getZones(),
     getCurrentUser(),
     settingsPromise.then((settings) => getHomeSidebarHotTopics(settings.homeSidebarHotTopicsCount)),
+    getHomeAnnouncements(3),
     settingsPromise,
   ])
 
@@ -69,7 +70,15 @@ export default async function FunsPage() {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} />
+              <HomeSidebarPanels
+                user={sidebarUser}
+                hotTopics={hotTopics}
+                announcements={announcements}
+                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                siteName={settings.siteName}
+                siteDescription={settings.siteDescription}
+                siteLogoPath={settings.siteLogoPath}
+              />
             </aside>
           )}
         />

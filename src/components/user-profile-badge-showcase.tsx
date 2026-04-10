@@ -58,7 +58,7 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
           }
           contentClassName="max-w-[240px]"
         >
-          <div className="group cursor-default rounded-2xl border border-transparent bg-transparent p-2 text-center transition-all duration-200 hover:-translate-y-1 hover:border-slate-200/80 hover:bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.8))] hover:shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:hover:border-white/10 dark:hover:bg-white/[0.03] dark:hover:shadow-[0_14px_28px_rgba(2,6,23,0.45)]">
+          <div className="group cursor-default rounded-2xl border border-transparent bg-transparent p-2 text-center transition-all duration-200 hover:-translate-y-1 hover:border-slate-200/80  hover:shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:hover:border-white/10 dark:hover:bg-white/[0.03] dark:hover:shadow-[0_14px_28px_rgba(2,6,23,0.45)]">
             <div
               className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border text-lg transition-transform duration-200 group-hover:scale-[1.08]"
               style={{

@@ -119,6 +119,25 @@ export function normalizeSiteDocumentSlug(value: unknown) {
   return segments.join("/").slice(0, 160)
 }
 
+function decodeSlugSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
+export function resolveSiteDocumentSlugFromSegments(segments?: string[]) {
+  if (!segments?.length) {
+    return ""
+  }
+
+  return segments
+    .map((segment) => decodeSlugSegment(String(segment)))
+    .join("/")
+    .trim()
+}
+
 export function buildSiteDocumentHref(input: {
   type: SiteDocumentType
   sourceType: SiteDocumentSourceType
@@ -132,7 +151,11 @@ export function buildSiteDocumentHref(input: {
 
   const basePath = SITE_DOCUMENT_TYPE_CONFIG[input.type].collectionPath
   if (input.slug) {
-    return `${basePath}/${input.slug}`
+    const encodedSlug = input.slug
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/")
+    return `${basePath}/${encodedSlug}`
   }
 
   if (input.type === "ANNOUNCEMENT" && input.id) {

@@ -494,7 +494,25 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         {tab === "settings" && currentSettingsSection === "interaction" ? <AdminBasicSettingsForm initialSettings={siteSettings!} mode="interaction" initialSubTab={currentSettingsSubTab} /> : null}
         {tab === "settings" && currentSettingsSection === "friend-links" ? <AdminFriendLinksSettingsForm initialSettings={friendLinks!.settings} items={friendLinks!.items} pendingCount={friendLinks!.pendingCount} /> : null}
         {tab === "settings" && currentSettingsSection === "vip" ? <AdminVipSettingsForm initialSettings={siteSettings!} initialSubTab={currentSettingsSubTab} initialRedeemCodes={redeemCodes} /> : null}
-        {tab === "settings" && currentSettingsSection === "upload" ? <AdminUploadSettingsForm initialSettings={siteSettings!} /> : null}
+        {tab === "settings" && currentSettingsSection === "upload" ? (
+          <AdminUploadSettingsForm
+            initialSettings={{
+              uploadProvider: siteSettings!.uploadProvider,
+              uploadLocalPath: siteSettings!.uploadLocalPath,
+              uploadBaseUrl: siteSettings!.uploadBaseUrl,
+              uploadOssBucket: siteSettings!.uploadOssBucket,
+              uploadOssRegion: siteSettings!.uploadOssRegion,
+              uploadOssEndpoint: siteSettings!.uploadOssEndpoint,
+              uploadS3CredentialsConfigured: Boolean(siteSettings!.uploadS3AccessKeyId && siteSettings!.uploadS3SecretAccessKey),
+              uploadS3ForcePathStyle: siteSettings!.uploadS3ForcePathStyle,
+              uploadRequireLogin: siteSettings!.uploadRequireLogin,
+              uploadAllowedImageTypes: siteSettings!.uploadAllowedImageTypes,
+              uploadMaxFileSizeMb: siteSettings!.uploadMaxFileSizeMb,
+              uploadAvatarMaxFileSizeMb: siteSettings!.uploadAvatarMaxFileSizeMb,
+              markdownImageUploadEnabled: siteSettings!.markdownImageUploadEnabled,
+            }}
+          />
+        ) : null}
 
         {tab === "reports" ? <AdminReportCenter data={reports!} /> : null}
         {tab === "logs" ? <AdminLogCenter data={logCenter!} /> : null}

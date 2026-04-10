@@ -69,7 +69,7 @@ export function SelfServeAdsSidebar({ panelData }: SelfServeAdsSidebarProps) {
 
       <div className="mt-2.5 grid grid-cols-2 gap-2">
         {resolvedPanelData.textSlots.map((item) => item.isPlaceholder ? (
-          <Link key={item.id} href={buildPurchaseHref("TEXT", item.slotIndex)} className="flex h-11 items-center justify-center rounded-[12px] border border-dashed border-border bg-background px-3 text-[11px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground">
+          <Link key={item.id} href={buildPurchaseHref("TEXT", item.slotIndex)} className="flex py-2 items-center justify-center rounded-[12px] border border-dashed border-border bg-background px-3 text-[11px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground">
             购买广告位
           </Link>
         ) : (

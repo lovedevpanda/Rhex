@@ -775,7 +775,7 @@ export function PostRewardPoolModal({
                 </div>
               </div>
             ) : (
-              <div className="space-y-2.5 rounded-[14px] bg-rose-50/80 p-2.5">
+              <div className="space-y-2.5 rounded-[14px] p-2.5">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-2">
                     <p className="text-xs font-medium">发放方式</p>

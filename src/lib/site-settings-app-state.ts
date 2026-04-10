@@ -78,8 +78,17 @@ export interface MarkdownImageUploadSettings {
   enabled: boolean
 }
 
+export interface UploadObjectStorageSettings {
+  forcePathStyle: boolean
+}
+
 export interface HomeSidebarAnnouncementSettings {
   enabled: boolean
+}
+
+export interface FooterCopyrightSettings {
+  text: string
+  brandingVisible: boolean
 }
 
 export interface HomeFeedPostListLoadSettings {
@@ -469,6 +478,46 @@ export function mergeMarkdownImageUploadSettings(
     ...siteSettingsState,
     markdownImageUpload: {
       enabled: input.enabled,
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveFooterCopyrightSettings(options: {
+  appStateJson?: string | null
+  textFallback?: string
+  brandingVisibleFallback?: boolean
+} = {}): FooterCopyrightSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const footerCopyright = isRecord(siteSettingsState.footerCopyright)
+    ? siteSettingsState.footerCopyright
+    : {}
+  const resolvedText = typeof footerCopyright.text === "string"
+    ? footerCopyright.text.trim()
+    : ""
+  const fallbackText = (options.textFallback ?? "").trim()
+
+  return {
+    text: resolvedText || fallbackText,
+    brandingVisible: typeof footerCopyright.brandingVisible === "boolean"
+      ? footerCopyright.brandingVisible
+      : options.brandingVisibleFallback ?? true,
+  }
+}
+
+export function mergeFooterCopyrightSettings(
+  appStateJson: string | null | undefined,
+  input: FooterCopyrightSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    footerCopyright: {
+      text: typeof input.text === "string" ? input.text.trim() : "",
+      brandingVisible: Boolean(input.brandingVisible),
     },
   }
 
@@ -901,6 +950,39 @@ export function mergePostRedPacketSettings(
     ...siteSettingsState,
     postRedPacket: {
       randomClaimProbability: Math.max(0, Math.min(100, normalizeNonNegativeInteger(input.randomClaimProbability, 0))),
+    },
+  }
+
+  return JSON.stringify(root)
+}
+
+export function resolveUploadObjectStorageSettings(options: {
+  appStateJson?: string | null
+  forcePathStyleFallback?: boolean
+} = {}): UploadObjectStorageSettings {
+  const siteSettingsState = readSiteSettingsState(options.appStateJson)
+  const uploadObjectStorage = isRecord(siteSettingsState.uploadObjectStorage)
+    ? siteSettingsState.uploadObjectStorage
+    : {}
+
+  return {
+    forcePathStyle: typeof uploadObjectStorage.forcePathStyle === "boolean"
+      ? uploadObjectStorage.forcePathStyle
+      : options.forcePathStyleFallback ?? true,
+  }
+}
+
+export function mergeUploadObjectStorageSettings(
+  appStateJson: string | null | undefined,
+  input: UploadObjectStorageSettings,
+) {
+  const root = parseAppStateRoot(appStateJson)
+  const siteSettingsState = readSiteSettingsState(appStateJson)
+
+  root[SITE_SETTINGS_STATE_KEY] = {
+    ...siteSettingsState,
+    uploadObjectStorage: {
+      forcePathStyle: input.forcePathStyle,
     },
   }
 

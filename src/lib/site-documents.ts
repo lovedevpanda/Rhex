@@ -5,6 +5,7 @@ import {
   getSiteDocumentSourceTypeLabel,
   getSiteDocumentTypeLabel,
   isExternalSiteDocumentHref,
+  resolveSiteDocumentSlugFromSegments,
   type SiteDocumentRecordBase,
   type SiteDocumentType,
 } from "@/lib/site-document-types"
@@ -54,7 +55,7 @@ export async function getPublishedSiteDocumentItems(type: SiteDocumentType, limi
 }
 
 export async function getPublishedSiteDocumentBySlug(type: SiteDocumentType, slugSegments?: string[]) {
-  const slug = slugSegments?.join("/").trim()
+  const slug = resolveSiteDocumentSlugFromSegments(slugSegments)
   if (!slug) {
     return null
   }
@@ -66,7 +67,7 @@ export async function getPublishedSiteDocumentBySlug(type: SiteDocumentType, slu
 export async function getHelpDocumentPageData(slugSegments?: string[]) {
   const items = await getPublishedSiteDocumentItems("HELP")
   const readableItems = items.filter((item) => item.sourceType === "DOCUMENT")
-  const requestedSlug = slugSegments?.join("/").trim()
+  const requestedSlug = resolveSiteDocumentSlugFromSegments(slugSegments)
 
   if (requestedSlug) {
     return {

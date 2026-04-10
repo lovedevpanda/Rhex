@@ -20,15 +20,11 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 
   void enqueueEvaluateUserLevelProgress(currentUser.id, { notifyOnUpgrade: true })
 
-  const { redPacketClaim } = await handleCommentCreateSideEffects({
+  await handleCommentCreateSideEffects({
     postId: result.postId,
     userId: currentUser.id,
     commentId: result.created.id,
   })
-
-  const redPacketMessage = redPacketClaim?.claimed
-    ? `，并获得了 ${redPacketClaim.amount} ${redPacketClaim.pointName} ${redPacketClaim.rewardMode === "JACKPOT" ? "聚宝盆奖励" : "红包"}`
-    : ""
 
   logRequestSucceeded({
     scope: "comments-create",
@@ -111,7 +107,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       view: result.commentView,
       anchor: `comment-${result.created.id}`,
     },
-  }, result.reviewRequired ? (result.contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : "当前节点开启回帖审核，回复已进入审核") : result.normalizedReplyToUserName ? `已回复 @${result.normalizedReplyToUserName}${redPacketMessage}` : `回复成功${redPacketMessage}`)
+  }, result.reviewRequired ? (result.contentSafety.shouldReview ? "回复命中敏感词规则，已进入审核" : "当前节点开启回帖审核，回复已进入审核") : result.normalizedReplyToUserName ? `已回复 @${result.normalizedReplyToUserName}` : "回复成功")
 }, {
   errorMessage: "评论失败",
   logPrefix: "[api/comments/create] unexpected error",

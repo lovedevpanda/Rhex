@@ -10,6 +10,9 @@ interface PostRedPacketEligibleCandidate {
   userId: number
 }
 
+const POST_REWARD_POOL_TRANSACTION_MAX_RETRIES = 3
+const POST_REWARD_POOL_TRANSACTION_RETRY_BASE_DELAY_MS = 25
+
 function pickRandomCandidate<T>(candidates: readonly T[]) {
   if (candidates.length === 0) {
     return null
@@ -78,6 +81,51 @@ function isCurrentUserEligibleForRandomClaim(params: {
   currentUserId: number
 }) {
   return params.eligibleCandidates.some((candidate) => candidate.userId === params.currentUserId)
+}
+
+function isRetryablePostRewardPoolTransactionError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    && error.code === "P2034"
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function runPostRewardPoolTransactionWithRetry<T>(
+  execute: () => Promise<T>,
+): Promise<T> {
+  let retryCount = 0
+
+  while (true) {
+    try {
+      return await execute()
+    } catch (error) {
+      if (!isRetryablePostRewardPoolTransactionError(error) || retryCount >= POST_REWARD_POOL_TRANSACTION_MAX_RETRIES) {
+        throw error
+      }
+
+      const delayMs = POST_REWARD_POOL_TRANSACTION_RETRY_BASE_DELAY_MS * (2 ** retryCount)
+        + randomInt(0, POST_REWARD_POOL_TRANSACTION_RETRY_BASE_DELAY_MS)
+
+      retryCount += 1
+      await sleep(delayMs)
+    }
+  }
+}
+
+async function lockPostRewardPoolByPostId(
+  tx: Prisma.TransactionClient,
+  postId: string,
+) {
+  await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "PostRedPacket"
+    WHERE "postId" = ${postId}
+    FOR UPDATE
+  `)
 }
 
 async function findPostRedPacketEligibleCandidates(
@@ -206,7 +254,9 @@ export async function claimPostRedPacketInTransaction(input: {
     packetCount: number
   }) => number
 }) {
-  return prisma.$transaction(async (tx) => {
+  return runPostRewardPoolTransactionWithRetry(() => prisma.$transaction(async (tx) => {
+    await lockPostRewardPoolByPostId(tx, input.postId)
+
     const [user, post] = await Promise.all([
       tx.user.findUnique({ where: { id: input.userId }, select: { id: true, points: true, status: true, username: true } }),
       tx.post.findUnique({
@@ -498,7 +548,7 @@ export async function claimPostRedPacketInTransaction(input: {
       : { claimed: false as const, reason: "本次随机红包未命中你", effectFeedback }
   }, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  })
+  }))
 }
 
 export function findPostRewardPoolContentByPostId(postId: string) {
@@ -519,10 +569,19 @@ export function createPostRewardPoolRecord(
 
 export function runSerializablePostRewardPoolTransaction<T>(
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: {
+    postId?: string
+  },
 ) {
-  return prisma.$transaction(callback, {
+  return runPostRewardPoolTransactionWithRetry(() => prisma.$transaction(async (tx) => {
+    if (options?.postId) {
+      await lockPostRewardPoolByPostId(tx, options.postId)
+    }
+
+    return callback(tx)
+  }, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  })
+  }))
 }
 
 export function findJackpotClaimContext(tx: Prisma.TransactionClient, postId: string, userId: number) {

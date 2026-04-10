@@ -34,6 +34,7 @@ import { parseBusinessDateTime } from "@/lib/formatters"
 import { ensureCanModerateUser, isScopedModerator, isSiteAdmin } from "@/lib/moderator-permissions"
 import { mergeUserProfileSettings } from "@/lib/user-profile-settings"
 import { validateProfilePayload } from "@/lib/validators"
+import { normalizeConfigurableVipLevel } from "@/lib/vip-status"
 
 function buildProfileUpdateDetail(context: AdminActionContext) {
   const changedFields: string[] = []
@@ -219,7 +220,7 @@ export const adminUserActionHandlers: Record<string, AdminActionDefinition> = {
     if (!isSiteAdmin(context.actor)) apiError(403, "仅管理员可配置 VIP")
     const userId = normalizePositiveUserId(context.targetId)
     if (!userId) apiError(400, "用户标识不合法")
-    const vipLevel = Math.max(1, readAdminActionNumber(context.body, "vipLevel") ?? 1)
+    const vipLevel = normalizeConfigurableVipLevel(readAdminActionNumber(context.body, "vipLevel"), 1)
     const vipExpiresAt = context.body.vipExpiresAt ? parseBusinessDateTime(String(context.body.vipExpiresAt)) : null
 
     if (vipExpiresAt && Number.isNaN(vipExpiresAt.getTime())) apiError(400, "VIP 到期时间不合法")

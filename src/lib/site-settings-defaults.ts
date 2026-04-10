@@ -1,6 +1,8 @@
 import { DEFAULT_FOOTER_LINKS } from "@/lib/shared/config-parsers"
 import { DEFAULT_SITE_HEADER_APP_LINKS } from "@/lib/site-header-app-links"
 
+const defaultFooterCopyrightText = `Rhex 论坛系统 ${new Date().getFullYear()}`
+
 export const defaultSiteSettingsCreateInput = {
 
   siteName: "Rhex 论坛系统",
@@ -96,7 +98,14 @@ export const defaultSiteSettingsCreateInput = {
   ]),
   headerAppLinksJson: JSON.stringify(DEFAULT_SITE_HEADER_APP_LINKS),
   headerAppIconName: "grid",
-  appStateJson: "{}",
+  appStateJson: JSON.stringify({
+    __siteSettings: {
+      footerCopyright: {
+        text: defaultFooterCopyrightText,
+        brandingVisible: true,
+      },
+    },
+  }),
   sensitiveStateJson: "{}",
 
 } as const

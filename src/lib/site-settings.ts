@@ -14,11 +14,12 @@ import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
 import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
-import { resolveAnonymousPostSettings, resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveBoardApplicationSettings, resolveBoardTreasurySettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostContentLengthSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolveRegistrationRewardSettings, resolveVipLevelIconSettings, type InteractionGateSettings } from "@/lib/site-settings-app-state"
-import { resolveAuthProviderSensitiveConfig, resolveCaptchaSensitiveConfig } from "@/lib/site-settings-sensitive-state"
+import { resolveAnonymousPostSettings, resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveBoardApplicationSettings, resolveBoardTreasurySettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveFooterCopyrightSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostContentLengthSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolveRegistrationRewardSettings, resolveUploadObjectStorageSettings, resolveVipLevelIconSettings, type InteractionGateSettings } from "@/lib/site-settings-app-state"
+import { resolveAuthProviderSensitiveConfig, resolveCaptchaSensitiveConfig, resolveUploadStorageSensitiveConfig } from "@/lib/site-settings-sensitive-state"
 import { resolveSiteSearchSettings, type SiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
 import { type SiteTippingGiftItem } from "@/lib/tipping-gifts"
+import { normalizeUploadProvider, type UploadProvider } from "@/lib/upload-provider"
 import { type VipLevelIcons } from "@/lib/vip-level-icons"
 import { normalizeHeaderAppIconName, parseSiteHeaderAppLinks, type SiteHeaderAppLinkItem } from "./site-header-app-links"
 
@@ -55,6 +56,8 @@ export interface SiteSettingsData {
   homeHotRecentWindowHours: number
   homeSidebarStatsCardEnabled: boolean
   homeSidebarAnnouncementsEnabled: boolean
+  footerCopyrightText: string
+  footerBrandingVisible: boolean
   vipLevelIcons: VipLevelIcons
   footerLinks: FooterLinkItem[]
   headerAppLinks: SiteHeaderAppLinkItem[]
@@ -158,12 +161,13 @@ export interface SiteSettingsData {
   vipMonthlyPrice: number
   vipQuarterlyPrice: number
   vipYearlyPrice: number
-  uploadProvider: string
+  uploadProvider: UploadProvider
   uploadLocalPath: string
   uploadBaseUrl?: string | null
   uploadOssBucket?: string | null
   uploadOssRegion?: string | null
   uploadOssEndpoint?: string | null
+  uploadS3ForcePathStyle: boolean
   uploadRequireLogin: boolean
   uploadAllowedImageTypes: string[]
   uploadMaxFileSizeMb: number
@@ -184,6 +188,8 @@ export interface ServerSiteSettingsData extends SiteSettingsData {
   passkeyRpName?: string | null
   passkeyOrigin?: string | null
   turnstileSecretKey?: string | null
+  uploadS3AccessKeyId?: string | null
+  uploadS3SecretAccessKey?: string | null
   smtpHost?: string | null
   smtpPort?: number | null
   smtpUser?: string | null
@@ -341,6 +347,11 @@ function mapSiteSettings(record: {
     appStateJson: record.appStateJson,
     enabledFallback: true,
   })
+  const footerCopyrightSettings = resolveFooterCopyrightSettings({
+    appStateJson: record.appStateJson,
+    textFallback: `${record.siteName} @ ${new Date().getFullYear()}`,
+    brandingVisibleFallback: true,
+  })
   const homeFeedPostListLoadSettings = resolveHomeFeedPostListLoadSettings({
     appStateJson: record.appStateJson,
     loadModeFallback: normalizePostListLoadMode(undefined),
@@ -355,6 +366,10 @@ function mapSiteSettings(record: {
   const markdownImageUploadSettings = resolveMarkdownImageUploadSettings({
     appStateJson: record.appStateJson,
     enabledFallback: true,
+  })
+  const uploadObjectStorageSettings = resolveUploadObjectStorageSettings({
+    appStateJson: record.appStateJson,
+    forcePathStyleFallback: true,
   })
   const commentAccessSettings = resolveCommentAccessSettings({
     appStateJson: record.appStateJson,
@@ -421,6 +436,7 @@ function mapSiteSettings(record: {
   })
   const authProviderSensitiveConfig = resolveAuthProviderSensitiveConfig(record.sensitiveStateJson)
   const captchaSensitiveConfig = resolveCaptchaSensitiveConfig(record.sensitiveStateJson)
+  const uploadStorageSensitiveConfig = resolveUploadStorageSensitiveConfig(record.sensitiveStateJson)
 
   return {
     siteName: record.siteName,
@@ -448,6 +464,8 @@ function mapSiteSettings(record: {
     homeHotRecentWindowHours: homeHotFeedSettings.recentWindowHours,
     homeSidebarStatsCardEnabled: record.homeSidebarStatsCardEnabled,
     homeSidebarAnnouncementsEnabled: homeSidebarAnnouncementSettings.enabled,
+    footerCopyrightText: footerCopyrightSettings.text,
+    footerBrandingVisible: footerCopyrightSettings.brandingVisible,
     vipLevelIcons,
     footerLinks: parseFooterLinks(record.footerLinksJson),
     headerAppLinks: parseSiteHeaderAppLinks(record.headerAppLinksJson),
@@ -565,16 +583,19 @@ function mapSiteSettings(record: {
     vipMonthlyPrice: record.vipMonthlyPrice,
     vipQuarterlyPrice: record.vipQuarterlyPrice,
     vipYearlyPrice: record.vipYearlyPrice,
-    uploadProvider: record.uploadProvider,
+    uploadProvider: normalizeUploadProvider(record.uploadProvider),
     uploadLocalPath: record.uploadLocalPath,
     uploadBaseUrl: record.uploadBaseUrl,
     uploadOssBucket: record.uploadOssBucket,
     uploadOssRegion: record.uploadOssRegion,
     uploadOssEndpoint: record.uploadOssEndpoint,
+    uploadS3ForcePathStyle: uploadObjectStorageSettings.forcePathStyle,
     uploadRequireLogin: record.uploadRequireLogin,
     uploadAllowedImageTypes: String(record.uploadAllowedImageTypes || "jpg,jpeg,png,gif,webp").split(/[，,\s]+/).map((item) => item.trim().toLowerCase()).filter(Boolean),
     uploadMaxFileSizeMb: record.uploadMaxFileSizeMb,
     uploadAvatarMaxFileSizeMb: record.uploadAvatarMaxFileSizeMb,
+    uploadS3AccessKeyId: uploadStorageSensitiveConfig.accessKeyId,
+    uploadS3SecretAccessKey: uploadStorageSensitiveConfig.secretAccessKey,
     markdownImageUploadEnabled: markdownImageUploadSettings.enabled,
     markdownEmojiMap: parseMarkdownEmojiMapJson(record.markdownEmojiMapJson),
     appStateJson: record.appStateJson,
@@ -603,6 +624,8 @@ function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
     passkeyRpName,
     passkeyOrigin,
     turnstileSecretKey,
+    uploadS3AccessKeyId,
+    uploadS3SecretAccessKey,
     smtpHost,
     smtpPort,
     smtpUser,
@@ -619,6 +642,8 @@ function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
   void passkeyRpName
   void passkeyOrigin
   void turnstileSecretKey
+  void uploadS3AccessKeyId
+  void uploadS3SecretAccessKey
   void smtpHost
   void smtpPort
   void smtpUser

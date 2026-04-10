@@ -340,6 +340,8 @@ async function tryClaimPostJackpot(input: {
       rewardMode: "JACKPOT" as const,
       effectFeedback: storedSuccessFeedback,
     }
+  }, {
+    postId: input.postId,
   })
 }
 

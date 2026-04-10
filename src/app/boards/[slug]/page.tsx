@@ -13,6 +13,7 @@ import { RssSubscribeButton } from "@/components/rss-subscribe-button"
 import { SiteHeader } from "@/components/site-header"
 
 
+import { getHomeAnnouncements } from "@/lib/announcements"
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission } from "@/lib/board-access"
 import { getBoardBySlug, getBoardModerators, getBoardPosts, getBoards, isUserFollowingBoard } from "@/lib/boards"
@@ -96,13 +97,14 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
 
   const rawPage = readSearchParam(searchParams?.page)
   const currentPage = Math.max(1, Number(rawPage ?? "1") || 1)
-  const [postsPage, boards, zones, hotTopics, moderators] = await Promise.all([
+  const [postsPage, boards, zones, hotTopics, announcements, moderators] = await Promise.all([
     permission.allowed
       ? getBoardPosts(params.slug, currentPage, settings.boardPostPageSize)
       : Promise.resolve({ items: [], page: 1, pageSize: settings.boardPostPageSize, total: 0, totalPages: 1, hasPrevPage: false, hasNextPage: false }),
     getBoards(),
     getZones(),
     settingsPromise.then((settings) => getHomeSidebarHotTopics(settings.homeSidebarHotTopicsCount)),
+    getHomeAnnouncements(3),
     getBoardModerators(board.id),
   ])
   const { items: posts, page, totalPages, hasPrevPage, hasNextPage } = postsPage
@@ -191,7 +193,19 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <BoardSidebarPanels user={sidebarUser} hotTopics={hotTopics} board={board} moderators={moderators} postLinkDisplayMode={settings.postLinkDisplayMode} createPostHref={`/write?board=${board.slug}`} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} />
+              <BoardSidebarPanels
+                user={sidebarUser}
+                hotTopics={hotTopics}
+                board={board}
+                moderators={moderators}
+                announcements={announcements}
+                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                postLinkDisplayMode={settings.postLinkDisplayMode}
+                createPostHref={`/write?board=${board.slug}`}
+                siteName={settings.siteName}
+                siteDescription={settings.siteDescription}
+                siteLogoPath={settings.siteLogoPath}
+              />
             </aside>
           )}
         />

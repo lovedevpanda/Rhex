@@ -150,6 +150,8 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
     postSidebarRelatedTopicsCount,
     homeSidebarStatsCardEnabled,
     homeSidebarAnnouncementsEnabled,
+    footerCopyrightText,
+    footerBrandingVisible,
     searchEnabled,
     analyticsCode,
     postEditableMinutes,
@@ -424,6 +426,26 @@ export function AdminBasicSettingsForm({ initialSettings, mode = "profile", init
             <p className="text-sm font-medium">页脚统计代码</p>
             <textarea value={analyticsCode} onChange={(event) => updateDraftField("analyticsCode", event.target.value)} className="min-h-[140px] w-full rounded-[24px] border border-border bg-background px-4 py-3 font-mono text-sm outline-none" placeholder="可粘贴统计脚本、站长统计或自定义 hook 代码" />
             <p className="text-xs leading-6 text-muted-foreground">这段代码会插入到全站页脚底部的统计 Hook 容器中，请仅粘贴你信任的统计脚本。</p>
+          </div>
+          <div className="rounded-[20px] border border-border bg-card/50 p-4 space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold">页脚版权</h4>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">自定义页脚版权文案，并单独控制是否显示 Powered by 与外部链接。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextField
+                label="版权文案"
+                value={footerCopyrightText}
+                onChange={(value) => updateDraftField("footerCopyrightText", value)}
+                placeholder="如 兴趣论坛 2026"
+              />
+              <AdminBooleanSelectField
+                label="显示版权附加信息"
+                checked={footerBrandingVisible}
+                onChange={(value) => updateDraftField("footerBrandingVisible", value)}
+              />
+            </div>
+            <p className="text-xs leading-6 text-muted-foreground">关闭后，前台页脚将隐藏 `Powered by Rhex`、`官网`、`GitHub`、`Gitee`，但自定义版权文案仍会保留显示。</p>
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium">站点描述</p>

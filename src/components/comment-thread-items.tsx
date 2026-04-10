@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRef, useState } from "react"
 import { CornerDownRight, Flag } from "lucide-react"
 
 import { AnonymousUserIndicator } from "@/components/anonymous-user-indicator"
@@ -10,6 +11,7 @@ import { AdminCommentStatusNotice, buildCommentAdminActions, CommentAuthorIdenti
 import { MarkdownContent } from "@/components/markdown-content"
 import { ReportDialog } from "@/components/report-dialog"
 import { TimeTooltip } from "@/components/time-tooltip"
+import { AnchoredPopover } from "@/components/ui/anchored-popover"
 import { UserAvatar } from "@/components/user-avatar"
 import { UserDisplayedBadges } from "@/components/user-displayed-badges"
 import { UserStatusBadge } from "@/components/user-status-badge"
@@ -83,6 +85,69 @@ interface CommentThreadReplyItemProps {
   layout?: CommentThreadReplyLayout
   isHighlighted?: boolean
   onJumpToParentComment?: (commentId: string, href?: string) => void
+}
+
+function CommentAdminActionMenu({
+  actions,
+  disabled,
+  onSelect,
+}: {
+  actions: CommentAdminAction[]
+  disabled?: boolean
+  onSelect: (action: CommentAdminAction) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+
+  if (actions.length === 0) {
+    return null
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((current) => !current)}
+        className="rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        管理
+      </button>
+      <AnchoredPopover
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        side="top"
+        align="end"
+        offset={8}
+      >
+        <div className="flex  flex-wrap justify-end gap-1.5">
+          {actions.map((action) => (
+            <Button
+              key={action.key}
+              type="button"
+              variant="outline"
+              disabled={action.disabled}
+              className={action.tone === "danger" ? "h-6 border-red-200 px-2 text-[11px] text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-60" : "h-6 px-2 text-[11px] disabled:opacity-60"}
+              onClick={() => {
+                if (action.disabled) {
+                  return
+                }
+
+                setOpen(false)
+                onSelect(action)
+              }}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      </AnchoredPopover>
+    </>
+  )
 }
 
 export function CommentThreadReplyItem({
@@ -223,7 +288,17 @@ export function CommentThreadReplyItem({
 
         <div className={cn("flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground", editingCommentId === reply.id && "justify-end border-t border-border/50 pt-2")}>
           <div className="flex items-center gap-1.5">
+                     {!hideFloatingActionButtons && replyActions.length > 0 ? (
+              <CommentAdminActionMenu
+                actions={replyActions}
+                disabled={editingCommentId === reply.id}
+                onSelect={(action) => {
+                  void onRunAdminAction(action.key, action.targetId, action.payload)
+                }}
+              />
+            ) : null}
             <CommentLikeButton commentId={reply.id} initialCount={reply.likes} initialLiked={reply.viewerLiked} />
+   
             {canReply ? (
               <button
                 type="button"
@@ -259,25 +334,6 @@ export function CommentThreadReplyItem({
           </div>
         </div>
       </div>
-      {!hideFloatingActionButtons && replyActions.length > 0 ? (
-        <div className="pointer-events-none absolute bottom-2.5 right-3 z-10 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
-          <div className="flex max-w-[320px] flex-wrap justify-end gap-1.5 rounded-2xl bg-background/95 p-1.5 shadow-sm backdrop-blur-sm">
-            {replyActions.map((action) => (
-              <Button
-                key={`${reply.id}-${action.key}`}
-                type="button"
-                variant="outline"
-                className={action.tone === "danger" ? "h-6 border-transparent bg-red-50/80 px-2 text-[11px] text-red-600 hover:bg-red-100 hover:text-red-700" : "h-6 border-transparent bg-secondary/70 px-2 text-[11px] hover:bg-accent"}
-                onClick={() => {
-                  void onRunAdminAction(action.key, action.targetId, action.payload)
-                }}
-              >
-                {action.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -405,7 +461,25 @@ export function CommentThreadCommentItem({
 
         <div className={cn("flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground sm:text-xs", editingCommentId === comment.id && "justify-end border-t border-border/60 pt-2")}>
           <div className="flex items-center gap-1.5">
+               {!hideFloatingActionButtons && commentActions.length > 0 ? (
+              <CommentAdminActionMenu
+                actions={commentActions}
+                disabled={editingCommentId === comment.id}
+                onSelect={(action) => {
+                  if (action.key === "comment.pinByAuthor") {
+                    void onTogglePinnedComment(comment.id, "pin")
+                    return
+                  }
+                  if (action.key === "comment.unpinByAuthor") {
+                    void onTogglePinnedComment(comment.id, "unpin")
+                    return
+                  }
+                  void onRunAdminAction(action.key, action.targetId, action.payload)
+                }}
+              />
+            ) : null}
             <CommentLikeButton commentId={comment.id} initialCount={comment.likes} initialLiked={comment.viewerLiked} />
+         
             {currentUserId && currentUserId !== comment.authorId ? (
               <ReportDialog
                 targetType="COMMENT"
@@ -479,35 +553,6 @@ export function CommentThreadCommentItem({
               {isExpanded ? "折叠回复" : `展开其余 ${comment.replies.length - initialVisibleReplies} 条回复`}
             </button>
           ) : null}
-        </div>
-      ) : null}
-
-      {!hideFloatingActionButtons && commentActions.length > 0 ? (
-        <div className="pointer-events-none absolute bottom-4 right-0 z-10 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
-          <div className="flex max-w-[360px] flex-wrap justify-end gap-1.5 rounded-2xl p-1.5">
-            {commentActions.map((action) => (
-              <Button
-                key={`${comment.id}-${action.key}`}
-                type="button"
-                variant="outline"
-                disabled={action.disabled}
-                className={action.tone === "danger" ? "h-6 border-red-200 px-2 text-[11px] text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-60" : "h-6 px-2 text-[11px] disabled:opacity-60"}
-                onClick={() => {
-                  if (action.key === "comment.pinByAuthor") {
-                    void onTogglePinnedComment(comment.id, "pin")
-                    return
-                  }
-                  if (action.key === "comment.unpinByAuthor") {
-                    void onTogglePinnedComment(comment.id, "unpin")
-                    return
-                  }
-                  void onRunAdminAction(action.key, action.targetId, action.payload)
-                }}
-              >
-                {action.label}
-              </Button>
-            ))}
-          </div>
         </div>
       ) : null}
     </div>

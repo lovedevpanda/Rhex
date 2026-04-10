@@ -34,6 +34,8 @@ export interface AdminBasicSettingsInitialSettings {
   postSidebarRelatedTopicsCount: number
   homeSidebarStatsCardEnabled: boolean
   homeSidebarAnnouncementsEnabled: boolean
+  footerCopyrightText: string
+  footerBrandingVisible: boolean
   search: SiteSearchSettings
   analyticsCode?: string | null
   inviteRewardInviter: number
@@ -139,6 +141,8 @@ export interface AdminBasicSettingsDraft {
   postSidebarRelatedTopicsCount: string
   homeSidebarStatsCardEnabled: boolean
   homeSidebarAnnouncementsEnabled: boolean
+  footerCopyrightText: string
+  footerBrandingVisible: boolean
   searchEnabled: boolean
   analyticsCode: string
   postEditableMinutes: string
@@ -309,6 +313,8 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     postSidebarRelatedTopicsCount: coerceNumberString(initialSettings.postSidebarRelatedTopicsCount, 5),
     homeSidebarStatsCardEnabled: coerceBoolean(initialSettings.homeSidebarStatsCardEnabled, true),
     homeSidebarAnnouncementsEnabled: coerceBoolean(initialSettings.homeSidebarAnnouncementsEnabled, true),
+    footerCopyrightText: coerceString(initialSettings.footerCopyrightText, `${coerceString(initialSettings.siteName)} @ ${new Date().getFullYear()}`),
+    footerBrandingVisible: coerceBoolean(initialSettings.footerBrandingVisible, true),
     searchEnabled: initialSettings.search?.enabled ?? true,
     analyticsCode: initialSettings.analyticsCode ?? "",
     postEditableMinutes: coerceNumberString(initialSettings.postEditableMinutes, 10),
@@ -416,6 +422,8 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
       postSidebarRelatedTopicsCount: Number(draft.postSidebarRelatedTopicsCount),
       homeSidebarStatsCardEnabled: draft.homeSidebarStatsCardEnabled,
       homeSidebarAnnouncementsEnabled: draft.homeSidebarAnnouncementsEnabled,
+      footerCopyrightText: draft.footerCopyrightText,
+      footerBrandingVisible: draft.footerBrandingVisible,
       searchEnabled: draft.searchEnabled,
       analyticsCode: draft.analyticsCode,
       postEditableMinutes: Number(draft.postEditableMinutes),

@@ -16,7 +16,7 @@ import type {
 } from "@/lib/admin-user-management"
 import { formatDateTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
-import { isVipActive } from "@/lib/vip-status"
+import { CONFIGURABLE_VIP_LEVELS, isVipActive, normalizeConfigurableVipLevel } from "@/lib/vip-status"
 
 interface AdminUserModalProps {
   user: AdminUserListItem
@@ -43,6 +43,11 @@ const ADMIN_USER_PANELS: Array<{ key: AdminUserPanel; label: string }> = [
   { key: "permissions", label: "权限身份" },
   { key: "operations", label: "运营发放" },
 ]
+
+const VIP_LEVEL_OPTIONS = CONFIGURABLE_VIP_LEVELS.map((level) => ({
+  value: String(level),
+  label: `VIP${level}`,
+}))
 
 function toEditableScopes<T extends { canEditSettings: boolean; canWithdrawTreasury: boolean }>(items: T[], key: keyof T) {
   return items.map((item) => ({
@@ -82,7 +87,7 @@ export function AdminUserModal({ user, moderatorScopeOptions }: AdminUserModalPr
   const [noteFeedback, setNoteFeedback] = useState("")
   const [operationMessage, setOperationMessage] = useState("")
   const [operationFeedback, setOperationFeedback] = useState("")
-  const [vipLevelDraft, setVipLevelDraft] = useState(String(user.vipLevel || 1))
+  const [vipLevelDraft, setVipLevelDraft] = useState(String(normalizeConfigurableVipLevel(user.vipLevel, 1)))
   const [vipExpiresAtDraft, setVipExpiresAtDraft] = useState(user.vipExpiresAt ? user.vipExpiresAt.slice(0, 16) : "")
   const [vipMessage, setVipMessage] = useState("")
   const [vipFeedback, setVipFeedback] = useState("")
@@ -148,7 +153,7 @@ export function AdminUserModal({ user, moderatorScopeOptions }: AdminUserModalPr
     setDetail(data)
     setProfileDraft(data.editableProfile)
     setPoints(String(data.points))
-    setVipLevelDraft(String(data.vipLevel || 1))
+    setVipLevelDraft(String(normalizeConfigurableVipLevel(data.vipLevel, 1)))
     setVipExpiresAtDraft(data.vipExpiresAt ? data.vipExpiresAt.slice(0, 16) : "")
     setZoneScopes(toEditableScopes(data.moderatedZoneScopes, "zoneId"))
     setBoardScopes(toEditableScopes(data.moderatedBoardScopes, "boardId"))
@@ -320,7 +325,7 @@ export function AdminUserModal({ user, moderatorScopeOptions }: AdminUserModalPr
       const result = await submitAdminAction({
         action: "user.vip.configure",
         targetId: String(user.id),
-        vipLevel: Math.max(1, Number(vipLevelDraft) || 1),
+        vipLevel: normalizeConfigurableVipLevel(Number(vipLevelDraft), 1),
         vipExpiresAt: vipExpiresAtDraft || null,
         message: vipMessage,
       })
@@ -649,7 +654,20 @@ export function AdminUserModal({ user, moderatorScopeOptions }: AdminUserModalPr
             <h4 className="text-sm font-semibold">VIP 配置</h4>
             <p className="mt-1 text-xs text-muted-foreground">支持人工开通、续期或修正 VIP 到期时间。</p>
             <div className="mt-4 space-y-3">
-              <Field label="VIP 等级" value={vipLevelDraft} onChange={setVipLevelDraft} placeholder="如 1 / 2 / 3" />
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">VIP 等级</span>
+                <select
+                  value={vipLevelDraft}
+                  onChange={(event) => setVipLevelDraft(event.target.value)}
+                  className="h-10 w-full rounded-full border border-border bg-background px-3 text-sm outline-none"
+                >
+                  {VIP_LEVEL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">到期时间</span>
                 <input type="datetime-local" value={vipExpiresAtDraft} onChange={(event) => setVipExpiresAtDraft(event.target.value)} className="h-10 w-full rounded-full border border-border bg-background px-3 text-sm outline-none" />
@@ -748,7 +766,7 @@ export function AdminUserModal({ user, moderatorScopeOptions }: AdminUserModalPr
         open={open}
         onClose={() => setOpen(false)}
         size="xl"
-        title={`${activeUser.displayName} · @${activeUser.username} · UID ${activeUser.id} · ${activePanelTitle}`}
+        title={`${activeUser.displayName}  @${activeUser.username}  UID ${activeUser.id}  ${activePanelTitle}`}
         description={`角色 ${activeUser.role} · 状态 ${activeUser.status} · ${vipActive ? `VIP${activeUser.vipLevel}` : "非 VIP"}`}
         footer={(
           <div className="flex items-center justify-end">

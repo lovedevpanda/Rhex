@@ -77,6 +77,7 @@ export default async function HelpPage({ params }: HelpPageProps) {
                 user={sidebarUser}
                 hotTopics={hotTopics}
                 announcements={announcements}
+                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
                 siteName={settings.siteName}
                 siteDescription={settings.siteDescription}
                 siteLogoPath={settings.siteLogoPath}

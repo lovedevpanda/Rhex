@@ -16,9 +16,7 @@ export function AnnouncementPageContent({ items }: AnnouncementPageContentProps)
           <Megaphone className="h-5 w-5 text-sky-500" />
           <h1 className="text-2xl font-semibold">站点文档</h1>
         </div>
-        <p className="mt-3 text-sm leading-7 text-muted-foreground">
-          这里集中展示公告类型的站点文档，既可以是正文文档，也可以是跳转链接。
-        </p>
+
       </section>
 
       <section className="space-y-4">

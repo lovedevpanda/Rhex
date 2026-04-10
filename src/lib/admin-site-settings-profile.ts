@@ -8,7 +8,7 @@ import { finalizeSiteSettingsUpdate, type SiteSettingsRecord } from "@/lib/admin
 import { normalizeMarkdownEmojiItems, serializeMarkdownEmojiItems } from "@/lib/markdown-emoji"
 import { normalizePostListLoadMode } from "@/lib/post-list-load-mode"
 import { normalizePostListDisplayMode } from "@/lib/post-list-display"
-import { mergeHomeFeedPostListLoadSettings, mergeHomeSidebarAnnouncementSettings, mergePostPageSizeSettings, resolveHomeFeedPostListLoadSettings, resolveHomeSidebarAnnouncementSettings, resolvePostPageSizeSettings } from "@/lib/site-settings-app-state"
+import { mergeFooterCopyrightSettings, mergeHomeFeedPostListLoadSettings, mergeHomeSidebarAnnouncementSettings, mergePostPageSizeSettings, resolveFooterCopyrightSettings, resolveHomeFeedPostListLoadSettings, resolveHomeSidebarAnnouncementSettings, resolvePostPageSizeSettings } from "@/lib/site-settings-app-state"
 import { normalizeHeaderAppIconName, normalizeSiteHeaderAppLinks } from "@/lib/site-header-app-links"
 import { mergeSiteSearchSettings, resolveSiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizeFooterLinks } from "@/lib/shared/config-parsers"
@@ -22,6 +22,7 @@ export async function updateProfileSiteSettingsSection(existing: SiteSettingsRec
     const siteLogoPath = readOptionalStringField(body, "siteLogoPath")
     const siteSeoKeywords = readOptionalStringField(body, "siteSeoKeywords").split(/[，,\n]+/).map((item) => item.trim()).filter(Boolean).join(",")
     const analyticsCode = readOptionalStringField(body, "analyticsCode")
+    const footerCopyrightText = readOptionalStringField(body, "footerCopyrightText")
     const postLinkDisplayMode = readOptionalStringField(body, "postLinkDisplayMode") === "ID" ? "ID" : "SLUG"
     const homeFeedPostListDisplayMode = normalizePostListDisplayMode(body.homeFeedPostListDisplayMode)
     const homeSidebarStatsCardEnabled = body.homeSidebarStatsCardEnabled === undefined ? existing.homeSidebarStatsCardEnabled : Boolean(body.homeSidebarStatsCardEnabled)
@@ -41,6 +42,14 @@ export async function updateProfileSiteSettingsSection(existing: SiteSettingsRec
     const commentEditableMinutes = Math.max(0, readOptionalNumberField(body, "commentEditableMinutes") ?? 5)
     const existingSearchSettings = resolveSiteSearchSettings(existing.appStateJson)
     const searchEnabled = body.searchEnabled === undefined ? existingSearchSettings.enabled : Boolean(body.searchEnabled)
+    const existingFooterCopyrightSettings = resolveFooterCopyrightSettings({
+      appStateJson: existing.appStateJson,
+      textFallback: `${siteName} @ ${new Date().getFullYear()}`,
+      brandingVisibleFallback: true,
+    })
+    const footerBrandingVisible = body.footerBrandingVisible === undefined
+      ? existingFooterCopyrightSettings.brandingVisible
+      : Boolean(body.footerBrandingVisible)
     const existingPostPageSizeSettings = resolvePostPageSizeSettings({
       appStateJson: existing.appStateJson,
       homeFeedFallback: 35,
@@ -77,9 +86,14 @@ export async function updateProfileSiteSettingsSection(existing: SiteSettingsRec
       loadMode: homeFeedPostListLoadMode,
     })
 
-    const appStateJson = mergeSiteSearchSettings(appStateWithHomeFeedPostListLoadMode, {
+    const appStateWithSearch = mergeSiteSearchSettings(appStateWithHomeFeedPostListLoadMode, {
       enabled: searchEnabled,
       externalEngines: existingSearchSettings.externalEngines,
+    })
+
+    const appStateJson = mergeFooterCopyrightSettings(appStateWithSearch, {
+      text: footerCopyrightText || existingFooterCopyrightSettings.text || `${siteName} @ ${new Date().getFullYear()}`,
+      brandingVisible: footerBrandingVisible,
     })
 
     const settings = await updateSiteSettingsRecord(existing.id, {

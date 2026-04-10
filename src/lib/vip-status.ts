@@ -3,6 +3,8 @@ export interface VipStateSource {
   vipExpiresAt?: string | Date | null
 }
 
+export const CONFIGURABLE_VIP_LEVELS = [1, 2, 3] as const
+
 interface VipNameClassOptions {
   emphasize?: boolean
   medium?: boolean
@@ -24,6 +26,10 @@ export function isVipActive(source: VipStateSource | null | undefined) {
 
 export function getVipLevel(source: VipStateSource | null | undefined) {
   return Math.max(1, source?.vipLevel ?? 1)
+}
+
+export function normalizeConfigurableVipLevel(value: number | null | undefined, fallback = 1) {
+  return CONFIGURABLE_VIP_LEVELS.includes(value as (typeof CONFIGURABLE_VIP_LEVELS)[number]) ? value as (typeof CONFIGURABLE_VIP_LEVELS)[number] : fallback
 }
 
 export function getVipNameClass(isVip?: boolean, level?: number | null, options?: VipNameClassOptions) {

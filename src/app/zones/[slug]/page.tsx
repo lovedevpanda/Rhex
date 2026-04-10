@@ -11,7 +11,7 @@ import { PageNumberPagination } from "@/components/page-number-pagination"
 import { HomeSidebarPanels } from "@/components/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
 
-
+import { getHomeAnnouncements } from "@/lib/announcements"
 import { getCurrentUser } from "@/lib/auth"
 import { checkBoardPermission } from "@/lib/board-access"
 import { getBoards } from "@/lib/boards"
@@ -88,7 +88,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
 
   const rawPage = readSearchParam(searchParams?.page)
   const currentPage = Math.max(1, Number(rawPage ?? "1") || 1)
-  const [zoneBoards, postsPage, allBoards, allZones, hotTopics] = await Promise.all([
+  const [zoneBoards, postsPage, allBoards, allZones, hotTopics, announcements] = await Promise.all([
     getZoneBoards(params.slug),
     permission.allowed
       ? getZonePosts(params.slug, currentPage, settings.zonePostPageSize)
@@ -96,6 +96,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
     getBoards(),
     getZones(),
     settingsPromise.then((settings) => getHomeSidebarHotTopics(settings.homeSidebarHotTopicsCount)),
+    getHomeAnnouncements(3),
   ])
   const { items: posts, page, totalPages, hasPrevPage, hasNextPage } = postsPage
 
@@ -190,7 +191,17 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} postLinkDisplayMode={settings.postLinkDisplayMode} createPostHref={zoneBoards[0] ? `/write?board=${zoneBoards[0].slug}` : "/write"} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} />
+              <HomeSidebarPanels
+                user={sidebarUser}
+                hotTopics={hotTopics}
+                postLinkDisplayMode={settings.postLinkDisplayMode}
+                announcements={announcements}
+                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                createPostHref={zoneBoards[0] ? `/write?board=${zoneBoards[0].slug}` : "/write"}
+                siteName={settings.siteName}
+                siteDescription={settings.siteDescription}
+                siteLogoPath={settings.siteLogoPath}
+              />
             </aside>
           )}
         />

@@ -49,7 +49,9 @@ export function UserRecentActivityPanel({
             <h2 className="text-xl font-semibold text-foreground">{title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-          <span className="rounded-full bg-[#f5f5f5] px-3 py-1 text-xs font-medium text-muted-foreground">共 {totalCount} 条活动</span>
+      <span className="rounded-full bg-[#f5f5f5] dark:bg-slate-800 px-3 py-1 text-xs font-medium text-muted-foreground dark:text-slate-300">
+  共 {totalCount} 条活动
+</span>
         </div>
         <div className="space-y-4 pt-4">
           <div className="flex flex-wrap gap-2">

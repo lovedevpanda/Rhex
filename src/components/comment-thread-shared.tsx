@@ -29,8 +29,12 @@ export type CommentAdminAction = {
 export function CommentIdentityBadge({ label, tooltip, tone = "neutral" }: { label: string; tooltip: string; tone?: "neutral" | "brand" }) {
   return (
     <Tooltip content={tooltip}>
-      <span className={cn("inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-[0.08em]", tone === "brand" ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-400/20 dark:bg-sky-500/12 dark:text-sky-200" : "border-border bg-background text-muted-foreground")}>
-        {label}
+<span className={cn(
+  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-[0.08em]", 
+  tone === "brand" 
+    ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-slate-100" // 
+    : "border-border bg-background text-muted-foreground"
+)}>        {label}
       </span>
     </Tooltip>
   )

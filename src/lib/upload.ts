@@ -2,7 +2,10 @@ import { createHash } from "crypto"
 import { mkdir, writeFile } from "fs/promises"
 import path from "path"
 
-import { getSiteSettings } from "@/lib/site-settings"
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+
+import { getServerSiteSettings } from "@/lib/site-settings"
+import { normalizeUploadProvider } from "@/lib/upload-provider"
 import { buildUploadStoragePath, resolveUploadBaseUrl } from "@/lib/upload-path"
 
 export interface SavedUploadFile {
@@ -20,6 +23,8 @@ export interface PreparedUploadFile {
   fileHash: string
   detectedMime: string
 }
+
+type UploadSettings = Awaited<ReturnType<typeof getServerSiteSettings>>
 
 const IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
@@ -121,9 +126,45 @@ async function saveToLocal(
   }
 }
 
-function validateOssSettings(settings: Awaited<ReturnType<typeof getSiteSettings>>) {
+function resolveS3ObjectKey(folder: string, fileName: string) {
+  return `${folder}/${fileName}`.replace(/^\/+|\/+$/g, "")
+}
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/g, "")
+}
+
+function resolveS3PublicUrl(settings: UploadSettings, objectKey: string) {
+  const normalizedObjectKey = objectKey.replace(/^\/+/, "")
+  if (settings.uploadBaseUrl?.trim()) {
+    return `${trimTrailingSlash(settings.uploadBaseUrl.trim())}/${normalizedObjectKey}`
+  }
+
+  const endpoint = settings.uploadOssEndpoint?.trim()
+  const bucket = settings.uploadOssBucket?.trim()
+  if (!endpoint || !bucket) {
+    throw new Error("对象存储访问地址无法生成，请补充资源访问基础 URL")
+  }
+
+  const parsedEndpoint = new URL(endpoint)
+  if (settings.uploadS3ForcePathStyle) {
+    return `${trimTrailingSlash(parsedEndpoint.toString())}/${bucket}/${normalizedObjectKey}`
+  }
+
+  parsedEndpoint.hostname = `${bucket}.${parsedEndpoint.hostname}`
+  parsedEndpoint.pathname = `/${normalizedObjectKey}`
+  parsedEndpoint.search = ""
+  parsedEndpoint.hash = ""
+  return parsedEndpoint.toString()
+}
+
+function validateOssSettings(settings: UploadSettings) {
   if (!settings.uploadOssBucket || !settings.uploadOssRegion || !settings.uploadOssEndpoint) {
-    throw new Error("OSS 配置不完整，请先在后台上传设置中填写 Bucket、Region 和 Endpoint")
+    throw new Error("对象存储配置不完整，请先在后台上传设置中填写 Bucket、Region 和 Endpoint")
+  }
+
+  if (!settings.uploadS3AccessKeyId || !settings.uploadS3SecretAccessKey) {
+    throw new Error("对象存储密钥不完整，请先在后台上传设置中填写 Access Key ID 和 Secret Access Key")
   }
 }
 
@@ -131,23 +172,51 @@ async function saveToOss(
   file: File,
   preparedFile: PreparedUploadFile,
   folder: string,
-  settings: Awaited<ReturnType<typeof getSiteSettings>>,
+  settings: UploadSettings,
 ): Promise<SavedUploadFile> {
   validateOssSettings(settings)
-  void file
-  void preparedFile
-  void folder
-  throw new Error("当前版本已支持 OSS 配置校验，但尚未集成具体云厂商 SDK，请先使用本地上传或明确目标 OSS 服务后继续接入")
+  const ext = path.extname(file.name) || ".bin"
+  const shortHash = preparedFile.fileHash.slice(0, 16)
+  const fileName = `${folder}-${shortHash}${ext}`
+  const objectKey = resolveS3ObjectKey(folder, fileName)
+  const client = new S3Client({
+    region: settings.uploadOssRegion ?? "auto",
+    endpoint: settings.uploadOssEndpoint ?? undefined,
+    forcePathStyle: settings.uploadS3ForcePathStyle,
+    credentials: {
+      accessKeyId: settings.uploadS3AccessKeyId ?? "",
+      secretAccessKey: settings.uploadS3SecretAccessKey ?? "",
+    },
+  })
+
+  await client.send(new PutObjectCommand({
+    Bucket: settings.uploadOssBucket ?? undefined,
+    Key: objectKey,
+    Body: preparedFile.buffer,
+    ContentType: preparedFile.detectedMime,
+    CacheControl: "public, max-age=31536000, immutable",
+  }))
+
+  return {
+    fileName,
+    storagePath: `s3://${settings.uploadOssBucket}/${objectKey}`,
+    urlPath: resolveS3PublicUrl(settings, objectKey),
+    fileExt: ext,
+    fileSize: preparedFile.buffer.byteLength,
+    mimeType: preparedFile.detectedMime,
+    fileHash: preparedFile.fileHash,
+  }
 }
 
 export async function saveUploadedFile(file: File, preparedFile: PreparedUploadFile, folder = "avatars"): Promise<SavedUploadFile> {
-  const settings = await getSiteSettings()
+  const settings = await getServerSiteSettings()
+  const uploadProvider = normalizeUploadProvider(settings.uploadProvider)
 
-  if (settings.uploadProvider === "local") {
+  if (uploadProvider === "local") {
     return saveToLocal(file, preparedFile, folder, settings.uploadLocalPath || "uploads", settings.uploadBaseUrl)
   }
 
-  if (settings.uploadProvider === "oss") {
+  if (uploadProvider === "s3") {
     return saveToOss(file, preparedFile, folder, settings)
   }
 
