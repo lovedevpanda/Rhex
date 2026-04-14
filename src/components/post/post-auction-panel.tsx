@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Clock3, Gavel, Info, Lock, Trophy } from "lucide-react"
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { UserAvatar } from "@/components/user/user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +20,11 @@ import type { SitePostItem } from "@/lib/posts"
 import { cn } from "@/lib/utils"
 
 type AuctionSummary = NonNullable<SitePostItem["auction"]>
+type AuctionTimingState = {
+  hasStarted: boolean
+  hasEnded: boolean
+  countdown: string
+}
 
 function subscribeToHydration() {
   return () => {}
@@ -35,6 +41,7 @@ export function PostAuctionPanel({
   pointName: string
   currentUserId?: number
 }) {
+  const router = useRouter()
   const [showBidModal, setShowBidModal] = useState(false)
   const [showParticipantsModal, setShowParticipantsModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -50,7 +57,7 @@ export function PostAuctionPanel({
     amount: number | null
   }>>([])
   const [bidValue, setBidValue] = useState<number>(auction.minNextBidAmount)
-  const countdown = useAuctionCountdown(auction)
+  const timing = useAuctionTiming(auction, router)
 
   useEffect(() => {
     setBidValue(auction.minNextBidAmount)
@@ -65,8 +72,13 @@ export function PostAuctionPanel({
   const sliderValue = Math.min(Math.max(bidValue, sliderMin), sliderMax)
   const isSealedBid = auction.mode === "SEALED_BID"
   const isLeadingOpenAuctionBidder = auction.mode === "OPEN_ASCENDING" && auction.viewerHasJoined && auction.viewerIsLeader
-  const phaseLabel = resolveAuctionPhaseLabel(auction)
-  const currentHeadlineValue = `${formatNumber(auction.leaderBidAmount ?? auction.startPrice)} ${pointName}`
+  const phaseLabel = resolveAuctionPhaseLabel(auction, timing)
+  const viewerCanBid = auction.viewerCanBid && timing.hasStarted && !timing.hasEnded
+  const headlineLabel = timing.hasEnded && auction.finalPrice ? "成交价" : "当前价"
+  const headlineAmount = timing.hasEnded
+    ? auction.finalPrice ?? auction.leaderBidAmount ?? auction.startPrice
+    : auction.leaderBidAmount ?? auction.startPrice
+  const showWinnerSummary = timing.hasEnded && Boolean(auction.winnerUserId && auction.winnerUserName)
 
   async function loadParticipantPage(page: number) {
     setParticipantsLoading(true)
@@ -142,40 +154,62 @@ export function PostAuctionPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 text-foreground">
                   <Gavel className="h-4 w-4" />
-                  <p className="text-lg font-semibold leading-none">{resolveAuctionStatusTitle(auction)}</p>
-                  <Badge variant={auction.hasEnded ? "outline" : auction.hasStarted ? "secondary" : "outline"} className="rounded-full bg-background/80">
+                  <p className="text-lg font-semibold leading-none">{resolveAuctionStatusTitle(auction, timing)}</p>
+                  <Badge variant={timing.hasEnded ? "outline" : timing.hasStarted ? "secondary" : "outline"} className="rounded-full bg-background/80">
                     {phaseLabel}
                   </Badge>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                   <div className="flex items-center gap-2 text-foreground">
                     <Clock3 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[1.9rem] font-semibold tracking-tight">{countdown}</span>
+                    <span className="text-[1.9rem] font-semibold tracking-tight">{timing.countdown}</span>
                   </div>
                   {!isSealedBid ? (
                     <Badge variant="outline" className="rounded-full bg-background/80">
-                      当前价 {currentHeadlineValue}
+                      {headlineLabel} {formatNumber(headlineAmount)} {pointName}
                     </Badge>
                   ) : null}
-                  {!isSealedBid ? (
+                  {!isSealedBid && !timing.hasEnded ? (
                     <Badge variant="outline" className="rounded-full bg-background/80">
                       最低下一口 {formatNumber(auction.minNextBidAmount)} {pointName}
                     </Badge>
                   ) : null}
                   {currentUserId ? (
                     <Badge variant="secondary" className="rounded-full">
-                      {resolveViewerStateLabel(auction, pointName, isSealedBid)}
+                      {resolveViewerStateLabel(auction, pointName, isSealedBid, timing.hasEnded)}
                     </Badge>
                   ) : null}
                 </div>
+                {showWinnerSummary ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-3 rounded-[20px] border border-amber-200 bg-amber-50/90 px-3 py-3 text-sm text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-50">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <UserAvatar
+                        name={auction.winnerUserName ?? "最终赢家"}
+                        avatarPath={auction.winnerAvatarPath}
+                        size="sm"
+                        isVip={auction.winnerIsVip}
+                        vipLevel={auction.winnerVipLevel}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-amber-700/80 dark:text-amber-200/80">最终赢家</p>
+                        <p className="truncate text-sm font-semibold text-foreground dark:text-amber-50">{auction.winnerUserName}</p>
+                      </div>
+                    </div>
+                    {auction.finalPrice ? (
+                      <Badge variant="outline" className="rounded-full border-amber-300/80 bg-background/70 text-amber-950 dark:border-amber-300/25 dark:bg-white/8 dark:text-amber-50">
+                        成交价 {formatNumber(auction.finalPrice)} {pointName}
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
-              {auction.viewerCanBid ? (
+              {viewerCanBid ? (
                 <Button type="button" className="h-12 rounded-[16px] px-5 text-base" onClick={() => setShowBidModal(true)}>
                   <Gavel data-icon="inline-start" />
                   {isLeadingOpenAuctionBidder ? "加价" : "出价"}
                 </Button>
-              ) : !currentUserId ? (
+              ) : !currentUserId && !timing.hasEnded ? (
                 <Link href="/login">
                   <Button type="button" className="h-12 rounded-[16px] px-5 text-base">
                     <Gavel data-icon="inline-start" />
@@ -184,11 +218,11 @@ export function PostAuctionPanel({
                 </Link>
               ) : (
                 <Badge variant="outline" className="rounded-full px-3 py-1.5 text-sm">
-                  {auction.hasEnded
+                  {timing.hasEnded
                     ? phaseLabel
                     : auction.viewerIsSeller
                       ? "你是发起人"
-                    : !auction.hasStarted
+                    : !timing.hasStarted
                       ? "未开始"
                       : isSealedBid && auction.viewerHasJoined
                         ? "已出价"
@@ -449,33 +483,63 @@ export function PostAuctionWinnerContent({
   )
 }
 
-function resolveAuctionStatusTitle(auction: AuctionSummary) {
-  if (auction.hasEnded) {
-    return auction.status === "SETTLED" ? "竞拍已结束" : auction.statusLabel
+function resolveAuctionStatusTitle(auction: AuctionSummary, timing: Pick<AuctionTimingState, "hasStarted" | "hasEnded">) {
+  if (timing.hasEnded) {
+    if (auction.status === "FAILED") {
+      return auction.mode === "SEALED_BID" ? "竞拍已流拍" : "拍卖已流拍"
+    }
+
+    if (auction.status === "CANCELLED") {
+      return auction.mode === "SEALED_BID" ? "竞拍已取消" : "拍卖已取消"
+    }
+
+    return auction.mode === "SEALED_BID" ? "竞拍已结束" : "拍卖已结束"
   }
 
-  if (!auction.hasStarted) {
+  if (!timing.hasStarted) {
     return auction.mode === "SEALED_BID" ? "竞拍未开始" : "拍卖未开始"
   }
 
   return auction.mode === "SEALED_BID" ? "竞拍进行中" : "拍卖进行中"
 }
 
-function resolveAuctionPhaseLabel(auction: AuctionSummary) {
-  if (auction.hasEnded) {
-    return auction.status === "SETTLED"
-      ? "已结束"
-      : auction.status === "FAILED"
-        ? "流拍"
-        : auction.statusLabel
+function resolveAuctionPhaseLabel(auction: AuctionSummary, timing: Pick<AuctionTimingState, "hasStarted" | "hasEnded">) {
+  if (timing.hasEnded) {
+    if (auction.status === "FAILED") {
+      return "流拍"
+    }
+
+    if (auction.status === "CANCELLED") {
+      return "已取消"
+    }
+
+    if (auction.status === "SETTLING") {
+      return "结算中"
+    }
+
+    return "已结束"
   }
 
-  return auction.hasStarted ? "进行中" : "未开始"
+  return timing.hasStarted ? "进行中" : "未开始"
 }
 
-function resolveViewerStateLabel(auction: AuctionSummary, pointName: string, isSealedBid: boolean) {
+function resolveViewerStateLabel(auction: AuctionSummary, pointName: string, isSealedBid: boolean, hasEnded: boolean) {
   if (auction.viewerIsSeller) {
     return "发起人"
+  }
+
+  if (hasEnded) {
+    switch (auction.viewerStatus) {
+      case "WON":
+        return "已中标"
+      case "LOST":
+      case "OUTBID":
+        return "未中标"
+      case "ACTIVE":
+        return auction.viewerIsLeader ? "等待结算" : "已参与"
+      default:
+        return auction.viewerHasJoined ? "已参与" : "未出价"
+    }
   }
 
   if (auction.viewerIsLeader) {
@@ -518,12 +582,33 @@ function resolveViewerStateLabel(auction: AuctionSummary, pointName: string, isS
   }
 }
 
-function useAuctionCountdown(auction: AuctionSummary) {
+function resolveAuctionCountdownLabel(auction: AuctionSummary) {
+  if (auction.status === "FAILED") {
+    return "流拍"
+  }
+
+  if (auction.status === "CANCELLED") {
+    return "已取消"
+  }
+
+  if (auction.status === "SETTLING") {
+    return "等待结算"
+  }
+
+  return "已结束"
+}
+
+function useAuctionTiming(auction: AuctionSummary, router: ReturnType<typeof useRouter>): AuctionTimingState {
   const mounted = useSyncExternalStore(subscribeToHydration, () => true, () => false)
+  const refreshKeyRef = useRef<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const startsAtMs = auction.startsAt ? new Date(auction.startsAt).getTime() : null
+  const endsAtMs = new Date(auction.endsAt).getTime()
+  const hasStarted = mounted ? startsAtMs === null || now >= startsAtMs : auction.hasStarted
+  const hasEnded = mounted ? auction.hasEnded || now >= endsAtMs : auction.hasEnded
 
   useEffect(() => {
-    if (auction.hasEnded) {
+    if (!mounted || hasEnded) {
       return
     }
 
@@ -534,17 +619,44 @@ function useAuctionCountdown(auction: AuctionSummary) {
     return () => {
       window.clearInterval(timer)
     }
-  }, [auction.hasEnded])
+  }, [hasEnded, mounted])
+
+  useEffect(() => {
+    if (!mounted) {
+      return
+    }
+
+    const refreshKey = hasEnded && !auction.hasEnded
+      ? "end"
+      : hasStarted && !auction.hasStarted
+        ? "start"
+        : null
+
+    if (!refreshKey || refreshKeyRef.current === refreshKey) {
+      return
+    }
+
+    refreshKeyRef.current = refreshKey
+    router.refresh()
+  }, [auction.hasEnded, auction.hasStarted, hasEnded, hasStarted, mounted, router])
 
   if (!mounted) {
-    return auction.hasStarted ? "进行中" : "未开始"
+    return {
+      hasStarted: auction.hasStarted,
+      hasEnded: auction.hasEnded,
+      countdown: auction.hasEnded ? resolveAuctionCountdownLabel(auction) : auction.hasStarted ? "进行中" : "未开始",
+    }
   }
 
-  const targetTime = auction.hasStarted ? new Date(auction.endsAt).getTime() : (auction.startsAt ? new Date(auction.startsAt).getTime() : now)
+  const targetTime = hasStarted ? endsAtMs : (startsAtMs ?? now)
   const remainingMs = Math.max(0, targetTime - now)
 
-  if (remainingMs <= 0) {
-    return auction.hasStarted ? "00天00小时00分00秒" : "即将开始"
+  if (hasEnded || remainingMs <= 0) {
+    return {
+      hasStarted,
+      hasEnded: true,
+      countdown: resolveAuctionCountdownLabel(auction),
+    }
   }
 
   const totalSeconds = Math.floor(remainingMs / 1000)
@@ -553,5 +665,9 @@ function useAuctionCountdown(auction: AuctionSummary) {
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
 
-  return `${String(days).padStart(2, "0")}天${String(hours).padStart(2, "0")}小时${String(minutes).padStart(2, "0")}分${String(seconds).padStart(2, "0")}秒`
+  return {
+    hasStarted,
+    hasEnded,
+    countdown: `${String(days).padStart(2, "0")}天${String(hours).padStart(2, "0")}小时${String(minutes).padStart(2, "0")}分${String(seconds).padStart(2, "0")}秒`,
+  }
 }

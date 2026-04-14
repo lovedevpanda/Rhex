@@ -13,7 +13,7 @@ import {
   Users,
 } from "lucide-react"
 
-import { VerificationChannel } from "@/db/types"
+import { VerificationChannel } from "@/lib/shared/verification-channel"
 import { useMemo, useState } from "react"
 
 import { useRouter, useSearchParams } from "next/navigation"

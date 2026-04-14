@@ -1,5 +1,3 @@
-import { VerificationChannel } from "@/db/types"
-
 import { prisma } from "@/db/client"
 import { findUserByNicknameInsensitive } from "@/db/user-queries"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
@@ -12,6 +10,7 @@ import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { isUserProfileVisibility, mapLegacyVisibilityBoolean, mergeUserProfileSettings, resolveUserProfileSettings, type UserProfileVisibility } from "@/lib/user-profile-settings"
+import { VerificationChannel } from "@/lib/shared/verification-channel"
 import { resolveVipTierPrice } from "@/lib/vip-tier-pricing"
 
 type ProfileUpdateResponse = {

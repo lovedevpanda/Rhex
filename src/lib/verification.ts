@@ -1,9 +1,8 @@
 import { createHash, randomInt } from "crypto"
 
-import { VerificationChannel } from "@/db/types"
-
 import { PublicRouteError } from "@/lib/public-route-error"
 import { createRedisKey, getRedis } from "@/lib/redis"
+import { VerificationChannel, type VerificationChannel as VerificationChannelValue } from "@/lib/shared/verification-channel"
 
 
 const EXPIRE_MINUTES = 10
@@ -53,7 +52,7 @@ function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex")
 }
 
-function normalizeTarget(channel: VerificationChannel, target: string) {
+function normalizeTarget(channel: VerificationChannelValue, target: string) {
   const normalized = target.trim()
   return channel === VerificationChannel.EMAIL ? normalized.toLowerCase() : normalized
 }
@@ -62,15 +61,15 @@ function createCode() {
   return String(randomInt(100000, 1000000))
 }
 
-function createVerificationFingerprint(channel: VerificationChannel, target: string, purpose: string) {
+function createVerificationFingerprint(channel: VerificationChannelValue, target: string, purpose: string) {
   return sha256([channel, target, purpose].join(":"))
 }
 
-function getActiveVerificationRedisKey(channel: VerificationChannel, target: string, purpose: string) {
+function getActiveVerificationRedisKey(channel: VerificationChannelValue, target: string, purpose: string) {
   return createRedisKey("verification-code", "active", createVerificationFingerprint(channel, target, purpose))
 }
 
-function getRecentVerifiedRedisKey(channel: VerificationChannel, target: string, purpose: string) {
+function getRecentVerifiedRedisKey(channel: VerificationChannelValue, target: string, purpose: string) {
   return createRedisKey("verification-code", "verified", createVerificationFingerprint(channel, target, purpose))
 }
 
@@ -85,7 +84,7 @@ export function getRegisterVerificationPurpose() {
 }
 
 export async function sendVerificationCode(input: {
-  channel: VerificationChannel
+  channel: VerificationChannelValue
   target: string
   ip?: string | null
   userAgent?: string | null
@@ -138,7 +137,7 @@ export async function sendVerificationCode(input: {
 }
 
 export async function verifyCode(input: {
-  channel: VerificationChannel
+  channel: VerificationChannelValue
   target: string
   code: string
   purpose?: string
@@ -183,7 +182,7 @@ export async function verifyCode(input: {
 }
 
 export async function hasRecentVerifiedCode(input: {
-  channel: VerificationChannel
+  channel: VerificationChannelValue
   target: string
   purpose?: string
   withinMinutes?: number

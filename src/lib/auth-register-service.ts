@@ -1,4 +1,4 @@
-import { VerificationChannel } from "@/db/types"
+import { VerificationChannel } from "@/lib/shared/verification-channel"
 import { hashSync } from "bcryptjs"
 
 import {

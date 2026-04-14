@@ -1,4 +1,4 @@
-import { BadgeRuleType } from "@/db/types"
+import { BadgeRuleType } from "@/lib/shared/badge-rule-enums"
 
 export type BadgeRuleValueMode = "number" | "text" | "user-level" | "vip-level" | "datetime-local"
 

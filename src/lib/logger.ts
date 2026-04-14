@@ -6,6 +6,10 @@ export interface LogContext {
   metadata?: Record<string, unknown>
 }
 
+function shouldEmitInfoLogs() {
+  return process.env.NODE_ENV !== "production"
+}
+
 function buildPayload(level: "info" | "error", context: LogContext, extra?: Record<string, unknown>) {
   return {
     level,
@@ -19,6 +23,10 @@ function buildPayload(level: "info" | "error", context: LogContext, extra?: Reco
 }
 
 export function logInfo(context: LogContext, extra?: Record<string, unknown>) {
+  if (!shouldEmitInfoLogs()) {
+    return
+  }
+
   console.info(JSON.stringify(buildPayload("info", context, extra)))
 }
 

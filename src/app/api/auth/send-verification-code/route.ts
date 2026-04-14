@@ -1,10 +1,9 @@
-import { VerificationChannel } from "@/db/types"
-
 import { apiError, apiSuccess, createRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { isEmailInWhitelist, normalizeEmailAddress } from "@/lib/email"
 import { sendRegisterVerificationEmail } from "@/lib/mailer"
 import { getRequestIp } from "@/lib/request-ip"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
+import { isVerificationChannel, VerificationChannel } from "@/lib/shared/verification-channel"
 import { getServerSiteSettings } from "@/lib/site-settings"
 import { sendVerificationCode } from "@/lib/verification"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
@@ -22,7 +21,7 @@ function isValidPhone(value: string) {
 export const POST = createRouteHandler(async ({ request }) => {
   const body = await readJsonBody(request)
   const rawChannel = requireStringField(body, "channel", "缺少验证码参数").toUpperCase()
-  const channel = rawChannel === VerificationChannel.EMAIL || rawChannel === VerificationChannel.PHONE ? rawChannel : ""
+  const channel = isVerificationChannel(rawChannel) ? rawChannel : ""
   const target = channel === VerificationChannel.EMAIL
     ? normalizeEmailAddress(requireStringField(body, "target", "缺少验证码参数"))
     : requireStringField(body, "target", "缺少验证码参数")

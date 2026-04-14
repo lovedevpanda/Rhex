@@ -87,6 +87,9 @@ export interface PostAuctionSummary {
   leaderUserId: number | null
   winnerUserId: number | null
   winnerUserName: string | null
+  winnerAvatarPath: string | null
+  winnerIsVip: boolean
+  winnerVipLevel: number | null
   winningBidAmount: number | null
   finalPrice: number | null
   settledAt: string | null
@@ -990,6 +993,9 @@ async function readAuctionForSummary(postId: string) {
           id: true,
           username: true,
           nickname: true,
+          avatarPath: true,
+          vipLevel: true,
+          vipExpiresAt: true,
         },
       },
     },
@@ -1054,7 +1060,7 @@ export async function getPostAuctionSummary(
   ])
 
   const now = new Date()
-  const settlementVisible = auction.status === PostAuctionStatus.SETTLED
+  const resultVisible = auction.status === PostAuctionStatus.SETTLED || auction.status === PostAuctionStatus.SETTLING
   const hasStarted = !auction.startsAt || now.getTime() >= auction.startsAt.getTime()
   const hasEnded = auction.status === PostAuctionStatus.SETTLED
     || auction.status === PostAuctionStatus.SETTLING
@@ -1092,16 +1098,19 @@ export async function getPostAuctionSummary(
     endsAt: auction.endsAt.toISOString(),
     participantCount: auction.participantCount,
     bidCount: auction.bidCount,
-    leaderBidAmount: auction.mode === PostAuctionMode.OPEN_ASCENDING || settlementVisible
+    leaderBidAmount: auction.mode === PostAuctionMode.OPEN_ASCENDING || resultVisible
       ? auction.leaderBidAmount
       : null,
-    leaderUserId: auction.mode === PostAuctionMode.OPEN_ASCENDING || settlementVisible
+    leaderUserId: auction.mode === PostAuctionMode.OPEN_ASCENDING || resultVisible
       ? auction.leaderUserId ?? null
       : null,
-    winnerUserId: settlementVisible ? auction.winnerUserId ?? null : null,
-    winnerUserName: settlementVisible ? getUserDisplayName(auction.winner) : null,
-    winningBidAmount: settlementVisible ? auction.winningBidAmount ?? null : null,
-    finalPrice: settlementVisible ? auction.finalPrice ?? null : null,
+    winnerUserId: resultVisible ? auction.winnerUserId ?? null : null,
+    winnerUserName: resultVisible ? getUserDisplayName(auction.winner) : null,
+    winnerAvatarPath: resultVisible ? auction.winner?.avatarPath ?? null : null,
+    winnerIsVip: resultVisible ? Boolean(auction.winner?.vipExpiresAt && auction.winner.vipExpiresAt.getTime() > Date.now()) : false,
+    winnerVipLevel: resultVisible ? auction.winner?.vipLevel ?? null : null,
+    winningBidAmount: resultVisible ? auction.winningBidAmount ?? null : null,
+    finalPrice: resultVisible ? auction.finalPrice ?? null : null,
     settledAt: auction.settledAt?.toISOString() ?? null,
     hasStarted,
     hasEnded,

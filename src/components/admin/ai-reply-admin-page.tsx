@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { TextField } from "@/components/ui/text-field"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import { formatPreciseDateTime } from "@/lib/formatters"
 
 import type { AiReplyAdminData } from "@/lib/ai-reply"
 
@@ -41,9 +42,7 @@ function formatDateTime(value: string | null) {
     return "暂无"
   }
 
-  return new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-  })
+  return formatPreciseDateTime(value) ?? value
 }
 
 function LabeledTextarea(props: {

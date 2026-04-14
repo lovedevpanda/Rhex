@@ -1,312 +1,70 @@
 import { parseNonNegativeSafeInteger } from "@/lib/shared/safe-integer"
-import { buildDefaultRegistrationEmailTemplateSettings, normalizeRegistrationEmailTemplateSettings, type RegistrationEmailTemplateSettings } from "@/lib/email-template-settings"
+import { buildDefaultRegistrationEmailTemplateSettings, normalizeRegistrationEmailTemplateSettings } from "@/lib/email-template-settings"
 import { parseEmailWhitelistDomains } from "@/lib/email"
-import { getDefaultTippingGiftItemsFromAmounts, normalizeTippingGiftItems, type SiteTippingGiftItem } from "@/lib/tipping-gifts"
-import { normalizeVipNameColors, type VipNameColors } from "@/lib/vip-name-colors"
-import { normalizeVipLevelIcons, type VipLevelIcons } from "@/lib/vip-level-icons"
-import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
+import { getDefaultTippingGiftItemsFromAmounts, normalizeTippingGiftItems } from "@/lib/tipping-gifts"
+import { normalizeVipNameColors } from "@/lib/vip-name-colors"
+import { normalizeVipLevelIcons } from "@/lib/vip-level-icons"
+import { normalizePostListLoadMode } from "@/lib/post-list-load-mode"
+import type { PostListLoadMode } from "@/lib/post-list-load-mode"
+import {
+  SITE_SETTINGS_STATE_KEY,
+  isRecord,
+  normalizeFileExtensionList,
+  normalizeHexColor,
+  normalizeImageWatermarkPosition,
+  normalizeLeftSidebarDisplayMode,
+  normalizeNonNegativeInteger,
+  normalizePostSlugGenerationMode,
+  parseAppStateRoot,
+  readSiteSettingsState,
+} from "@/lib/site-settings-app-state.types"
+import type {
+  AnonymousPostSettings,
+  AttachmentFeatureSettings,
+  AuthPageShowcaseSettings,
+  AuthProviderSettings,
+  AvatarChangePointCostSettings,
+  BoardApplicationSettings,
+  BoardTreasurySettings,
+  CheckInMakeUpPriceSettings,
+  CheckInRewardSettings,
+  CheckInStreakSettings,
+  CommentAccessSettings,
+  FooterCopyrightSettings,
+  HomeFeedPostListLoadSettings,
+  HomeHotFeedSettings,
+  HomeSidebarAnnouncementSettings,
+  ImageWatermarkPosition,
+  ImageWatermarkSettings,
+  InteractionGateCondition,
+  InteractionGateRule,
+  InteractionGateSettings,
+  InviteCodePurchasePriceSettings,
+  LeftSidebarDisplayMode,
+  LeftSidebarDisplaySettings,
+  MarkdownImageUploadSettings,
+  NicknameChangePointCostSettings,
+  PostContentLengthSettings,
+  PostJackpotSettings,
+  PostPageSizeSettings,
+  PostRedPacketSettings,
+  PostSlugGenerationMode,
+  PostSlugGenerationSettings,
+  RedeemCodeHelpSettings,
+  RegisterEmailWhitelistSettings,
+  RegisterInviteCodeHelpSettings,
+  RegisterNicknameLengthSettings,
+  RegistrationEmailTemplateSettings,
+  RegistrationRewardSettings,
+  SiteBrandingSettings,
+  SiteTippingGiftItem,
+  UploadObjectStorageSettings,
+  VipLevelIconSettings,
+  VipNameColorSettings,
+  IntroductionChangePointCostSettings,
+} from "@/lib/site-settings-app-state.types"
 
-const SITE_SETTINGS_STATE_KEY = "__siteSettings"
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-function parseAppStateRoot(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    return isRecord(parsed) ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function readSiteSettingsState(raw: string | null | undefined) {
-  const root = parseAppStateRoot(raw)
-  const siteSettingsState = root[SITE_SETTINGS_STATE_KEY]
-  return isRecord(siteSettingsState) ? siteSettingsState : {}
-}
-
-function normalizeNonNegativeInteger(value: unknown, fallback: number) {
-  return parseNonNegativeSafeInteger(value) ?? fallback
-}
-
-function normalizeFileExtensionList(value: unknown, fallback: string[]) {
-  if (!Array.isArray(value)) {
-    return fallback
-  }
-
-  const normalized = Array.from(new Set(
-    value
-      .map((item) => (typeof item === "string" ? item.trim().toLowerCase().replace(/^\./, "") : ""))
-      .filter(Boolean),
-  ))
-
-  return normalized.length > 0 ? normalized : fallback
-}
-
-function normalizeHexColor(value: unknown, fallback: string) {
-  const normalized = typeof value === "string" ? value.trim().toUpperCase() : ""
-  return /^#(?:[0-9A-F]{3}|[0-9A-F]{6})$/.test(normalized) ? normalized : fallback
-}
-
-export type LeftSidebarDisplayMode = "DEFAULT" | "HIDDEN" | "DOCKED"
-
-export function normalizeLeftSidebarDisplayMode(value: unknown, fallback: LeftSidebarDisplayMode = "DEFAULT"): LeftSidebarDisplayMode {
-  const normalized = typeof value === "string" ? value.trim().toUpperCase() : ""
-
-  switch (normalized) {
-    case "DEFAULT":
-    case "HIDDEN":
-    case "DOCKED":
-      return normalized
-    default:
-      return fallback
-  }
-}
-
-export type ImageWatermarkPosition = "TOP_LEFT" | "TOP_RIGHT" | "BOTTOM_LEFT" | "BOTTOM_RIGHT" | "CENTER"
-
-function normalizeImageWatermarkPosition(value: unknown, fallback: ImageWatermarkPosition): ImageWatermarkPosition {
-  const normalized = typeof value === "string" ? value.trim().toUpperCase() : ""
-
-  switch (normalized) {
-    case "TOP_LEFT":
-    case "TOP_RIGHT":
-    case "BOTTOM_LEFT":
-    case "BOTTOM_RIGHT":
-    case "CENTER":
-      return normalized as ImageWatermarkPosition
-    default:
-      return fallback
-  }
-}
-
-export interface CheckInMakeUpPriceSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface CheckInRewardSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface NicknameChangePointCostSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface IntroductionChangePointCostSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface AvatarChangePointCostSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface InviteCodePurchasePriceSettings {
-  normal: number
-  vip1: number
-  vip2: number
-  vip3: number
-}
-
-export interface MarkdownImageUploadSettings {
-  enabled: boolean
-}
-
-export interface UploadObjectStorageSettings {
-  forcePathStyle: boolean
-}
-
-export interface ImageWatermarkSettings {
-  enabled: boolean
-  text: string
-  position: ImageWatermarkPosition
-  opacity: number
-  fontSize: number
-  margin: number
-  color: string
-  logoPath: string
-  logoScalePercent: number
-}
-
-export interface AttachmentFeatureSettings {
-  uploadEnabled: boolean
-  downloadEnabled: boolean
-  minUploadLevel: number
-  minUploadVipLevel: number
-  allowedExtensions: string[]
-  maxFileSizeMb: number
-}
-
-export interface HomeSidebarAnnouncementSettings {
-  enabled: boolean
-}
-
-export interface LeftSidebarDisplaySettings {
-  mode: LeftSidebarDisplayMode
-}
-
-export interface FooterCopyrightSettings {
-  text: string
-  brandingVisible: boolean
-}
-
-export interface SiteBrandingSettings {
-  iconPath: string
-}
-
-export interface RegisterNicknameLengthSettings {
-  minLength: number
-  maxLength: number
-}
-
-export interface RegisterEmailWhitelistSettings {
-  enabled: boolean
-  domains: string[]
-}
-
-export type PostSlugGenerationMode = "TITLE_TIMESTAMP" | "TIME36" | "PINYIN_TIME36" | "TITLE_TIME36"
-
-export interface PostSlugGenerationSettings {
-  mode: PostSlugGenerationMode
-}
-
-export interface HomeFeedPostListLoadSettings {
-  loadMode: PostListLoadMode
-}
-
-export interface HomeHotFeedSettings {
-  recentWindowHours: number
-}
-
-export interface PostPageSizeSettings {
-  homeFeed: number
-  zonePosts: number
-  boardPosts: number
-  comments: number
-  hotTopics: number
-  postRelatedTopics: number
-}
-
-export interface CommentAccessSettings {
-  guestCanView: boolean
-  initialVisibleReplies: number
-}
-
-export interface PostContentLengthSettings {
-  postTitleMinLength: number
-  postTitleMaxLength: number
-  postContentMinLength: number
-  postContentMaxLength: number
-  commentContentMinLength: number
-  commentContentMaxLength: number
-}
-
-export type InteractionGateAction = "POST_CREATE" | "COMMENT_CREATE"
-
-export type InteractionGateCondition =
-  | {
-      type: "EMAIL_VERIFIED"
-      enabled: true
-    }
-  | {
-      type: "REGISTERED_MINUTES"
-      value: number
-    }
-
-export interface InteractionGateRule {
-  enabled: boolean
-  conditions: InteractionGateCondition[]
-}
-
-export interface InteractionGateSettings {
-  version: 1
-  actions: Record<InteractionGateAction, InteractionGateRule>
-}
-
-export interface AuthProviderSettings {
-  githubEnabled: boolean
-  googleEnabled: boolean
-  passkeyEnabled: boolean
-}
-
-export interface AuthPageShowcaseSettings {
-  enabled: boolean
-}
-
-export type VipLevelIconSettings = VipLevelIcons
-export type VipNameColorSettings = VipNameColors
-
-export interface RegistrationRewardSettings {
-  initialPoints: number
-}
-
-export interface RegisterInviteCodeHelpSettings {
-  enabled: boolean
-  title: string
-  url: string
-}
-
-export interface RedeemCodeHelpSettings {
-  enabled: boolean
-  title: string
-  url: string
-}
-
-export interface CheckInStreakSettings {
-  makeUpCountsTowardStreak: boolean
-}
-
-export interface PostJackpotSettings {
-  enabled: boolean
-  minInitialPoints: number
-  maxInitialPoints: number
-  replyIncrementPoints: number
-  hitProbability: number
-}
-
-export interface PostRedPacketSettings {
-  randomClaimProbability: number
-}
-
-export interface AnonymousPostSettings {
-  enabled: boolean
-  price: number
-  dailyLimit: number
-  maskUserId: number | null
-  allowReplySwitch: boolean
-  defaultReplyAnonymous: boolean
-}
-
-export interface BoardTreasurySettings {
-  tipGiftTaxEnabled: boolean
-  tipGiftTaxRateBps: number
-}
-
-export interface BoardApplicationSettings {
-  enabled: boolean
-}
-
-export type { RegistrationEmailTemplateSettings } from "@/lib/email-template-settings"
+export * from "@/lib/site-settings-app-state.types"
 
 export function resolveTippingGiftSettings(options: {
   appStateJson?: string | null
@@ -921,15 +679,6 @@ export function mergeFooterCopyrightSettings(
   }
 
   return JSON.stringify(root)
-}
-
-export function normalizePostSlugGenerationMode(
-  value: unknown,
-  fallback: PostSlugGenerationMode = "TITLE_TIMESTAMP",
-): PostSlugGenerationMode {
-  return value === "TIME36" || value === "PINYIN_TIME36" || value === "TITLE_TIME36"
-    ? value
-    : fallback
 }
 
 export function resolvePostSlugGenerationSettings(options: {

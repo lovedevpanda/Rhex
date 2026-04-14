@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react"
 import { useMemo, useState, useTransition } from "react"
-import { BadgeRuleOperator, BadgeRuleType, PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/db/types"
 import { CircleHelp, Pencil, Plus, Save, Sparkles, Trash2 } from "lucide-react"
 
 import { Modal } from "@/components/ui/modal"
@@ -25,6 +24,7 @@ import { showConfirm } from "@/components/ui/alert-dialog"
 import { Tooltip } from "@/components/ui/tooltip"
 import { buildUserLevelThresholdOptions, buildVipLevelThresholdOptions } from "@/lib/access-threshold-options"
 import { BADGE_RULE_TYPE_OPTIONS, getBadgeRuleTypeOption, type BadgeRuleTypeValue } from "@/lib/badge-rule-definitions"
+import { BadgeRuleOperator, BadgeRuleType } from "@/lib/shared/badge-rule-enums"
 import type { LevelDefinitionItem } from "@/lib/level-system"
 import {
   BADGE_EFFECT_SCOPE_HOME_AUTO_CHECK_IN,
@@ -44,6 +44,7 @@ import {
   normalizePointEffectDirectionByRuleKind,
   timeInputToMinuteOfDay,
 } from "@/lib/point-effect-definitions"
+import { PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/lib/shared/point-effect-enums"
 
 type BadgeRuleFormItem = {
   id?: string

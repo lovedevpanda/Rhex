@@ -52,6 +52,10 @@ export function logRuntimeError(error: unknown, fallback: Omit<RuntimeErrorOptio
   }
 
   if (normalized.level === "info") {
+    if (process.env.NODE_ENV === "production") {
+      return normalized
+    }
+
     console.info("[runtime]", payload)
     return normalized
   }

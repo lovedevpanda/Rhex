@@ -1,6 +1,6 @@
 import { hashSync } from "bcryptjs"
 
-import { VerificationChannel } from "@/db/types"
+import { VerificationChannel } from "@/lib/shared/verification-channel"
 
 import { findUserByEmail, updateUserPasswordById } from "@/db/password-reset-queries"
 import { apiError } from "@/lib/api-route"

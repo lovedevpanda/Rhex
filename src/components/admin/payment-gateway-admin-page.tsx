@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { TextField } from "@/components/ui/text-field"
 import { toast } from "@/components/ui/toast"
+import { formatPreciseDateTime } from "@/lib/formatters"
 import {
   PAYMENT_GATEWAY_CLIENT_TYPES,
   type PaymentGatewayAdminData,
@@ -28,9 +29,7 @@ function formatDateTime(value: string | null) {
     return "暂无"
   }
 
-  return new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-  })
+  return formatPreciseDateTime(value) ?? value
 }
 
 function describeRouteRule(route: PaymentGatewayRouteRule, channelLabel: string) {
@@ -116,6 +115,10 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
 
   function removeTopupPackage(id: string) {
     setTopupPackages((current) => current.filter((item) => item.id !== id))
+  }
+
+  function updateChannel(channelCode: string, enabled: boolean) {
+    setChannels((current) => current.map((item) => item.channelCode === channelCode ? { ...item, enabled } : item))
   }
 
   function updateRoute(id: string, patch: Partial<PaymentGatewayRouteRule>) {
@@ -313,6 +316,37 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
               </Link>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>支付通道</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-3">
+          {data.channelDefinitions.map((definition) => {
+            const channel = channels.find((item) => item.channelCode === definition.channelCode)
+            const enabled = channel?.enabled ?? false
+
+            return (
+              <div key={definition.channelCode} className="rounded-xl border border-border p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{definition.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{definition.description}</p>
+                  </div>
+                  <Switch checked={enabled} onCheckedChange={(checked) => updateChannel(definition.channelCode, checked)} />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-full border border-border px-3 py-1">{definition.channelCode}</span>
+                  <span className="rounded-full border border-border px-3 py-1">{definition.clientTypes.join(" / ")}</span>
+                  <span className="rounded-full border border-border px-3 py-1">
+                    {definition.presentationType === "QR_CODE" ? "二维码展示" : "跳转表单"}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
         </CardContent>
       </Card>
 

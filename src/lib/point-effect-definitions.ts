@@ -1,4 +1,4 @@
-import { PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/db/types"
+import { PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/lib/shared/point-effect-enums"
 
 export const BADGE_EFFECT_SCOPE_HOME_AUTO_CHECK_IN = "HOME_AUTO_CHECK_IN"
 

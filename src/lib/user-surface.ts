@@ -41,6 +41,12 @@ function isMissingRevalidateStoreError(error: unknown) {
     && error.message.startsWith("Invariant: static generation store missing in revalidateTag")
 }
 
+function isRenderPhaseRevalidateError(error: unknown) {
+  return error instanceof Error
+    && error.message.includes('used "revalidateTag ')
+    && error.message.includes("during render which is unsupported")
+}
+
 function hasPersistedCheckInStreakSummary(progress: UserSurfaceBaseRecord["levelProgress"]) {
   if (!progress) {
     return false
@@ -131,9 +137,9 @@ export function revalidateUserSurfaceCache(userId?: number | null) {
     // serving stale counts and updating later in the background.
     revalidateTag(tag, { expire: 0 })
   } catch (error) {
-    // Background workers do not run inside a Next.js request/store context, so
-    // tag invalidation is unavailable there. The cache still self-heals via TTL.
-    if (isMissingRevalidateStoreError(error)) {
+    // Background workers and render-time recovery paths do not have a legal
+    // revalidation context. The cache still self-heals via the short TTL.
+    if (isMissingRevalidateStoreError(error) || isRenderPhaseRevalidateError(error)) {
       return
     }
 

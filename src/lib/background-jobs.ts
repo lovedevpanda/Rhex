@@ -424,7 +424,34 @@ let backgroundJobTransport: BackgroundJobTransport = new InMemoryBackgroundJobTr
 let backgroundJobHandlersReadyPromise: Promise<void> | null = null
 let backgroundJobRuntimeReadyPromise: Promise<void> | null = null
 
+function detectBackgroundJobProcessRole() {
+  const entrypoint = process.argv[1]?.replace(/\\/g, "/").toLowerCase() ?? ""
+
+  if (entrypoint.includes("background-jobs-worker")) {
+    return "jobs-worker"
+  }
+
+  if (entrypoint.includes("/worker.ts")) {
+    return "worker"
+  }
+
+  if (entrypoint.includes("next")) {
+    return "web"
+  }
+
+  return process.env.NODE_ENV === "production" ? "app" : "dev"
+}
+
 function shouldStartBackgroundJobWorkerInProcess() {
+  const processRole = detectBackgroundJobProcessRole()
+
+  // Dedicated worker entrypoints must always consume jobs, regardless of the
+  // web runtime mode. `BACKGROUND_JOB_WEB_RUNTIME=worker-only` only disables
+  // job consumption inside the web process.
+  if (processRole === "jobs-worker" || processRole === "worker") {
+    return true
+  }
+
   const mode = process.env.BACKGROUND_JOB_WEB_RUNTIME?.trim().toLowerCase()
 
   if (mode === "1" || mode === "true" || mode === "on" || mode === "enabled" || mode === "hybrid") {
