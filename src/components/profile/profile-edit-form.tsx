@@ -22,6 +22,8 @@ interface ProfileEditFormProps {
   initialAvatarPath?: string | null
   initialEmail?: string | null
   initialEmailVerified: boolean
+  passwordChangeRequireEmailVerification?: boolean
+  emailDeliveryEnabled?: boolean
   initialActivityVisibility: UserProfileVisibility
   initialIntroductionVisibility: UserProfileVisibility
   nicknameChangePointCost: number
@@ -105,6 +107,8 @@ export function ProfileEditForm({
   initialAvatarPath,
   initialEmail,
   initialEmailVerified,
+  passwordChangeRequireEmailVerification = false,
+  emailDeliveryEnabled = false,
   initialActivityVisibility,
   initialIntroductionVisibility,
   nicknameChangePointCost,
@@ -490,21 +494,23 @@ export function ProfileEditForm({
   }
 
   return (
-      <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        {normalizedSections.length > 1 ? normalizedSections.map((section) => (
-          <SectionTab
-            key={section}
-            label={profileSectionLabels[section]}
-            active={activeSection === section}
-            onClick={() => setActiveSection(section)}
-          />
-        )) : null}
-      </div>
+    <div className="space-y-5">
+      {normalizedSections.length > 1 ? (
+        <div className="flex flex-wrap gap-2">
+          {normalizedSections.map((section) => (
+            <SectionTab
+              key={section}
+              label={profileSectionLabels[section]}
+              active={activeSection === section}
+              onClick={() => setActiveSection(section)}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {activeSection === "basic" ? (
         <form onSubmit={handleBasicSubmit} className="space-y-5">
-          <div className="rounded-[24px] border border-border bg-card p-5">
+          <div className="rounded-[24px]  bg-card p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-medium">昵称</p>
@@ -518,7 +524,7 @@ export function ProfileEditForm({
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-border bg-card p-5 space-y-4">
+          <div className="rounded-[24px] bg-card p-5 space-y-4">
             <div>
               <p className="text-sm font-medium">账号名</p>
               <p className="mt-2 rounded-full bg-secondary px-4 py-3 text-sm text-muted-foreground">{username}</p>
@@ -572,12 +578,12 @@ export function ProfileEditForm({
       ) : null}
 
       {activeSection === "avatar" ? (
-        <div className="space-y-5 rounded-[24px] border border-border bg-card p-5">
+        <div className="space-y-5 rounded-[24px]  bg-card p-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="relative">
                 <UserAvatar name={nickname || username} avatarPath={previewUrl || pendingAvatarPath || undefined} size="lg" />
-                <div className="absolute -bottom-2 -right-2 rounded-full border border-border bg-background p-2 shadow-xs">
+                <div className="absolute -bottom-2 -right-2 rounded-full  bg-background p-2 shadow-xs">
                   {uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                 </div>
               </div>
@@ -638,7 +644,7 @@ export function ProfileEditForm({
       />
 
       {activeSection === "email" ? (
-        <form onSubmit={handleEmailSubmit} className="space-y-5 rounded-[24px] border border-border bg-card p-5">
+        <form onSubmit={handleEmailSubmit} className="space-y-5 rounded-[24px] bg-card p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-foreground">
               <Mail className="h-5 w-5" />
@@ -671,7 +677,7 @@ export function ProfileEditForm({
       ) : null}
 
       {activeSection === "password" ? (
-        <div className="rounded-[24px] border border-border bg-card p-5">
+        <div className="rounded-[24px]  bg-card p-5">
           <div className="mb-5 flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-foreground">
               <UserRound className="h-5 w-5" />
@@ -681,12 +687,18 @@ export function ProfileEditForm({
               <p className="mt-1 text-xs text-muted-foreground">为确保账户安全，修改密码后建议重新登录并妥善保管新密码。</p>
             </div>
           </div>
-          <PasswordChangeForm embedded />
+          <PasswordChangeForm
+            embedded
+            requireEmailVerification={passwordChangeRequireEmailVerification}
+            emailDeliveryEnabled={emailDeliveryEnabled}
+            currentEmail={email}
+            currentEmailVerified={emailVerified}
+          />
         </div>
       ) : null}
 
       {activeSection === "privacy" ? (
-        <div className="space-y-5 rounded-[24px] border border-border bg-card p-5">
+        <div className="space-y-5 rounded-[24px] bg-card p-5">
           <div>
             <p className="text-sm font-medium">主页隐私</p>
             <p className="mt-1 text-xs text-muted-foreground">分别控制“活动轨迹”和“介绍”在主页上的可见范围，登录公开表示只有登录后才能查看。</p>
@@ -873,4 +885,3 @@ function SectionTab({ label, active, onClick }: { label: string; active: boolean
     </button>
   )
 }
-

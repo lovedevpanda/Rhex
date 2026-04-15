@@ -53,7 +53,6 @@ function SecretTextarea(props: {
 
 export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAlipayAdminPageProps) {
   const [data, setData] = useState(initialData)
-  const [enabled, setEnabled] = useState(initialData.config.alipay.enabled)
   const [sandbox, setSandbox] = useState(initialData.config.alipay.sandbox)
   const [signMode, setSignMode] = useState(initialData.config.alipay.signMode)
   const [keyType, setKeyType] = useState(initialData.config.alipay.keyType)
@@ -79,7 +78,6 @@ export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAli
 
   function syncDraftFromData(nextData: PaymentGatewayAdminData) {
     setData(nextData)
-    setEnabled(nextData.config.alipay.enabled)
     setSandbox(nextData.config.alipay.sandbox)
     setSignMode(nextData.config.alipay.signMode)
     setKeyType(nextData.config.alipay.keyType)
@@ -103,7 +101,6 @@ export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAli
     return {
       config: {
         alipay: {
-          enabled,
           sandbox,
           signMode,
           keyType,
@@ -157,8 +154,7 @@ export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAli
     })
   }
 
-  const runtimeReady = enabled
-    && data.config.alipay.privateKeyConfigured
+  const runtimeReady = data.config.alipay.privateKeyConfigured
     && (
       signMode === "PUBLIC_KEY"
         ? data.config.alipay.alipayPublicKeyConfigured
@@ -182,9 +178,9 @@ export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAli
         </CardHeader>
         <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-border p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">接口开关</p>
-            <p className="mt-2 text-base font-semibold">{enabled ? "已启用" : "未启用"}</p>
-            <p className="mt-1 text-sm text-muted-foreground">关闭后，网关基础页里的支付宝通道和路由都不会生效。</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">当前提供方</p>
+            <p className="mt-2 text-base font-semibold">支付宝</p>
+            <p className="mt-1 text-sm text-muted-foreground">不再单独维护提供方开关，实际启停由基础页的支付通道控制。</p>
           </div>
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">运行环境</p>
@@ -209,16 +205,7 @@ export function PaymentGatewayAlipayAdminPage({ initialData }: PaymentGatewayAli
           <CardTitle>基础参数</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5 py-5">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">启用支付宝接口</p>
-                  <p className="mt-1 text-sm text-muted-foreground">总开关。</p>
-                </div>
-                <Switch checked={enabled} onCheckedChange={setEnabled} />
-              </div>
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-xl border border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>

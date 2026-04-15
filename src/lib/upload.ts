@@ -3,14 +3,13 @@ import { mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
 
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { Jimp, loadFont, measureText, measureTextHeight } from "jimp"
-import { SANS_8_WHITE, SANS_16_WHITE, SANS_32_WHITE, SANS_64_WHITE, SANS_128_WHITE } from "jimp/fonts"
 
 import { getServerSiteSettings } from "@/lib/site-settings"
 import { resolveUploadBaseUrl } from "@/lib/upload-path"
 import { normalizeUploadProvider } from "@/lib/upload-provider"
 import { buildUploadStoragePath } from "@/lib/upload-path"
 import { getUploadMimeType } from "@/lib/upload-rules"
+import { applyTextWatermarkToBuffer } from "@/lib/watermark-lib.server"
 
 export interface SavedUploadFile {
   fileName: string
@@ -29,21 +28,15 @@ export interface PreparedUploadFile {
 }
 
 type UploadSettings = Awaited<ReturnType<typeof getServerSiteSettings>>
-interface WatermarkImageLike {
-  bitmap: {
-    width: number
-    height: number
-    data: Buffer
-  }
-  scan(callback: (x: number, y: number, idx: number) => void): unknown
-}
 type ImageWatermarkConfig = Pick<
   UploadSettings,
   "imageWatermarkEnabled"
   | "imageWatermarkText"
   | "imageWatermarkPosition"
+  | "imageWatermarkTiled"
   | "imageWatermarkOpacity"
   | "imageWatermarkFontSize"
+  | "imageWatermarkFontFamily"
   | "imageWatermarkMargin"
   | "imageWatermarkColor"
 >
@@ -62,15 +55,6 @@ const IMAGE_MIME_TYPES = new Set([
 ])
 const WATERMARK_SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png"])
 const WATERMARK_APPLICABLE_FOLDERS = new Set(["posts", "comments", "post-covers"])
-const WATERMARK_FONT_PATHS = {
-  8: SANS_8_WHITE,
-  16: SANS_16_WHITE,
-  32: SANS_32_WHITE,
-  64: SANS_64_WHITE,
-  128: SANS_128_WHITE,
-} as const
-const PINGFANG_WATERMARK_FONT_PATH = path.join(process.cwd(), "public", "apps", "fonts", "PingFang_24_BLACK.fnt")
-const watermarkFontCache = new Map<string, Promise<Awaited<ReturnType<typeof loadFont>>>>()
 
 /**
  * 通过文件头魔数（magic bytes）检测真实 MIME 类型。
@@ -112,23 +96,6 @@ function detectSvgMimeType(buffer: Buffer): string | null {
   return null
 }
 
-function normalizeHexColorToRgb(hexColor: string) {
-  const normalized = hexColor.trim().replace(/^#/, "")
-  const expanded = normalized.length === 3
-    ? normalized.split("").map((char) => `${char}${char}`).join("")
-    : normalized
-
-  const red = Number.parseInt(expanded.slice(0, 2), 16)
-  const green = Number.parseInt(expanded.slice(2, 4), 16)
-  const blue = Number.parseInt(expanded.slice(4, 6), 16)
-
-  return {
-    red: Number.isFinite(red) ? red : 255,
-    green: Number.isFinite(green) ? green : 255,
-    blue: Number.isFinite(blue) ? blue : 255,
-  }
-}
-
 function shouldApplyImageWatermark(params: {
   detectedMime: string
   folder?: string
@@ -143,140 +110,6 @@ function shouldApplyImageWatermark(params: {
   )
 }
 
-function mapMimeTypeToJimpFormat(mimeType: string): "image/jpeg" | "image/png" {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "image/jpeg"
-    case "image/png":
-    default:
-      return "image/png"
-  }
-}
-
-function resolveWatermarkFontSize(fontSize: number) {
-  const availableFontSizes = Object.keys(WATERMARK_FONT_PATHS).map((item) => Number(item)).sort((left, right) => left - right)
-  let resolvedSize = availableFontSizes[0]
-
-  for (const candidate of availableFontSizes) {
-    resolvedSize = candidate
-    if (fontSize <= candidate) {
-      break
-    }
-  }
-
-  return resolvedSize as keyof typeof WATERMARK_FONT_PATHS
-}
-
-function containsNonAsciiText(value: string) {
-  return /[^\x00-\x7F]/.test(value)
-}
-
-async function getWatermarkFont(text: string, fontSize: number) {
-  if (containsNonAsciiText(text)) {
-    const cacheKey = `pingfang:24`
-    if (!watermarkFontCache.has(cacheKey)) {
-      watermarkFontCache.set(cacheKey, loadFont(PINGFANG_WATERMARK_FONT_PATH))
-    }
-
-    return {
-      font: await watermarkFontCache.get(cacheKey)!,
-      scaleRatio: Math.max(0.5, fontSize / 24),
-    }
-  }
-
-  const resolvedFontSize = resolveWatermarkFontSize(fontSize)
-  const cacheKey = `default:${resolvedFontSize}`
-
-  if (!watermarkFontCache.has(cacheKey)) {
-    watermarkFontCache.set(cacheKey, loadFont(WATERMARK_FONT_PATHS[resolvedFontSize]))
-  }
-
-  return {
-    font: await watermarkFontCache.get(cacheKey)!,
-    scaleRatio: 1,
-  }
-}
-
-function recolorTextWatermarkImage(image: WatermarkImageLike, hexColor: string, opacityPercent: number) {
-  const { red, green, blue } = normalizeHexColorToRgb(hexColor)
-  const opacityRatio = Math.min(1, Math.max(0, opacityPercent / 100))
-
-  image.scan((x: number, y: number, idx: number) => {
-    void x
-    void y
-    const alpha = image.bitmap.data[idx + 3]
-    if (alpha <= 0) {
-      return
-    }
-
-    image.bitmap.data[idx] = red
-    image.bitmap.data[idx + 1] = green
-    image.bitmap.data[idx + 2] = blue
-    image.bitmap.data[idx + 3] = Math.round(alpha * opacityRatio)
-  })
-}
-
-function resolveWatermarkPlacement(options: {
-  width: number
-  height: number
-  overlayWidth: number
-  overlayHeight: number
-  position: UploadSettings["imageWatermarkPosition"]
-  margin: number
-}) {
-  const { width, height, overlayWidth, overlayHeight, position, margin } = options
-
-  switch (position) {
-    case "TOP_LEFT":
-      return { x: margin, y: margin }
-    case "TOP_RIGHT":
-      return { x: Math.max(0, width - overlayWidth - margin), y: margin }
-    case "BOTTOM_LEFT":
-      return { x: margin, y: Math.max(0, height - overlayHeight - margin) }
-    case "CENTER":
-      return { x: Math.max(0, Math.round((width - overlayWidth) / 2)), y: Math.max(0, Math.round((height - overlayHeight) / 2)) }
-    case "BOTTOM_RIGHT":
-    default:
-      return { x: Math.max(0, width - overlayWidth - margin), y: Math.max(0, height - overlayHeight - margin) }
-  }
-}
-
-async function createTextWatermarkImage(baseImage: WatermarkImageLike, settings: ImageWatermarkConfig) {
-  const watermarkText = settings.imageWatermarkText.trim()
-  if (!watermarkText) {
-    return null
-  }
-
-  const margin = Math.max(0, settings.imageWatermarkMargin)
-  const availableWidth = Math.max(24, baseImage.bitmap.width - margin * 2)
-  const { font, scaleRatio } = await getWatermarkFont(watermarkText, settings.imageWatermarkFontSize)
-  const unscaledAvailableWidth = Math.max(24, Math.floor(availableWidth / scaleRatio))
-  const textWidth = Math.min(unscaledAvailableWidth, Math.max(1, measureText(font, watermarkText)))
-  const textHeight = Math.max(1, measureTextHeight(font, watermarkText, textWidth))
-  const textImage = new Jimp({ width: textWidth, height: textHeight, color: 0x00000000 })
-
-  textImage.print({
-    font,
-    x: 0,
-    y: 0,
-    text: watermarkText,
-    maxWidth: textWidth,
-    maxHeight: textHeight,
-  })
-  recolorTextWatermarkImage(textImage, settings.imageWatermarkColor, settings.imageWatermarkOpacity)
-
-  if (Math.abs(scaleRatio - 1) > 0.001) {
-    textImage.scale(scaleRatio)
-  }
-
-  return textImage
-}
-
-async function buildWatermarkOverlay(baseImage: WatermarkImageLike, fullSettings: WatermarkUploadSettings, settings: ImageWatermarkConfig) {
-  void fullSettings
-  return createTextWatermarkImage(baseImage, settings)
-}
-
 async function applyImageWatermarkToBuffer(params: {
   buffer: Buffer
   detectedMime: string
@@ -288,23 +121,20 @@ async function applyImageWatermarkToBuffer(params: {
   }
 
   try {
-    const image = await Jimp.read(params.buffer)
-    const overlay = await buildWatermarkOverlay(image, params.settings!, params.settings!)
-    if (!overlay) {
-      return params.buffer
-    }
-
-    const coordinates = resolveWatermarkPlacement({
-      width: image.bitmap.width,
-      height: image.bitmap.height,
-      overlayWidth: overlay.bitmap.width,
-      overlayHeight: overlay.bitmap.height,
-      position: params.settings!.imageWatermarkPosition,
-      margin: params.settings!.imageWatermarkMargin,
+    return await applyTextWatermarkToBuffer({
+      buffer: params.buffer,
+      mimeType: params.detectedMime === "image/jpeg" ? "image/jpeg" : "image/png",
+      settings: {
+        color: params.settings!.imageWatermarkColor,
+        fontSize: params.settings!.imageWatermarkFontSize,
+        fontFamily: params.settings!.imageWatermarkFontFamily,
+        margin: params.settings!.imageWatermarkMargin,
+        opacity: params.settings!.imageWatermarkOpacity,
+        position: params.settings!.imageWatermarkPosition,
+        text: params.settings!.imageWatermarkText,
+        tiled: params.settings!.imageWatermarkTiled,
+      },
     })
-    image.composite(overlay, coordinates.x, coordinates.y)
-
-    return await image.getBuffer(mapMimeTypeToJimpFormat(params.detectedMime))
   } catch (error) {
     console.warn("[upload] failed to apply image watermark, fallback to original image", error)
     return params.buffer

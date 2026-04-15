@@ -71,14 +71,26 @@ export function PostAuctionPanel({
   )
   const sliderValue = Math.min(Math.max(bidValue, sliderMin), sliderMax)
   const isSealedBid = auction.mode === "SEALED_BID"
+  const showBidAmounts = !isSealedBid || timing.hasEnded
   const isLeadingOpenAuctionBidder = auction.mode === "OPEN_ASCENDING" && auction.viewerHasJoined && auction.viewerIsLeader
   const phaseLabel = resolveAuctionPhaseLabel(auction, timing)
+  const timelineLabel = resolveAuctionTimelineLabel(auction, timing)
+  const timelineValue = resolveAuctionTimelineValue(auction, timing)
   const viewerCanBid = auction.viewerCanBid && timing.hasStarted && !timing.hasEnded
   const headlineLabel = timing.hasEnded && auction.finalPrice ? "成交价" : "当前价"
   const headlineAmount = timing.hasEnded
     ? auction.finalPrice ?? auction.leaderBidAmount ?? auction.startPrice
     : auction.leaderBidAmount ?? auction.startPrice
   const showWinnerSummary = timing.hasEnded && Boolean(auction.winnerUserId && auction.winnerUserName)
+  const viewerStateLabel = currentUserId
+    ? resolveViewerStateLabel(auction, pointName, isSealedBid, timing.hasEnded)
+    : null
+  const readonlyActionLabel = resolveAuctionReadonlyActionLabel({
+    auction,
+    currentUserId,
+    isSealedBid,
+    timing,
+  })
 
   async function loadParticipantPage(page: number) {
     setParticipantsLoading(true)
@@ -150,33 +162,42 @@ export function PostAuctionPanel({
         </CardHeader>
         <CardContent className="p-0">
           <div className="border-b bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.35)_1px,transparent_0)] [background-size:16px_16px] px-4 py-5 sm:px-5">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-foreground">
-                  <Gavel className="h-4 w-4" />
-                  <p className="text-lg font-semibold leading-none">{resolveAuctionStatusTitle(auction, timing)}</p>
-                  <Badge variant={timing.hasEnded ? "outline" : timing.hasStarted ? "secondary" : "outline"} className="rounded-full bg-background/80">
+                <div className="flex flex-col items-start gap-2 text-foreground sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Gavel className="h-4 w-4 shrink-0" />
+                    <p className="truncate text-base font-semibold leading-none sm:text-lg">{resolveAuctionStatusTitle(auction, timing)}</p>
+                  </div>
+                  <Badge variant={timing.hasEnded ? "outline" : timing.hasStarted ? "secondary" : "outline"} className="shrink-0 rounded-full bg-background/80">
                     {phaseLabel}
                   </Badge>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="flex items-center gap-2 text-foreground">
-                    <Clock3 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[1.9rem] font-semibold tracking-tight">{timing.countdown}</span>
+                <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-foreground sm:gap-2">
+                    <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
+                    <span className={cn(
+                      "shrink-0 whitespace-nowrap font-semibold leading-none tracking-tight",
+                      timing.hasEnded ? "text-[0.95rem] sm:text-base" : "text-[1.35rem] sm:text-[1.9rem]",
+                    )}
+                    >
+                      {timelineValue}
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:text-sm">{timelineLabel}</span>
                   </div>
                   {!isSealedBid ? (
-                    <Badge variant="outline" className="rounded-full bg-background/80">
+                    <Badge variant="outline" className="shrink-0 rounded-full bg-background/80">
                       {headlineLabel} {formatNumber(headlineAmount)} {pointName}
                     </Badge>
                   ) : null}
                   {!isSealedBid && !timing.hasEnded ? (
-                    <Badge variant="outline" className="rounded-full bg-background/80">
+                    <Badge variant="outline" className="shrink-0 rounded-full bg-background/80">
                       最低下一口 {formatNumber(auction.minNextBidAmount)} {pointName}
                     </Badge>
                   ) : null}
-                  {currentUserId ? (
-                    <Badge variant="secondary" className="rounded-full">
-                      {resolveViewerStateLabel(auction, pointName, isSealedBid, timing.hasEnded)}
+                  {viewerStateLabel ? (
+                    <Badge variant="secondary" className="shrink-0 rounded-full">
+                      {viewerStateLabel}
                     </Badge>
                   ) : null}
                 </div>
@@ -205,30 +226,22 @@ export function PostAuctionPanel({
               </div>
 
               {viewerCanBid ? (
-                <Button type="button" className="h-12 rounded-[16px] px-5 text-base" onClick={() => setShowBidModal(true)}>
+                <Button type="button" className="h-11 w-full rounded-[16px] px-4 text-sm sm:h-12 sm:w-auto sm:px-5 sm:text-base" onClick={() => setShowBidModal(true)}>
                   <Gavel data-icon="inline-start" />
                   {isLeadingOpenAuctionBidder ? "加价" : "出价"}
                 </Button>
               ) : !currentUserId && !timing.hasEnded ? (
                 <Link href="/login">
-                  <Button type="button" className="h-12 rounded-[16px] px-5 text-base">
+                  <Button type="button" className="h-11 w-full rounded-[16px] px-4 text-sm sm:h-12 sm:w-auto sm:px-5 sm:text-base">
                     <Gavel data-icon="inline-start" />
                     出价
                   </Button>
                 </Link>
-              ) : (
+              ) : readonlyActionLabel ? (
                 <Badge variant="outline" className="rounded-full px-3 py-1.5 text-sm">
-                  {timing.hasEnded
-                    ? phaseLabel
-                    : auction.viewerIsSeller
-                      ? "你是发起人"
-                    : !timing.hasStarted
-                      ? "未开始"
-                      : isSealedBid && auction.viewerHasJoined
-                        ? "已出价"
-                        : "暂不可出价"}
+                  {readonlyActionLabel}
                 </Badge>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -259,7 +272,7 @@ export function PostAuctionPanel({
                       vipLevel={participant.vipLevel}
                     />
                     <span className="max-w-28 truncate text-[11px] font-medium text-foreground sm:max-w-32">{participant.userName}</span>
-                    {!isSealedBid && participant.amount ? (
+                    {showBidAmounts && participant.amount !== null ? (
                       <span
                         className={cn(
                           "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
@@ -296,7 +309,9 @@ export function PostAuctionPanel({
               <div className="flex items-start gap-2">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
-                  {isSealedBid
+                  {isSealedBid && timing.hasEnded
+                    ? `竞拍已结束，当前已公开全部出价；本场按${auction.pricingRuleLabel}确定最终成交。`
+                    : isSealedBid
                     ? `${auction.pricingRuleLabel}，同价按出价时间先后决定优先顺序。`
                     : `新出价至少需达到 ${formatNumber(auction.minNextBidAmount)} ${pointName}，同价按时间先后决定优先顺序。`}
                 </p>
@@ -378,8 +393,12 @@ export function PostAuctionPanel({
       <Modal
         open={showParticipantsModal}
         onClose={() => setShowParticipantsModal(false)}
-        title={isSealedBid ? "全部参与用户" : "全部参与记录"}
-        description={isSealedBid ? `按最新参与时间排序，共 ${formatNumber(participantsTotal)} 人。` : `按最新出价时间排序，共 ${formatNumber(participantsTotal)} 条。`}
+        title={isSealedBid && timing.hasEnded ? "全部竞拍记录" : isSealedBid ? "全部参与用户" : "全部参与记录"}
+        description={isSealedBid
+          ? timing.hasEnded
+            ? `竞拍已结束，按参与时间排序，共 ${formatNumber(participantsTotal)} 人，出价已公开。`
+            : `按最新参与时间排序，共 ${formatNumber(participantsTotal)} 人。`
+          : `按最新出价时间排序，共 ${formatNumber(participantsTotal)} 条。`}
         size="lg"
         footer={(
           <div className="flex w-full items-center justify-between gap-3">
@@ -416,7 +435,7 @@ export function PostAuctionPanel({
               <TableRow>
                 <TableHead>时间</TableHead>
                 <TableHead>用户</TableHead>
-                {!isSealedBid ? <TableHead className="text-right">出价</TableHead> : null}
+                {showBidAmounts ? <TableHead className="text-right">出价</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -424,7 +443,7 @@ export function PostAuctionPanel({
                 <TableRow key={item.id}>
                   <TableCell>{formatDateTime(item.createdAt)}</TableCell>
                   <TableCell>{item.userName}</TableCell>
-                  {!isSealedBid ? <TableCell className="text-right">{item.amount ? `${formatNumber(item.amount)} ${pointName}` : "-"}</TableCell> : null}
+                  {showBidAmounts ? <TableCell className="text-right">{item.amount !== null ? `${formatNumber(item.amount)} ${pointName}` : "-"}</TableCell> : null}
                 </TableRow>
               ))}
             </TableBody>
@@ -493,6 +512,10 @@ function resolveAuctionStatusTitle(auction: AuctionSummary, timing: Pick<Auction
       return auction.mode === "SEALED_BID" ? "竞拍已取消" : "拍卖已取消"
     }
 
+    if (auction.status === "SETTLING") {
+      return auction.mode === "SEALED_BID" ? "竞拍结算中" : "拍卖结算中"
+    }
+
     return auction.mode === "SEALED_BID" ? "竞拍已结束" : "拍卖已结束"
   }
 
@@ -523,12 +546,58 @@ function resolveAuctionPhaseLabel(auction: AuctionSummary, timing: Pick<AuctionT
   return timing.hasStarted ? "进行中" : "未开始"
 }
 
+function resolveAuctionTimelineLabel(auction: AuctionSummary, timing: Pick<AuctionTimingState, "hasStarted" | "hasEnded">) {
+  if (timing.hasEnded) {
+    return auction.status === "SETTLING" ? "结算状态" : "结束时间"
+  }
+
+  return timing.hasStarted ? "距结束" : "距开始"
+}
+
+function resolveAuctionTimelineValue(auction: AuctionSummary, timing: Pick<AuctionTimingState, "hasStarted" | "hasEnded" | "countdown">) {
+  if (timing.hasEnded) {
+    return formatDateTime(auction.endsAt)
+  }
+
+  return timing.countdown
+}
+
+function resolveAuctionReadonlyActionLabel({
+  auction,
+  currentUserId,
+  isSealedBid,
+  timing,
+}: {
+  auction: AuctionSummary
+  currentUserId?: number
+  isSealedBid: boolean
+  timing: Pick<AuctionTimingState, "hasStarted" | "hasEnded">
+}) {
+  if (!currentUserId || timing.hasEnded) {
+    return null
+  }
+
+  if (!timing.hasStarted) {
+    return "未开始"
+  }
+
+  if (auction.viewerIsSeller || (isSealedBid && auction.viewerHasJoined)) {
+    return null
+  }
+
+  return "暂不可出价"
+}
+
 function resolveViewerStateLabel(auction: AuctionSummary, pointName: string, isSealedBid: boolean, hasEnded: boolean) {
   if (auction.viewerIsSeller) {
     return "发起人"
   }
 
   if (hasEnded) {
+    if (auction.status === "SETTLING" && auction.viewerHasJoined && auction.viewerStatus === "ACTIVE") {
+      return "等待结算"
+    }
+
     switch (auction.viewerStatus) {
       case "WON":
         return "已中标"

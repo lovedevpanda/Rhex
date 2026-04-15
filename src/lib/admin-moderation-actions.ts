@@ -12,6 +12,7 @@ import { defineAdminAction, writeAdminActionLog, type AdminActionDefinition } fr
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { ensureCanEditBoard, ensureCanManageComment } from "@/lib/moderator-permissions"
 import { createSystemNotification } from "@/lib/notification-writes"
+import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 
 
 export const adminModerationActionHandlers: Record<string, AdminActionDefinition> = {
@@ -136,6 +137,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
     const board = await findBoardPostingState(context.targetId)
     if (!board) apiError(404, "版块不存在")
     await updateBoardPostingState(context.targetId, !board.allowPost)
+    expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminModerationActionHandlers["board.togglePosting"].metadata)
     return { message: board.allowPost ? "已关闭发帖" : "已开放发帖" }
   }),
@@ -145,6 +147,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
     if (!board) apiError(404, "版块不存在")
     const nextStatus = board.status === BoardStatus.HIDDEN ? BoardStatus.ACTIVE : BoardStatus.HIDDEN
     await updateBoardVisibilityState(context.targetId, nextStatus)
+    expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminModerationActionHandlers["board.hide"].metadata)
     return { message: nextStatus === BoardStatus.HIDDEN ? "版块已隐藏" : "版块已恢复显示" }
   }),

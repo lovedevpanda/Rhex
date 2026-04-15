@@ -124,7 +124,7 @@ function buildTagFrequency(text: string) {
 }
 
 export function extractAutoTags(title: string, content: string, limit = 10) {
-  const maxCount = Math.max(0, Math.min(limit, 10))
+  const maxCount = Math.max(0, Math.min(limit, 50))
   const sourceText = normalizeWhitespace(`${title} ${content}`)
   const result = buildTagFrequency(sourceText).entries()
 

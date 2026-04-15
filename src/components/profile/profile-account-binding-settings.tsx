@@ -204,8 +204,8 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
         </div>
       ) : null}
 
-      <div className="rounded-[24px] border border-border bg-card p-5">
-        <div className="flex items-start gap-3">
+      <div className="rounded-[24px] bg-card p-5 ">
+        <div className="flex items-start gap-3 ">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
             <Link2 className="h-5 w-5" />
           </div>
@@ -219,7 +219,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           {providers.map((binding) => (
-            <div key={binding.provider} className="rounded-[22px] border border-border bg-background p-4">
+            <div key={binding.provider} className="rounded-[22px] bg-background p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">{binding.label}</p>
@@ -269,7 +269,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-border bg-card p-5">
+      <div className="rounded-[24px] bg-card p-5">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
             <KeyRound className="h-5 w-5" />
@@ -282,7 +282,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
           </div>
         </div>
 
-        <div className="mt-5 rounded-[22px] border border-border bg-background p-4">
+        <div className="mt-5 rounded-[22px] bg-background p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">Passkey 列表</p>
@@ -310,7 +310,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
                 当前还没有绑定任何 Passkey。
               </div>
             ) : passkey.items.map((item) => (
-              <div key={item.id} className="rounded-[18px] border border-border px-4 py-4">
+              <div key={item.id} className="rounded-[18px] px-4 py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">{item.name}</p>

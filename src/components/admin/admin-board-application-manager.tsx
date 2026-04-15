@@ -11,6 +11,7 @@ import type {
   BoardApplicationItem,
   BoardApplicationReviewFormState,
 } from "@/components/admin/admin-structure.types"
+import { LevelIcon } from "@/components/level-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -94,7 +95,13 @@ export function AdminBoardApplicationManager({
                     <TableCell className="align-top">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-lg">{item.icon}</span>
+                          <LevelIcon
+                            icon={item.icon}
+                            className="h-5 w-5 shrink-0 text-lg"
+                            emojiClassName="text-inherit leading-none"
+                            svgClassName="[&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                            title={`${item.name} 图标`}
+                          />
                           <span className="text-sm font-semibold">{item.name}</span>
                           <BoardApplicationStatusBadge status={item.status} />
                         </div>

@@ -50,6 +50,7 @@ const adminSettingsSectionDetails: Record<
       { key: "invite-codes", label: "邀请码管理" },
       { key: "captcha", label: "验证码" },
       { key: "fields", label: "表单字段" },
+      { key: "security", label: "安全" },
       { key: "email-templates", label: "邮件模板" },
       { key: "auth", label: "第三方登录" },
       { key: "smtp", label: "SMTP 邮件" },

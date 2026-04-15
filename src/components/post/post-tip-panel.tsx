@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 interface PostTipPanelProps {
   postId: string
   enabled: boolean
+  isLoggedIn: boolean
   pointName: string
   currentUserPoints: number
   gifts: SiteTippingGiftItem[]
@@ -42,6 +43,7 @@ interface PostTipPanelProps {
 
 interface TipSummaryPayload {
   enabled: boolean
+  isLoggedIn: boolean
   pointName: string
   currentUserPoints: number
   gifts: SiteTippingGiftItem[]
@@ -81,6 +83,7 @@ const GIFT_FLOAT_LANES = [-18, 0, 18] as const
 export function PostTipPanel({
   postId,
   enabled,
+  isLoggedIn,
   pointName,
   currentUserPoints,
   gifts,
@@ -127,10 +130,13 @@ export function PostTipPanel({
     [gifts, selectedGiftId],
   )
   const effectiveSelectedAmount = allowedAmounts.includes(selectedAmount) ? selectedAmount : (allowedAmounts[0] ?? 0)
-  const canTip = enabled && effectiveSelectedAmount > 0 && todayUsed < dailyLimit && postUsed < perPostLimit && points >= effectiveSelectedAmount
+  const canTip = enabled && isLoggedIn && effectiveSelectedAmount > 0 && todayUsed < dailyLimit && postUsed < perPostLimit && points >= effectiveSelectedAmount
   const tipHelperText = useMemo(() => {
     if (!enabled) {
       return "当前未开启积分打赏"
+    }
+    if (!isLoggedIn) {
+      return "请登录后参与打赏"
     }
     if (todayUsed >= dailyLimit) {
       return `今日打赏次数已用完（${dailyLimit}/${dailyLimit}）`
@@ -142,7 +148,7 @@ export function PostTipPanel({
       return `当前${pointName}余额不足，暂时无法打赏`
     }
     return `今日还能打赏 ${Math.max(0, dailyLimit - todayUsed)} 次，本帖还能打赏 ${Math.max(0, perPostLimit - postUsed)} 次`
-  }, [dailyLimit, enabled, perPostLimit, pointName, points, postUsed, todayUsed])
+  }, [dailyLimit, enabled, isLoggedIn, perPostLimit, pointName, points, postUsed, todayUsed])
   const compactSupporters = supporters.slice(0, 6)
   const giftStatMap = useMemo(
     () => new Map(giftSummary.map((item) => [item.giftId, item])),
@@ -264,6 +270,9 @@ export function PostTipPanel({
   function getTipBlockedMessage(amount: number, mode: "gift" | "tip") {
     if (!enabled) {
       return "当前未开启积分打赏"
+    }
+    if (!isLoggedIn) {
+      return mode === "gift" ? "请登录后参与送礼" : "请登录后参与打赏"
     }
     if (todayUsed >= dailyLimit) {
       return `今日打赏次数已用完（${dailyLimit}/${dailyLimit}）`
@@ -573,7 +582,11 @@ export function PostTipPanel({
                 <Button type="button" onClick={() => handleTip({ mode: "tip", amount: effectiveSelectedAmount })} disabled={!canTip || isPending} className="h-8 rounded-xl px-3.5 text-xs">
                   {isPending ? "打赏中..." : effectiveSelectedAmount > 0 ? `打赏 ${formatNumber(effectiveSelectedAmount)} ${pointName}` : "选择金额"}
                 </Button>
-                {points <= 0 ? (
+                {!isLoggedIn ? (
+                  <Link href="/login" className="text-xs text-primary hover:opacity-80">
+                    去登录
+                  </Link>
+                ) : points <= 0 ? (
                   <Link href="/topup" className="text-xs text-primary hover:opacity-80">
                     去充值 / 兑换
                   </Link>

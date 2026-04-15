@@ -9,6 +9,7 @@ export function countAdminLogTabs() {
     prisma.userCheckInLog.count(),
     prisma.pointLog.count(),
     prisma.upload.count(),
+    prisma.paymentOrder.count(),
     prisma.vipOrder.count(),
   ])
 }
@@ -122,6 +123,27 @@ export function findUploadLogsPage(where: Prisma.UploadWhereInput, skip: number,
 
 export function countVipOrders(where: Prisma.VipOrderWhereInput) {
   return prisma.vipOrder.count({ where })
+}
+
+export function countPaymentOrders(where: Prisma.PaymentOrderWhereInput) {
+  return prisma.paymentOrder.count({ where })
+}
+
+export function findPaymentOrdersPage(where: Prisma.PaymentOrderWhereInput, skip: number, take: number) {
+  return prisma.paymentOrder.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      user: {
+        select: {
+          username: true,
+          nickname: true,
+        },
+      },
+    },
+    skip,
+    take,
+  })
 }
 
 export function findVipOrdersPage(where: Prisma.VipOrderWhereInput, skip: number, take: number) {

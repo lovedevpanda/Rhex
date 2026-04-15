@@ -76,6 +76,7 @@ export function MessageConversationSidebar({ conversations, activeConversationId
         {filteredConversations.length === 0 ? <p className="px-3 py-8 text-sm text-muted-foreground">没有匹配的会话。</p> : null}
         {filteredConversations.map((conversation) => {
           const active = conversation.id === activeConversationId
+          const hasUnread = conversation.unreadCount > 0
           const mainParticipant = conversation.participants.find((item) => !item.isCurrentUser) ?? conversation.participants[0]
           const isDeleting = deletingConversationId === conversation.id
           const profileHref = `/users/${mainParticipant.username}`
@@ -84,11 +85,15 @@ export function MessageConversationSidebar({ conversations, activeConversationId
             <div
               key={conversation.id}
               className={cn(
-                "group flex items-start gap-3 rounded-[20px] border px-3.5 py-3.5 transition-colors",
-                active ? "border-foreground/15 bg-secondary/60" : "border-transparent hover:border-border hover:bg-secondary/40",
+                "group flex items-center gap-3 rounded-[20px] border px-3.5 py-3 transition-colors",
+                active
+                  ? "border-foreground/15 bg-secondary/60"
+                  : hasUnread
+                    ? "border-emerald-200/60 bg-emerald-50/40 hover:border-emerald-200/80 hover:bg-emerald-50/55 dark:border-emerald-400/12 dark:bg-emerald-400/[0.06] dark:hover:border-emerald-400/20 dark:hover:bg-emerald-400/[0.1]"
+                    : "border-transparent hover:border-border hover:bg-secondary/40",
               )}
             >
-              <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Link
                   href={profileHref}
                   className="relative z-10 shrink-0 rounded-2xl focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -96,25 +101,13 @@ export function MessageConversationSidebar({ conversations, activeConversationId
                 >
                   <div className="relative shrink-0">
                     <UserAvatar name={mainParticipant.displayName} avatarPath={mainParticipant.avatarPath} size="md" />
-                    {conversation.unreadCount > 0 ? <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">{conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}</span> : null}
+                    {conversation.unreadCount > 0 ? <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border border-background bg-rose-500 px-1 text-[10px] font-semibold text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-card dark:bg-rose-300 dark:text-rose-950 dark:shadow-none">{conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}</span> : null}
                   </div>
                 </Link>
-                <button type="button" onClick={() => handleSelect(conversation.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                <button type="button" onClick={() => handleSelect(conversation.id)} className="flex min-w-0 flex-1 items-center text-left">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link
-                          href={profileHref}
-                          className="relative z-10 truncate text-sm font-semibold transition-colors hover:text-foreground/80 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {conversation.title}
-                        </Link>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{conversation.subtitle}</p>
-                      </div>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">{conversation.updatedAt}</span>
-                    </div>
-                    <p className="mt-2.5 line-clamp-2 text-sm leading-6 text-muted-foreground">{conversation.preview}</p>
+                      {conversation.title}
+                    <p className={cn("mt-1 truncate text-xs", hasUnread && !active ? "text-foreground/65 dark:text-foreground/60" : "text-muted-foreground")}>{conversation.updatedAt}</p>
                   </div>
                 </button>
               </div>

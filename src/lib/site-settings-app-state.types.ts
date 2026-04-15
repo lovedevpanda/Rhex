@@ -120,8 +120,10 @@ export interface ImageWatermarkSettings {
   enabled: boolean
   text: string
   position: ImageWatermarkPosition
+  tiled: boolean
   opacity: number
   fontSize: number
+  fontFamily: string
   margin: number
   color: string
   logoPath: string
@@ -162,6 +164,11 @@ export interface RegisterNicknameLengthSettings {
 export interface RegisterEmailWhitelistSettings {
   enabled: boolean
   domains: string[]
+}
+
+export interface SiteSecuritySettings {
+  loginIpChangeEmailAlertEnabled: boolean
+  passwordChangeRequireEmailVerification: boolean
 }
 
 export type PostSlugGenerationMode = "TITLE_TIMESTAMP" | "TIME36" | "PINYIN_TIME36" | "TITLE_TIME36"

@@ -14,12 +14,14 @@ import {
   verifyAlipayNotifySignature,
 } from "@/lib/payment-gateway-alipay"
 import { getPaymentGatewayConfig, getServerPaymentGatewayConfig } from "@/lib/payment-gateway-config"
-import { listPaymentGatewayChannelDefinitions } from "@/lib/payment-gateway-registry"
+import { maybeEnqueuePaymentGatewayOrderSuccessEmail, type PaymentGatewayOrderSuccessEmailSnapshot } from "@/lib/payment-gateway-email-notifications"
+import { findPaymentGatewayChannelDefinition, listPaymentGatewayChannelDefinitions } from "@/lib/payment-gateway-registry"
 import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 import { applyPointDelta } from "@/lib/point-center"
 import type {
   PaymentGatewayAdminData,
   PaymentGatewayCheckoutResult,
+  PaymentGatewayCheckoutMethodOption,
   PaymentGatewayClientType,
   PaymentGatewayRouteRule,
   ServerPaymentGatewayConfigData,
@@ -35,14 +37,6 @@ function formatUserDisplayName(user: { username: string; nickname: string | null
   }
 
   return user.nickname ?? user.username
-}
-
-function resolveProviderEnabled(config: ServerPaymentGatewayConfigData, providerCode: string) {
-  if (providerCode === "alipay") {
-    return config.alipay.enabled
-  }
-
-  return false
 }
 
 function buildRouteWeight(route: PaymentGatewayRouteRule, scene: string, clientType: PaymentGatewayClientType) {
@@ -67,7 +61,97 @@ function buildRouteWeight(route: PaymentGatewayRouteRule, scene: string, clientT
   return score
 }
 
-function resolvePaymentRoute(config: ServerPaymentGatewayConfigData, scene: string, clientType: PaymentGatewayClientType) {
+function buildRouteSceneWeight(route: PaymentGatewayRouteRule, scene: string) {
+  if (route.scene === scene) {
+    return 100
+  }
+
+  if (route.scene === "*") {
+    return 10
+  }
+
+  return -1
+}
+
+function isProviderRunnable(config: ServerPaymentGatewayConfigData, providerCode: string) {
+  if (providerCode === "alipay") {
+    return isAlipayConfigRunnable(config.alipay)
+  }
+
+  return false
+}
+
+function listCheckoutMethodOptionsForScene(config: ServerPaymentGatewayConfigData, scene: string): PaymentGatewayCheckoutMethodOption[] {
+  const enabledChannels = new Set(
+    config.channels
+      .filter((item) => item.enabled)
+      .map((item) => item.channelCode),
+  )
+  const methodMap = new Map<string, PaymentGatewayCheckoutMethodOption & { sceneWeight: number; priority: number }>()
+
+  for (const route of config.routes) {
+    const sceneWeight = buildRouteSceneWeight(route, scene)
+    if (!route.enabled || sceneWeight < 0 || !enabledChannels.has(route.channelCode) || !isProviderRunnable(config, route.providerCode)) {
+      continue
+    }
+
+    const definition = findPaymentGatewayChannelDefinition(route.channelCode)
+    if (!definition) {
+      continue
+    }
+
+    const concreteClientTypes = route.clientType === "ANY"
+      ? definition.clientTypes.filter((item) => item !== "ANY")
+      : (definition.clientTypes.includes(route.clientType) ? [route.clientType] : [])
+
+    for (const checkoutClientType of concreteClientTypes) {
+      const key = `${definition.channelCode}:${checkoutClientType}`
+      const current = methodMap.get(key)
+      const next = {
+        id: key,
+        providerCode: definition.providerCode,
+        channelCode: definition.channelCode,
+        label: definition.label,
+        description: route.description.trim() || definition.description,
+        presentationType: definition.presentationType,
+        checkoutClientType,
+        sceneWeight,
+        priority: route.priority,
+      }
+
+      if (!current || next.sceneWeight > current.sceneWeight || (next.sceneWeight === current.sceneWeight && next.priority < current.priority)) {
+        methodMap.set(key, next)
+      }
+    }
+  }
+
+  return [...methodMap.values()]
+    .sort((left, right) => {
+      if (right.sceneWeight !== left.sceneWeight) {
+        return right.sceneWeight - left.sceneWeight
+      }
+      if (left.priority !== right.priority) {
+        return left.priority - right.priority
+      }
+      return left.label.localeCompare(right.label, "zh-CN")
+    })
+    .map((item) => ({
+      id: item.id,
+      providerCode: item.providerCode,
+      channelCode: item.channelCode,
+      label: item.label,
+      description: item.description,
+      presentationType: item.presentationType,
+      checkoutClientType: item.checkoutClientType,
+    }))
+}
+
+function resolvePaymentRoute(
+  config: ServerPaymentGatewayConfigData,
+  scene: string,
+  clientType: PaymentGatewayClientType,
+  preferredChannelCode?: string | null,
+) {
   const enabledChannels = new Set(
     config.channels
       .filter((item) => item.enabled)
@@ -77,7 +161,7 @@ function resolvePaymentRoute(config: ServerPaymentGatewayConfigData, scene: stri
   const candidates = config.routes
     .filter((route) => route.enabled)
     .filter((route) => enabledChannels.has(route.channelCode))
-    .filter((route) => resolveProviderEnabled(config, route.providerCode))
+    .filter((route) => !preferredChannelCode || route.channelCode === preferredChannelCode)
     .map((route) => ({
       route,
       weight: buildRouteWeight(route, scene, clientType),
@@ -354,7 +438,11 @@ export async function clearPaymentGatewayAdminLogs() {
 }
 
 export async function getEnabledPointTopupPackages() {
-  const config = await getPaymentGatewayConfig()
+  const config = await getServerPaymentGatewayConfig()
+  const paymentMethods = config.enabled && config.topupEnabled
+    ? listCheckoutMethodOptionsForScene(config, "points.topup")
+    : []
+
   return {
     enabled: config.enabled && config.topupEnabled,
     packages: config.topupPackages
@@ -370,6 +458,7 @@ export async function getEnabledPointTopupPackages() {
     customMinAmountFen: config.topupCustomMinAmountFen,
     customMaxAmountFen: config.topupCustomMaxAmountFen,
     customPointsPerYuan: config.topupCustomPointsPerYuan,
+    paymentMethods,
   }
 }
 
@@ -385,6 +474,7 @@ export async function createPaymentCheckout(input: {
   body?: string | null
   amountFen: number
   clientType: PaymentGatewayClientType
+  preferredChannelCode?: string | null
   returnPath?: string | null
   returnPathTemplate?: string | null
   metadata?: Record<string, unknown> | null
@@ -409,9 +499,14 @@ export async function createPaymentCheckout(input: {
     apiError(400, "当前支付网关未启用")
   }
 
-  const route = resolvePaymentRoute(config, scene, input.clientType)
+  const preferredChannelCode = input.preferredChannelCode?.trim() || null
+  if (preferredChannelCode && !findPaymentGatewayChannelDefinition(preferredChannelCode)) {
+    apiError(400, "所选支付方式不存在")
+  }
+
+  const route = resolvePaymentRoute(config, scene, input.clientType, preferredChannelCode)
   if (!route) {
-    apiError(400, "当前支付场景未配置可用路由，请联系管理员")
+    apiError(400, preferredChannelCode ? "当前所选支付方式暂不可用，请重新选择" : "当前支付场景未配置可用路由，请联系管理员")
   }
 
   if (route.providerCode === "alipay" && !isAlipayConfigRunnable(config.alipay)) {
@@ -560,6 +655,7 @@ export async function createPaymentCheckout(input: {
 
 async function fulfillPointTopupOrder(orderId: string) {
   const settings = await getSiteSettings()
+  let successEmailSnapshot: PaymentGatewayOrderSuccessEmailSnapshot | null = null
 
   const promoted = await prisma.paymentOrder.updateMany({
     where: {
@@ -588,8 +684,21 @@ async function fulfillPointTopupOrder(orderId: string) {
           id: true,
           userId: true,
           merchantOrderNo: true,
+          bizScene: true,
+          subject: true,
+          amountFen: true,
+          currency: true,
+          providerCode: true,
+          channelCode: true,
+          paidAt: true,
           metadataJson: true,
           fulfillmentStatus: true,
+          user: {
+            select: {
+              username: true,
+              nickname: true,
+            },
+          },
         },
       })
 
@@ -607,6 +716,22 @@ async function fulfillPointTopupOrder(orderId: string) {
             fulfillmentErrorMessage: null,
           },
         })
+
+        successEmailSnapshot = {
+          merchantOrderNo: order.merchantOrderNo,
+          bizScene: order.bizScene,
+          orderSubject: order.subject,
+          amountFen: order.amountFen,
+          currency: order.currency,
+          providerCode: order.providerCode,
+          channelCode: order.channelCode,
+          paidAt: order.paidAt?.toISOString() ?? new Date().toISOString(),
+          username: formatUserDisplayName(order.user),
+          pointName: null,
+          points: null,
+          bonusPoints: null,
+          totalPoints: null,
+        }
         return
       }
 
@@ -658,7 +783,27 @@ async function fulfillPointTopupOrder(orderId: string) {
           fulfillmentErrorMessage: null,
         },
       })
+
+      successEmailSnapshot = {
+        merchantOrderNo: order.merchantOrderNo,
+        bizScene: order.bizScene,
+        orderSubject: order.subject,
+        amountFen: order.amountFen,
+        currency: order.currency,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        paidAt: order.paidAt?.toISOString() ?? new Date().toISOString(),
+        username: formatUserDisplayName(order.user),
+        pointName: settings.pointName,
+        points: topup.points,
+        bonusPoints: topup.bonusPoints,
+        totalPoints: topup.totalPoints,
+      }
     })
+
+    if (successEmailSnapshot) {
+      await maybeEnqueuePaymentGatewayOrderSuccessEmail(successEmailSnapshot)
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "积分充值履约失败"
     await prisma.paymentOrder.update({
@@ -926,6 +1071,7 @@ export async function createPointTopupCheckout(input: {
   packageId?: string | null
   customAmountFen?: number | null
   clientType: PaymentGatewayClientType
+  preferredChannelCode?: string | null
   requestIp?: string | null
 }) {
   const config = await getServerPaymentGatewayConfig()
@@ -977,6 +1123,7 @@ export async function createPointTopupCheckout(input: {
     body: `${points}${settings.pointName}${bonusPoints > 0 ? ` + 赠送 ${bonusPoints}${settings.pointName}` : ""}`,
     amountFen,
     clientType: input.clientType,
+    preferredChannelCode: input.preferredChannelCode,
     returnPathTemplate: "/topup/result?merchantOrderNo={merchantOrderNo}",
     metadata: {
       kind: "points.topup",

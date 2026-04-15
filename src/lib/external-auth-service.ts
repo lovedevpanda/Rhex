@@ -16,6 +16,7 @@ import {
   recordSuccessfulExternalLoginByUserId,
   runExternalAuthTransaction,
 } from "@/db/external-auth-user-queries"
+import { maybeEnqueueLoginIpChangeAlert } from "@/lib/account-security"
 import { findUserByNicknameInsensitive } from "@/db/user-queries"
 import { apiError } from "@/lib/api-route"
 import { getExternalAuthProviderLabel } from "@/lib/auth-provider-config"
@@ -46,6 +47,7 @@ import type { ExternalAuthProvider } from "@/lib/external-auth-types"
 interface AuthenticatedUserSummary {
   id: number
   username: string
+  lastLoginIp?: string | null
 }
 
 interface ExternalAuthPendingResult {
@@ -484,6 +486,12 @@ export async function completePendingExternalAuthBind(input: {
 export async function recordSuccessfulExternalLogin(request: Request, user: AuthenticatedUserSummary) {
   const loginIp = getRequestIp(request)
   await recordSuccessfulExternalLoginByUserId(user.id, loginIp, request.headers.get("user-agent"))
+  void maybeEnqueueLoginIpChangeAlert({
+    userId: user.id,
+    previousIp: user.lastLoginIp,
+    currentIp: loginIp,
+    userAgent: request.headers.get("user-agent"),
+  })
 }
 
 export async function attachAuthenticatedSession(response: NextResponse, request: Request, user: AuthenticatedUserSummary) {

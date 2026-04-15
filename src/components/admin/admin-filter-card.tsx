@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { ChevronDown, ChevronUp, RotateCcw, Search } from "lucide-react"
 
@@ -63,8 +63,18 @@ export function AdminFilterCard({
   children,
   defaultOpen = false,
 }: AdminFilterCardProps) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(() => defaultOpen || activeBadges.length > 0)
   const showFooter = open || activeBadges.length > 0
+
+  useEffect(() => {
+    if (activeBadges.length > 0) {
+      const timer = window.setTimeout(() => {
+        setOpen(true)
+      }, 0)
+
+      return () => window.clearTimeout(timer)
+    }
+  }, [activeBadges.length])
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>

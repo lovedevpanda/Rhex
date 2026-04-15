@@ -4,7 +4,7 @@ import Image from "next/image"
 import { Loader2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/rbutton"
-import { buildDefaultRegistrationEmailTemplateSettings } from "@/lib/email-template-settings"
+import { buildDefaultRegistrationEmailTemplateSettings, normalizeRegistrationEmailTemplateSettings } from "@/lib/email-template-settings"
 import { POST_LIST_LOAD_MODE_INFINITE, POST_LIST_LOAD_MODE_PAGINATION, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { POST_LIST_DISPLAY_MODE_DEFAULT, POST_LIST_DISPLAY_MODE_GALLERY, type PostListDisplayMode } from "@/lib/post-list-display"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
@@ -96,6 +96,8 @@ export interface AdminBasicSettingsInitialSettings {
   registerEmailEnabled: boolean
   registerEmailRequired: boolean
   registerEmailVerification: boolean
+  loginIpChangeEmailAlertEnabled: boolean
+  passwordChangeRequireEmailVerification: boolean
   registerEmailWhitelistEnabled: boolean
   registerEmailWhitelistDomains: string[]
   registerPhoneEnabled: boolean
@@ -223,6 +225,8 @@ export interface AdminBasicSettingsDraft {
   registerEmailEnabled: boolean
   registerEmailRequired: boolean
   registerEmailVerification: boolean
+  loginIpChangeEmailAlertEnabled: boolean
+  passwordChangeRequireEmailVerification: boolean
   registerEmailWhitelistEnabled: boolean
   registerEmailWhitelistDomains: string
   registerPhoneEnabled: boolean
@@ -241,6 +245,15 @@ export interface AdminBasicSettingsDraft {
   resetPasswordEmailSubject: string
   resetPasswordEmailText: string
   resetPasswordEmailHtml: string
+  passwordChangeEmailSubject: string
+  passwordChangeEmailText: string
+  passwordChangeEmailHtml: string
+  loginIpChangeAlertEmailSubject: string
+  loginIpChangeAlertEmailText: string
+  loginIpChangeAlertEmailHtml: string
+  paymentOrderSuccessEmailSubject: string
+  paymentOrderSuccessEmailText: string
+  paymentOrderSuccessEmailHtml: string
   authGithubEnabled: boolean
   authGoogleEnabled: boolean
   authPasskeyEnabled: boolean
@@ -300,7 +313,10 @@ function getDefaultInteractionGates(): InteractionGateSettings {
 
 export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSettingsInitialSettings): AdminBasicSettingsDraft {
   const interactionGates = initialSettings.interactionGates ?? getDefaultInteractionGates()
-  const registrationEmailTemplates = initialSettings.registrationEmailTemplates ?? buildDefaultRegistrationEmailTemplateSettings(initialSettings.siteName)
+  const registrationEmailTemplates = normalizeRegistrationEmailTemplateSettings(
+    initialSettings.registrationEmailTemplates,
+    buildDefaultRegistrationEmailTemplateSettings(initialSettings.siteName),
+  )
   const postCreateConditions = interactionGates.actions.POST_CREATE?.conditions ?? []
   const commentCreateConditions = interactionGates.actions.COMMENT_CREATE?.conditions ?? []
   const postCreateRequireEmailVerified = postCreateConditions.some((condition) => condition.type === "EMAIL_VERIFIED")
@@ -413,6 +429,8 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     registerEmailEnabled: coerceBoolean(initialSettings.registerEmailEnabled, false),
     registerEmailRequired: coerceBoolean(initialSettings.registerEmailRequired, false),
     registerEmailVerification: coerceBoolean(initialSettings.registerEmailVerification, false),
+    loginIpChangeEmailAlertEnabled: coerceBoolean(initialSettings.loginIpChangeEmailAlertEnabled, false),
+    passwordChangeRequireEmailVerification: coerceBoolean(initialSettings.passwordChangeRequireEmailVerification, false),
     registerEmailWhitelistEnabled: coerceBoolean(initialSettings.registerEmailWhitelistEnabled, false),
     registerEmailWhitelistDomains: Array.isArray(initialSettings.registerEmailWhitelistDomains)
       ? initialSettings.registerEmailWhitelistDomains.join("\n")
@@ -433,6 +451,15 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     resetPasswordEmailSubject: registrationEmailTemplates.resetPasswordVerification.subject,
     resetPasswordEmailText: registrationEmailTemplates.resetPasswordVerification.text,
     resetPasswordEmailHtml: registrationEmailTemplates.resetPasswordVerification.html,
+    passwordChangeEmailSubject: registrationEmailTemplates.passwordChangeVerification.subject,
+    passwordChangeEmailText: registrationEmailTemplates.passwordChangeVerification.text,
+    passwordChangeEmailHtml: registrationEmailTemplates.passwordChangeVerification.html,
+    loginIpChangeAlertEmailSubject: registrationEmailTemplates.loginIpChangeAlert.subject,
+    loginIpChangeAlertEmailText: registrationEmailTemplates.loginIpChangeAlert.text,
+    loginIpChangeAlertEmailHtml: registrationEmailTemplates.loginIpChangeAlert.html,
+    paymentOrderSuccessEmailSubject: registrationEmailTemplates.paymentOrderSuccessNotification.subject,
+    paymentOrderSuccessEmailText: registrationEmailTemplates.paymentOrderSuccessNotification.text,
+    paymentOrderSuccessEmailHtml: registrationEmailTemplates.paymentOrderSuccessNotification.html,
     authGithubEnabled: coerceBoolean(initialSettings.authGithubEnabled, false),
     authGoogleEnabled: coerceBoolean(initialSettings.authGoogleEnabled, false),
     authPasskeyEnabled: coerceBoolean(initialSettings.authPasskeyEnabled, false),
@@ -505,6 +532,8 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
       registerEmailEnabled: draft.registerEmailEnabled,
       registerEmailRequired: draft.registerEmailRequired,
       registerEmailVerification: draft.registerEmailVerification,
+      loginIpChangeEmailAlertEnabled: draft.loginIpChangeEmailAlertEnabled,
+      passwordChangeRequireEmailVerification: draft.passwordChangeRequireEmailVerification,
       registerEmailWhitelistEnabled: draft.registerEmailWhitelistEnabled,
       registerEmailWhitelistDomains: draft.registerEmailWhitelistDomains,
       registerPhoneEnabled: draft.registerPhoneEnabled,
@@ -523,6 +552,15 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
       resetPasswordEmailSubject: draft.resetPasswordEmailSubject,
       resetPasswordEmailText: draft.resetPasswordEmailText,
       resetPasswordEmailHtml: draft.resetPasswordEmailHtml,
+      passwordChangeEmailSubject: draft.passwordChangeEmailSubject,
+      passwordChangeEmailText: draft.passwordChangeEmailText,
+      passwordChangeEmailHtml: draft.passwordChangeEmailHtml,
+      loginIpChangeAlertEmailSubject: draft.loginIpChangeAlertEmailSubject,
+      loginIpChangeAlertEmailText: draft.loginIpChangeAlertEmailText,
+      loginIpChangeAlertEmailHtml: draft.loginIpChangeAlertEmailHtml,
+      paymentOrderSuccessEmailSubject: draft.paymentOrderSuccessEmailSubject,
+      paymentOrderSuccessEmailText: draft.paymentOrderSuccessEmailText,
+      paymentOrderSuccessEmailHtml: draft.paymentOrderSuccessEmailHtml,
       authGithubEnabled: draft.authGithubEnabled,
       authGoogleEnabled: draft.authGoogleEnabled,
       authPasskeyEnabled: draft.authPasskeyEnabled,

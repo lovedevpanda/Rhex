@@ -38,8 +38,10 @@ export async function updateUploadSiteSettingsSection(existing: SiteSettingsReco
     enabledFallback: false,
     textFallback: "",
     positionFallback: "BOTTOM_RIGHT",
+    tiledFallback: false,
     opacityFallback: 22,
     fontSizeFallback: 24,
+    fontFamilyFallback: "",
     marginFallback: 24,
     colorFallback: "#FFFFFF",
     logoPathFallback: "",
@@ -66,8 +68,14 @@ export async function updateUploadSiteSettingsSection(existing: SiteSettingsReco
     : Boolean(body.imageWatermarkEnabled)
   const imageWatermarkText = readOptionalStringField(body, "imageWatermarkText") || existingImageWatermarkSettings.text
   const imageWatermarkPosition = (readOptionalStringField(body, "imageWatermarkPosition") || existingImageWatermarkSettings.position) as ImageWatermarkPosition
+  const imageWatermarkTiled = body.imageWatermarkTiled === undefined
+    ? existingImageWatermarkSettings.tiled
+    : Boolean(body.imageWatermarkTiled)
   const imageWatermarkOpacity = normalizeNonNegativeInteger(body.imageWatermarkOpacity, existingImageWatermarkSettings.opacity)
   const imageWatermarkFontSize = normalizePositiveInteger(body.imageWatermarkFontSize, existingImageWatermarkSettings.fontSize)
+  const imageWatermarkFontFamily = body.imageWatermarkFontFamily === undefined
+    ? existingImageWatermarkSettings.fontFamily
+    : readOptionalStringField(body, "imageWatermarkFontFamily")
   const imageWatermarkMargin = normalizeNonNegativeInteger(body.imageWatermarkMargin, existingImageWatermarkSettings.margin)
   const imageWatermarkColor = readOptionalStringField(body, "imageWatermarkColor") || existingImageWatermarkSettings.color
   const imageWatermarkLogoPath = readOptionalStringField(body, "imageWatermarkLogoPath") || existingImageWatermarkSettings.logoPath
@@ -109,8 +117,10 @@ export async function updateUploadSiteSettingsSection(existing: SiteSettingsReco
     enabled: imageWatermarkEnabled,
     text: imageWatermarkText,
     position: imageWatermarkPosition,
+    tiled: imageWatermarkTiled,
     opacity: imageWatermarkOpacity,
     fontSize: imageWatermarkFontSize,
+    fontFamily: imageWatermarkFontFamily,
     margin: imageWatermarkMargin,
     color: imageWatermarkColor,
     logoPath: imageWatermarkLogoPath,

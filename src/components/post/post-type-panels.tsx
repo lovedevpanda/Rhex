@@ -318,29 +318,31 @@ export function LotteryPanel({ postId, isOwnerOrAdmin, lottery }: LotteryPanelPr
         </CardHeader>
         <CardContent className="p-0">
           <div className="border-b bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.35)_1px,transparent_0)] [background-size:16px_16px] px-4 py-5 sm:px-5">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-foreground">
-                  <StatusIcon className="h-4 w-4" />
-                  <p className="text-lg font-semibold leading-none">{statusConfig.title}</p>
-                  <Badge variant={isDrawn ? "outline" : hasNotStarted ? "outline" : "secondary"} className="rounded-full bg-background/80">
+                <div className="flex flex-col items-start gap-2 text-foreground sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <StatusIcon className="h-4 w-4 shrink-0" />
+                    <p className="truncate text-base font-semibold leading-none sm:text-lg">{statusConfig.title}</p>
+                  </div>
+                  <Badge variant={isDrawn ? "outline" : hasNotStarted ? "outline" : "secondary"} className="shrink-0 rounded-full bg-background/80">
                     {statusConfig.label}
                   </Badge>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="flex items-center gap-2 text-foreground">
-                    <Clock3 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[1.9rem] font-semibold tracking-tight">{countdown}</span>
-                    <span className="text-sm text-muted-foreground">{currentStageText}</span>
+                <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-foreground sm:gap-2">
+                    <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
+                    <span className="shrink-0 whitespace-nowrap text-[1.35rem] font-semibold leading-none tracking-tight sm:text-[1.9rem]">{countdown}</span>
+                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:text-sm">{currentStageText}</span>
                   </div>
-                  <Badge variant="outline" className="rounded-full bg-background/80">
+                  <Badge variant="outline" className="shrink-0 rounded-full bg-background/80">
                     {participationBadgeText}
                   </Badge>
                 </div>
               </div>
 
               {isOwnerOrAdmin && !isDrawn && !isAutoParticipantDraw ? (
-                <Button type="button" variant={isLocked ? "default" : "outline"} className="h-12 rounded-[16px] px-5 text-base" onClick={drawNow} disabled={loading}>
+                <Button type="button" variant={isLocked ? "default" : "outline"} className="h-11 w-full rounded-[16px] px-4 text-sm sm:h-12 sm:w-auto sm:px-5 sm:text-base" onClick={drawNow} disabled={loading}>
                   <Trophy data-icon="inline-start" />
                   {loading ? "开奖中..." : isLocked ? "立即开奖" : "手动开奖"}
                 </Button>

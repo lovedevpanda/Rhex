@@ -83,6 +83,17 @@ const writeGuardConfig = {
       parts: ["channel", "target"],
     },
   },
+  "profile-password-send-code": {
+    description: "个人中心修改密码邮箱验证码发送，按用户做短时间去重和频率限制。",
+    scope: "profile-password-send-code",
+    cooldownMs: 15_000,
+    cooldownMessage: "验证码已发送，如未收到请 15 秒后重试",
+    releaseOnError: true,
+    dedupe: {
+      windowMs: 3_000,
+      parts: ["userId"],
+    },
+  },
   "boards-follow-toggle": {
     description: "节点关注切换去抖，避免连点导致重复切换。",
     scope: "boards-follow-toggle",

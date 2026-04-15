@@ -3,12 +3,14 @@ import type { Prisma } from "@/db/types"
 import {
   countAdminLogs,
   countAdminLogTabs,
+  countPaymentOrders,
   countPointLogs,
   countUploadLogs,
   countUserCheckInLogs,
   countUserLoginLogs,
   countVipOrders,
   findAdminLogsPage,
+  findPaymentOrdersPage,
   findPointLogsPage,
   findUploadLogsPage,
   findUserCheckInLogsPage,
@@ -20,7 +22,7 @@ import { serializeDate, serializeDateTime } from "@/lib/formatters"
 import { normalizePageSize, normalizePositiveInteger } from "@/lib/shared/normalizers"
 
 
-export type AdminLogCenterTab = "admin" | "login" | "checkins" | "points" | "uploads" | "orders"
+export type AdminLogCenterTab = "admin" | "login" | "checkins" | "points" | "uploads" | "payments" | "orders"
 
 interface GetAdminLogCenterOptions {
   activeTab?: string
@@ -89,7 +91,8 @@ const LOG_TABS: Array<{ key: AdminLogCenterTab; label: string }> = [
   { key: "checkins", label: "签到日志" },
   { key: "points", label: "积分日志" },
   { key: "uploads", label: "上传日志" },
-  { key: "orders", label: "订单日志" },
+  { key: "payments", label: "支付流水" },
+  { key: "orders", label: "VIP 订单日志" },
 ]
 
 
@@ -131,6 +134,40 @@ function resolvePointTone(changeType: string, changeValue: number) {
   return "success" as const
 }
 
+function formatUserDisplay(user: { username: string; nickname: string | null } | null) {
+  if (!user) {
+    return {
+      primary: "匿名 / 系统",
+      secondary: "未关联用户",
+    }
+  }
+
+  return {
+    primary: user.nickname ?? user.username,
+    secondary: `@${user.username}`,
+  }
+}
+
+function formatCurrencyAmount(amountFen: number, currency: string) {
+  return `${currency} ${(amountFen / 100).toFixed(2)}`
+}
+
+function resolvePaymentTone(status: string, fulfillmentStatus: string) {
+  if (status === "FAILED") {
+    return "danger" as const
+  }
+  if (status === "CLOSED" || status === "REFUNDING" || status === "REFUNDED") {
+    return "warning" as const
+  }
+  if (status === "PAID" && fulfillmentStatus === "SUCCEEDED") {
+    return "success" as const
+  }
+  if (status === "PAID" && fulfillmentStatus === "FAILED") {
+    return "danger" as const
+  }
+  return "info" as const
+}
+
 export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}): Promise<AdminLogCenterResult> {
   const activeTab = normalizeTab(options.activeTab)
   const keyword = String(options.keyword ?? "").trim()
@@ -140,7 +177,7 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
   const requestedPage = normalizePositiveInteger(options.page, 1)
   const pageSize = normalizePageSize(options.pageSize)
 
-  const [adminCount, loginCount, checkInCount, pointCount, uploadCount, orderCount] = await countAdminLogTabs()
+  const [adminCount, loginCount, checkInCount, pointCount, uploadCount, paymentCount, orderCount] = await countAdminLogTabs()
 
 
   const summary = [
@@ -149,7 +186,8 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
     { key: "checkins" as const, label: "签到日志", count: checkInCount },
     { key: "points" as const, label: "积分日志", count: pointCount },
     { key: "uploads" as const, label: "上传日志", count: uploadCount },
-    { key: "orders" as const, label: "订单日志", count: orderCount },
+    { key: "payments" as const, label: "支付流水", count: paymentCount },
+    { key: "orders" as const, label: "VIP 订单日志", count: orderCount },
   ]
 
   if (activeTab === "admin") {
@@ -361,6 +399,65 @@ export async function getAdminLogCenter(options: GetAdminLogCenterOptions = {}):
         detailSecondary: item.fileName,
         tone: "info",
       })),
+    }
+  }
+
+  if (activeTab === "payments") {
+    const where: Prisma.PaymentOrderWhereInput = keyword
+      ? {
+          OR: [
+            { merchantOrderNo: { contains: keyword, mode: "insensitive" } },
+            { bizScene: { contains: keyword, mode: "insensitive" } },
+            { bizOrderId: { contains: keyword, mode: "insensitive" } },
+            { subject: { contains: keyword, mode: "insensitive" } },
+            { providerCode: { contains: keyword, mode: "insensitive" } },
+            { channelCode: { contains: keyword, mode: "insensitive" } },
+            { providerTradeNo: { contains: keyword, mode: "insensitive" } },
+            { lastErrorMessage: { contains: keyword, mode: "insensitive" } },
+            { user: { username: { contains: keyword, mode: "insensitive" } } },
+            { user: { nickname: { contains: keyword, mode: "insensitive" } } },
+          ],
+        }
+      : {}
+
+    const total = await countPaymentOrders(where)
+    const pagination = buildPagination(total, requestedPage, pageSize)
+    const rows = await findPaymentOrdersPage(where, (pagination.page - 1) * pagination.pageSize, pagination.pageSize)
+
+    return {
+      activeTab,
+      tabs: LOG_TABS.map((item) => ({ key: item.key, label: item.label, count: summary.find((summaryItem) => summaryItem.key === item.key)?.count ?? 0 })),
+      summary,
+      filters: { keyword, action, changeType, bucketType },
+      pagination,
+      rows: rows.map((item) => {
+        const actor = formatUserDisplay(item.user)
+        const timeHints = [
+          item.paidAt ? `支付 ${serializeDateTime(item.paidAt) ?? item.paidAt.toISOString()}` : null,
+          item.fulfilledAt ? `到账 ${serializeDateTime(item.fulfilledAt) ?? item.fulfilledAt.toISOString()}` : null,
+        ].filter(Boolean).join(" · ")
+
+        return {
+          id: item.id,
+          occurredAt: serializeDateTime(item.createdAt) ?? item.createdAt.toISOString(),
+          actorPrimary: actor.primary,
+          actorSecondary: actor.secondary,
+          typePrimary: item.status,
+          typeSecondary: `${item.providerCode} / ${item.channelCode}`,
+          targetPrimary: item.merchantOrderNo,
+          targetSecondary: formatCurrencyAmount(item.amountFen, item.currency),
+          detailPrimary: item.subject,
+          detailSecondary: [
+            `场景 ${item.bizScene}`,
+            item.bizOrderId ? `业务单 ${item.bizOrderId}` : null,
+            `履约 ${item.fulfillmentStatus}`,
+            item.providerTradeNo ? `第三方流水 ${item.providerTradeNo}` : null,
+            timeHints || null,
+            item.lastErrorMessage ? `错误 ${item.lastErrorMessage}` : null,
+          ].filter(Boolean).join(" · "),
+          tone: resolvePaymentTone(item.status, item.fulfillmentStatus),
+        }
+      }),
     }
   }
 

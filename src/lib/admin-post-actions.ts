@@ -19,6 +19,7 @@ import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { ensureCanManageBoard, ensureCanManagePost, getAvailablePinScopes } from "@/lib/moderator-permissions"
 import { createSystemNotification } from "@/lib/notification-writes"
 import { activatePostAuctionForPost } from "@/lib/post-auctions"
+import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 
 export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
   "post.feature": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员切换推荐状态" }, async (context) => {
@@ -47,6 +48,7 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     await ensureCanManagePost(context.actor, context.targetId)
     await updatePostStatus(context.targetId, PostStatus.OFFLINE)
     revalidateHomeSidebarStatsCache()
+    expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminPostActionHandlers["post.hide"].metadata)
     return { message: "帖子已下线" }
   }),
@@ -57,6 +59,7 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
       await activatePostAuctionForPost(post.id)
     }
     revalidateHomeSidebarStatsCache()
+    expireTaxonomyCacheImmediately()
 
     await writeAdminActionLog(context, adminPostActionHandlers["post.show"].metadata)
     return { message: "帖子已上线" }
@@ -71,6 +74,7 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     await ensureCanManageBoard(context.actor, targetBoard.id)
     if (post.boardId === targetBoard.id) apiError(400, "帖子已在当前节点，无需移动")
     await movePostToBoard(context.targetId, targetBoard.id)
+    expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminPostActionHandlers["post.moveBoard"].metadata)
     const postId = context.targetId
 
@@ -89,6 +93,7 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
       await activatePostAuctionForPost(post.id)
     }
     revalidateHomeSidebarStatsCache()
+    expireTaxonomyCacheImmediately()
 
     if (post.authorId !== context.adminUserId) {
       void createSystemNotification({
@@ -110,6 +115,7 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     const post = await ensureCanManagePost(context.actor, context.targetId)
     await updatePostStatus(context.targetId, PostStatus.OFFLINE, context.message || "审核未通过")
     revalidateHomeSidebarStatsCache()
+    expireTaxonomyCacheImmediately()
 
     if (post.authorId !== context.adminUserId) {
       void createSystemNotification({

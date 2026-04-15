@@ -24,6 +24,9 @@ export function findConversationByIdForParticipant(conversationId: string, curre
     where: {
       id: conversationId,
       kind: ConversationKind.DIRECT,
+      messages: {
+        some: {},
+      },
       participants: {
         some: {
           userId: currentUserId,
@@ -48,6 +51,9 @@ export function findConversationListItems(currentUserId: number) {
       archivedAt: null,
       conversation: {
         kind: ConversationKind.DIRECT,
+        messages: {
+          some: {},
+        },
       },
     },
     include: {
@@ -123,6 +129,9 @@ export function findConversationDetailById(conversationId: string, currentUserId
     where: {
       id: conversationId,
       kind: ConversationKind.DIRECT,
+      messages: {
+        some: {},
+      },
       participants: {
         some: {
           userId: currentUserId,

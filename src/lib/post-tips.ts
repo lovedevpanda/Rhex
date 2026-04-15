@@ -35,6 +35,7 @@ export interface PostTipLeaderboardItem {
 
 export interface PostTipSummary {
   enabled: boolean
+  isLoggedIn: boolean
   pointName: string
   currentUserPoints: number
   gifts: SiteTippingGiftItem[]
@@ -396,6 +397,7 @@ export async function getPostTipSummary(postId: string, currentUserId?: number):
 
   return {
     enabled: settings.tippingEnabled,
+    isLoggedIn: Boolean(currentUserId),
     pointName: settings.pointName,
     currentUserPoints: currentUser?.points ?? 0,
     gifts: settings.tippingGifts,

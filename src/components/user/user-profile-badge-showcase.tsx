@@ -1,10 +1,11 @@
-import { Sparkles } from "lucide-react"
+import Link from "next/link"
 
 import { LevelIcon } from "@/components/level-icon"
 import { Tooltip } from "@/components/ui/tooltip"
 
 interface UserProfileBadgeShowcaseItem {
   id: string
+  code: string
   name: string
   description?: string | null
   color: string
@@ -25,7 +26,7 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
   }
 
   return (
-    <div className="mt-3 grid grid-cols-3 gap-2">
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
       {badges.map((badge) => (
         <Tooltip
           key={badge.id}
@@ -34,12 +35,8 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <span
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-[13px]"
-                  style={{
-                    color: badge.color,
-                    borderColor: `${badge.color}45`,
-                    backgroundColor: `${badge.color}16`,
-                  }}
+                  className="inline-flex h-5 w-5 items-center justify-center text-[13px]"
+                  style={{ color: badge.color }}
                 >
                   <LevelIcon
                     icon={badge.iconText}
@@ -58,31 +55,23 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
           }
           contentClassName="max-w-[240px]"
         >
-          <div className="group cursor-default rounded-2xl border border-transparent bg-transparent p-2 text-center transition-all duration-200 hover:-translate-y-1 hover:border-slate-200/80  hover:shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:hover:border-white/10 dark:hover:bg-white/3 dark:hover:shadow-[0_14px_28px_rgba(2,6,23,0.45)]">
+          <Link href={`/badges/${badge.code}`} className="flex min-w-0 items-center gap-1.5 text-left">
             <div
-              className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border text-lg transition-transform duration-200 group-hover:scale-[1.08]"
-              style={{
-                background: `linear-gradient(180deg, ${badge.color}20, ${badge.color}12)`,
-                color: badge.color,
-                borderColor: `${badge.color}30`,
-                boxShadow: `0 10px 22px ${badge.color}22`,
-              }}
+              className="flex h-5 w-5 shrink-0 items-center justify-center text-lg"
+              style={{ color: badge.color }}
             >
               <LevelIcon
                 icon={badge.iconText}
                 color={badge.color}
-                className="h-5 w-5 text-[18px]"
+                className="h-4 w-4 text-[16px]"
                 emojiClassName="text-inherit"
                 svgClassName="[&>svg]:block"
               />
             </div>
-            <div className="mt-2 flex items-center justify-center gap-1">
-              <p className="line-clamp-1 text-[11px] font-semibold text-foreground transition-colors group-hover:text-slate-950 dark:group-hover:text-slate-50">
-                {badge.name}
-              </p>
-              <Sparkles className="h-3 w-3 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-            </div>
-          </div>
+            <p className="line-clamp-1 min-w-0 text-[12px] font-semibold leading-5 text-foreground">
+              {badge.name}
+            </p>
+          </Link>
         </Tooltip>
       ))}
     </div>

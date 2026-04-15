@@ -41,16 +41,13 @@ interface AdminBasicSettingsModeProps {
   updateDraftField: UpdateAdminBasicSettingsDraftField
 }
 
-export interface AdminProfileSettingsFormProps
-  extends AdminBasicSettingsModeProps {}
-
 export interface AdminRegistrationSettingsFormProps
   extends AdminBasicSettingsModeProps {
   initialInviteCodes: AdminBasicSettingsInviteCodeItem[]
 }
 
-export interface AdminInteractionSettingsFormProps
-  extends AdminBasicSettingsModeProps {}
+export type AdminProfileSettingsFormProps = AdminBasicSettingsModeProps
 
-export interface AdminBoardApplicationSettingsFormProps
-  extends AdminBasicSettingsModeProps {}
+export type AdminInteractionSettingsFormProps = AdminBasicSettingsModeProps
+
+export type AdminBoardApplicationSettingsFormProps = AdminBasicSettingsModeProps

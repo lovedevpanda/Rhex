@@ -179,6 +179,14 @@ export function formatPreciseDateTime(input: string | Date | null | undefined) {
   return serialized ? serialized.slice(0, 16) : null
 }
 
+export function formatOptionalPreciseDateTime(input: string | null | undefined, emptyText = "暂无") {
+  if (!input) {
+    return emptyText
+  }
+
+  return formatPreciseDateTime(input) ?? input
+}
+
 export function serializeDate(input: string | Date | null | undefined) {
   if (!input) {
     return null

@@ -125,7 +125,7 @@ export default async function WritePage(props: PageProps<"/write">) {
     <div className="min-h-screen ">
       <SiteHeader />
       <main className="mx-auto max-w-[900px] px-4 py-6 lg:px-6">
-        <Card>
+        <Card className="min-[1220px]:overflow-visible">
           <CardHeader>
             <CardTitle>{mode === "edit" ? "编辑帖子" : "发布新帖子"}</CardTitle>
           </CardHeader>

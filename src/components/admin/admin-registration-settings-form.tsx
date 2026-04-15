@@ -36,6 +36,7 @@ function EmailTemplateSection({
   onTextChange,
   onHtmlChange,
   previewVariables,
+  variableHelpText,
 }: {
   title: string
   description: string
@@ -46,6 +47,7 @@ function EmailTemplateSection({
   onTextChange: (value: string) => void
   onHtmlChange: (value: string) => void
   previewVariables: Record<string, string>
+  variableHelpText?: string
 }) {
   const renderedSubject = renderEmailTemplate(subject, previewVariables)
   const renderedText = renderEmailTemplate(text, previewVariables)
@@ -60,12 +62,12 @@ function EmailTemplateSection({
       <div className="grid gap-4 md:grid-cols-2">
         <TextField label="邮件主题" value={subject} onChange={onSubjectChange} placeholder="输入邮件主题模板" />
         <div className="rounded-[18px] border border-dashed border-border bg-card/60 px-4 py-3 text-xs leading-6 text-muted-foreground">
-          可用变量：<code>{"{{siteName}}"}</code>、<code>{"{{code}}"}</code>、<code>{"{{username}}"}</code>。其中注册验证码邮件不会传入 <code>{"{{username}}"}</code>，留空会自动替换为空字符串。
+          {variableHelpText ?? "可用变量会按当前模板对应的示例变量动态展示。"}
           <div className="mt-3 grid gap-1">
             <p>当前预览变量：</p>
-            <p><code>{"{{siteName}}"}</code> = {previewVariables.siteName || "(空)"}</p>
-            <p><code>{"{{code}}"}</code> = {previewVariables.code || "(空)"}</p>
-            <p><code>{"{{username}}"}</code> = {previewVariables.username || "(空)"}</p>
+            {Object.entries(previewVariables).map(([key, value]) => (
+              <p key={key}><code>{`{{${key}}}`}</code> = {value || "(空)"}</p>
+            ))}
           </div>
         </div>
       </div>
@@ -182,6 +184,35 @@ export function AdminRegistrationSettingsForm({
     code: "864209",
     username: "demo_user",
   }), [draft.siteName])
+  const passwordChangePreviewVariables = useMemo(() => ({
+    siteName: draft.siteName.trim() || "示例站点",
+    code: "531842",
+    username: "demo_user",
+  }), [draft.siteName])
+  const loginIpChangeAlertPreviewVariables = useMemo(() => ({
+    siteName: draft.siteName.trim() || "示例站点",
+    displayName: "演示用户",
+    username: "demo_user",
+    currentIp: "203.0.113.25",
+    previousIp: "198.51.100.8",
+    loginAt: "2026-04-15 21:48:00",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0 Safari/537.36",
+  }), [draft.siteName])
+  const paymentOrderSuccessPreviewVariables = useMemo(() => ({
+    siteName: draft.siteName.trim() || "示例站点",
+    orderSubject: "积分充值 · 330积分",
+    merchantOrderNo: "pay_20260415_demo123456",
+    bizScene: "points.topup",
+    amount: "CNY 30.00",
+    providerCode: "alipay",
+    channelCode: "alipay.page",
+    paidAt: "2026-04-15 21:30:00",
+    username: "demo_user",
+    pointName: "积分",
+    points: "300",
+    bonusPoints: "30",
+    totalPoints: "330",
+  }), [draft.siteName])
 
   async function handleSendSmtpTest() {
     setIsSendingSmtpTest(true)
@@ -297,11 +328,43 @@ export function AdminRegistrationSettingsForm({
         </div>
       ) : null}
 
+      {activeSubTab === "security" ? (
+        <div className="rounded-[24px] border border-border p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">账号安全</h3>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground">控制异地登录邮件提醒，以及用户在个人页面修改密码时是否必须完成邮箱验证码验证。</p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <FieldGroup title="登录安全提醒">
+              <AdminBooleanSelectField
+                label="登录 IP 变化发送邮件提醒"
+                checked={draft.loginIpChangeEmailAlertEnabled}
+                onChange={(value) => updateDraftField("loginIpChangeEmailAlertEnabled", value)}
+              />
+              <p className="text-xs leading-6 text-muted-foreground">仅当用户上次登录 IP 与本次登录 IP 不一致时入队发送。任务执行时会再次检查开关、SMTP 和用户已验证邮箱，条件不满足会自动跳过。</p>
+            </FieldGroup>
+            <FieldGroup title="密码修改验证">
+              <AdminBooleanSelectField
+                label="修改密码必须邮箱验证"
+                checked={draft.passwordChangeRequireEmailVerification}
+                onChange={(value) => updateDraftField("passwordChangeRequireEmailVerification", value)}
+              />
+              <p className="text-xs leading-6 text-muted-foreground">开启后，用户中心修改密码除了校验当前密码，还必须输入发送到已验证邮箱的验证码。前台也会提前检查邮箱和邮件能力，不满足条件时直接提示不可用。</p>
+            </FieldGroup>
+          </div>
+          {!draft.smtpEnabled ? (
+            <div className="rounded-[20px] border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800">
+              当前尚未启用 SMTP。即使这里开启安全开关，异地登录提醒任务也会自动跳过，前台改密入口也会提示“邮件能力未配置”。
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {activeSubTab === "email-templates" ? (
         <div className="rounded-[24px] border border-border p-5 space-y-5">
           <div>
             <h3 className="text-sm font-semibold">邮件模板编辑</h3>
-            <p className="mt-1 text-xs leading-6 text-muted-foreground">编辑注册验证码邮件与找回密码验证码邮件模板。支持变量：<code>{"{{siteName}}"}</code>、<code>{"{{code}}"}</code>、<code>{"{{username}}"}</code>。</p>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground">编辑注册验证码、找回密码验证码、修改密码验证码、登录安全提醒以及支付成功通知邮件模板。每个模板支持的变量会在对应卡片内单独展示。</p>
           </div>
 
           <EmailTemplateSection
@@ -314,6 +377,7 @@ export function AdminRegistrationSettingsForm({
             onTextChange={(value) => updateDraftField("registerVerificationEmailText", value)}
             onHtmlChange={(value) => updateDraftField("registerVerificationEmailHtml", value)}
             previewVariables={registerVerificationPreviewVariables}
+            variableHelpText={"可用变量：{{siteName}}、{{code}}、{{username}}。其中注册验证码邮件通常不会传入 {{username}}，留空会自动替换为空字符串。"}
           />
 
           <EmailTemplateSection
@@ -326,6 +390,46 @@ export function AdminRegistrationSettingsForm({
             onTextChange={(value) => updateDraftField("resetPasswordEmailText", value)}
             onHtmlChange={(value) => updateDraftField("resetPasswordEmailHtml", value)}
             previewVariables={resetPasswordPreviewVariables}
+            variableHelpText={"可用变量：{{siteName}}、{{code}}、{{username}}。"}
+          />
+
+          <EmailTemplateSection
+            title="修改密码验证码邮件"
+            description="用户在个人中心修改密码，且后台开启“修改密码必须邮箱验证”时发送。"
+            subject={draft.passwordChangeEmailSubject}
+            text={draft.passwordChangeEmailText}
+            html={draft.passwordChangeEmailHtml}
+            onSubjectChange={(value) => updateDraftField("passwordChangeEmailSubject", value)}
+            onTextChange={(value) => updateDraftField("passwordChangeEmailText", value)}
+            onHtmlChange={(value) => updateDraftField("passwordChangeEmailHtml", value)}
+            previewVariables={passwordChangePreviewVariables}
+            variableHelpText={"可用变量：{{siteName}}、{{code}}、{{username}}。"}
+          />
+
+          <EmailTemplateSection
+            title="登录安全提醒邮件"
+            description="用户登录成功后，若后台开启“登录 IP 变化发送邮件提醒”且本次 IP 与上次不同，则通过后台任务发送。"
+            subject={draft.loginIpChangeAlertEmailSubject}
+            text={draft.loginIpChangeAlertEmailText}
+            html={draft.loginIpChangeAlertEmailHtml}
+            onSubjectChange={(value) => updateDraftField("loginIpChangeAlertEmailSubject", value)}
+            onTextChange={(value) => updateDraftField("loginIpChangeAlertEmailText", value)}
+            onHtmlChange={(value) => updateDraftField("loginIpChangeAlertEmailHtml", value)}
+            previewVariables={loginIpChangeAlertPreviewVariables}
+            variableHelpText={"可用变量：{{siteName}}、{{displayName}}、{{username}}、{{currentIp}}、{{previousIp}}、{{loginAt}}、{{userAgent}}。"}
+          />
+
+          <EmailTemplateSection
+            title="支付成功通知邮件"
+            description="支付网关订单支付成功并履约成功后，按支付网关后台设置的通知邮箱发送。"
+            subject={draft.paymentOrderSuccessEmailSubject}
+            text={draft.paymentOrderSuccessEmailText}
+            html={draft.paymentOrderSuccessEmailHtml}
+            onSubjectChange={(value) => updateDraftField("paymentOrderSuccessEmailSubject", value)}
+            onTextChange={(value) => updateDraftField("paymentOrderSuccessEmailText", value)}
+            onHtmlChange={(value) => updateDraftField("paymentOrderSuccessEmailHtml", value)}
+            previewVariables={paymentOrderSuccessPreviewVariables}
+            variableHelpText={"可用变量：{{siteName}}、{{orderSubject}}、{{merchantOrderNo}}、{{bizScene}}、{{amount}}、{{providerCode}}、{{channelCode}}、{{paidAt}}、{{username}}、{{pointName}}、{{points}}、{{bonusPoints}}、{{totalPoints}}。"}
           />
         </div>
       ) : null}

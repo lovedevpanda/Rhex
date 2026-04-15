@@ -118,6 +118,7 @@ export function PostAttachmentModal({
       open={open}
       onClose={onClose}
       title="配置帖子附件"
+      hideHeaderCloseButtonOnMobile
       description="附件会统一展示在帖子正文底部，可分别设置等级、VIP、积分购买和回复解锁条件。"
       size="xl"
       footer={(

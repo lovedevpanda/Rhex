@@ -1,7 +1,8 @@
 "use client"
 
+import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, useTransition } from "react"
+import { useDeferredValue, useEffect, useState, useTransition } from "react"
 
 import { AccessThresholdSelectGroup } from "@/components/access-threshold-select-group"
 import {
@@ -13,6 +14,7 @@ import {
 import { AdminSettingsSubTabs } from "@/components/admin/admin-settings-sub-tabs"
 import { ColorPicker, normalizeHexColor } from "@/components/ui/color-picker"
 import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
 import type { AccessThresholdOption } from "@/lib/access-threshold-options"
 import { saveAdminSiteSettings } from "@/lib/admin-site-settings-client"
 import { getAdminSettingsHref } from "@/lib/admin-settings-navigation"
@@ -38,8 +40,10 @@ interface AdminUploadSettingsFormProps {
     imageWatermarkEnabled: boolean
     imageWatermarkText: string
     imageWatermarkPosition: ImageWatermarkPosition
+    imageWatermarkTiled: boolean
     imageWatermarkOpacity: number
     imageWatermarkFontSize: number
+    imageWatermarkFontFamily: string
     imageWatermarkMargin: number
     imageWatermarkColor: string
     attachmentUploadEnabled: boolean
@@ -59,13 +63,47 @@ function normalizeStringList(value: string[] | undefined, fallback: string[]) {
   return Array.isArray(value) && value.length > 0 ? value : fallback
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function normalizeSliderNumber(value: string, fallback: number, min: number, max: number) {
+  const parsed = Number(value)
+  return clamp(Number.isFinite(parsed) ? Math.round(parsed) : fallback, min, max)
+}
+
 type UploadSettingsTabKey = "storage" | "watermark" | "attachment"
+type WatermarkFontPresetKey = "default" | "zhimangxing" | "yahei" | "pingfang" | "noto-sans" | "simhei" | "kaiti" | "custom"
 
 const UPLOAD_TABS = [
   { key: "storage", label: "上传配置" },
   { key: "watermark", label: "水印配置" },
   { key: "attachment", label: "附件配置" },
 ] as const
+
+const WATERMARK_FONT_PRESETS: Array<{
+  key: Exclude<WatermarkFontPresetKey, "custom">
+  label: string
+  value: string
+}> = [
+  { key: "default", label: "默认字体栈", value: "" },
+  { key: "zhimangxing", label: "芝麻行草", value: '"Zhi Mang Xing", cursive' },
+  { key: "yahei", label: "微软雅黑", value: '"Microsoft YaHei", sans-serif' },
+  { key: "pingfang", label: "苹方", value: '"PingFang SC", "Hiragino Sans GB", sans-serif' },
+  { key: "noto-sans", label: "思源黑体", value: '"Noto Sans SC", "Source Han Sans SC", sans-serif' },
+  { key: "simhei", label: "黑体", value: '"SimHei", sans-serif' },
+  { key: "kaiti", label: "楷体", value: '"KaiTi", serif' },
+]
+
+function normalizeFontFamilyValue(value: string) {
+  return value.replace(/\s+/g, " ").trim()
+}
+
+function resolveWatermarkFontPresetKey(value: string): WatermarkFontPresetKey {
+  const normalizedValue = normalizeFontFamilyValue(value)
+  const matchedPreset = WATERMARK_FONT_PRESETS.find((preset) => normalizeFontFamilyValue(preset.value) === normalizedValue)
+  return matchedPreset?.key ?? "custom"
+}
 
 function resolveUploadTab(initialSubTab?: string): UploadSettingsTabKey {
   return UPLOAD_TABS.some((item) => item.key === initialSubTab)
@@ -111,8 +149,12 @@ export function AdminUploadSettingsForm({
   const [imageWatermarkEnabled, setImageWatermarkEnabled] = useState(Boolean(initialSettings.imageWatermarkEnabled))
   const [imageWatermarkText, setImageWatermarkText] = useState(initialSettings.imageWatermarkText ?? "")
   const [imageWatermarkPosition, setImageWatermarkPosition] = useState<ImageWatermarkPosition>(initialSettings.imageWatermarkPosition ?? "BOTTOM_RIGHT")
+  const [imageWatermarkTiled, setImageWatermarkTiled] = useState(Boolean(initialSettings.imageWatermarkTiled))
   const [imageWatermarkOpacity, setImageWatermarkOpacity] = useState(String(initialSettings.imageWatermarkOpacity ?? 22))
   const [imageWatermarkFontSize, setImageWatermarkFontSize] = useState(String(initialSettings.imageWatermarkFontSize ?? 24))
+  const [imageWatermarkFontFamily, setImageWatermarkFontFamily] = useState(initialSettings.imageWatermarkFontFamily ?? "")
+  const [imageWatermarkFontPresetKey, setImageWatermarkFontPresetKey] = useState<WatermarkFontPresetKey>(() => resolveWatermarkFontPresetKey(initialSettings.imageWatermarkFontFamily ?? ""))
+  const [customImageWatermarkFontFamily, setCustomImageWatermarkFontFamily] = useState(() => resolveWatermarkFontPresetKey(initialSettings.imageWatermarkFontFamily ?? "") === "custom" ? (initialSettings.imageWatermarkFontFamily ?? "") : "")
   const [imageWatermarkMargin, setImageWatermarkMargin] = useState(String(initialSettings.imageWatermarkMargin ?? 24))
   const [imageWatermarkColor, setImageWatermarkColor] = useState(initialSettings.imageWatermarkColor ?? "#FFFFFF")
   const [attachmentUploadEnabled, setAttachmentUploadEnabled] = useState(normalizedAttachmentUploadEnabled)
@@ -124,6 +166,10 @@ export function AdminUploadSettingsForm({
   const [feedback, setFeedback] = useState("")
   const [isPending, startTransition] = useTransition()
   const [activeTab, setActiveTab] = useState<UploadSettingsTabKey>(() => resolveUploadTab(initialSubTab))
+  const normalizedImageWatermarkOpacity = normalizeSliderNumber(imageWatermarkOpacity, initialSettings.imageWatermarkOpacity ?? 22, 0, 100)
+  const normalizedImageWatermarkFontSize = normalizeSliderNumber(imageWatermarkFontSize, initialSettings.imageWatermarkFontSize ?? 24, 8, 160)
+  const normalizedImageWatermarkMargin = normalizeSliderNumber(imageWatermarkMargin, initialSettings.imageWatermarkMargin ?? 24, 0, 200)
+  const isCustomWatermarkFontFamily = imageWatermarkFontPresetKey === "custom"
   const useRemoteStorage = uploadProvider === "s3"
   const currentTabSaveLabel = activeTab === "storage"
     ? "保存上传配置"
@@ -160,9 +206,11 @@ export function AdminUploadSettingsForm({
             imageWatermarkEnabled,
             imageWatermarkText,
             imageWatermarkPosition,
-            imageWatermarkOpacity: Number(imageWatermarkOpacity),
-            imageWatermarkFontSize: Number(imageWatermarkFontSize),
-            imageWatermarkMargin: Number(imageWatermarkMargin),
+            imageWatermarkTiled,
+            imageWatermarkOpacity: normalizedImageWatermarkOpacity,
+            imageWatermarkFontSize: normalizedImageWatermarkFontSize,
+            imageWatermarkFontFamily,
+            imageWatermarkMargin: normalizedImageWatermarkMargin,
             imageWatermarkColor,
             attachmentUploadEnabled,
             attachmentDownloadEnabled,
@@ -232,6 +280,7 @@ export function AdminUploadSettingsForm({
                 label="水印位置"
                 value={imageWatermarkPosition}
                 onChange={(value) => setImageWatermarkPosition(value as ImageWatermarkPosition)}
+                description="单点水印决定角落位置；铺满模式下则作为平铺纹理的起始偏移锚点。"
                 options={[
                   { value: "TOP_LEFT", label: "左上角" },
                   { value: "TOP_RIGHT", label: "右上角" },
@@ -240,9 +289,42 @@ export function AdminUploadSettingsForm({
                   { value: "CENTER", label: "居中" },
                 ]}
               />
-              <SettingsInputField label="透明度（0-100）" type="number" value={imageWatermarkOpacity} onChange={setImageWatermarkOpacity} />
-              <SettingsInputField label="字号（px）" type="number" value={imageWatermarkFontSize} onChange={setImageWatermarkFontSize} />
-              <SettingsInputField label="边距（px）" type="number" value={imageWatermarkMargin} onChange={setImageWatermarkMargin} />
+              <SettingsToggleField label="铺满整张图片" checked={imageWatermarkTiled} onChange={setImageWatermarkTiled} description="开启后会以倾斜网格重复铺设整张图，边距会被当作平铺间距使用。" />
+              <SettingsSelectField
+                label="字体预设"
+                value={imageWatermarkFontPresetKey}
+                onChange={(value) => {
+                  const nextKey = value as WatermarkFontPresetKey
+                  setImageWatermarkFontPresetKey(nextKey)
+
+                  if (nextKey === "custom") {
+                    setImageWatermarkFontFamily(customImageWatermarkFontFamily)
+                    return
+                  }
+
+                  const preset = WATERMARK_FONT_PRESETS.find((item) => item.key === nextKey)
+                  setImageWatermarkFontFamily(preset?.value ?? "")
+                }}
+                options={[
+                  ...WATERMARK_FONT_PRESETS.map((preset) => ({ value: preset.key, label: preset.label })),
+                  { value: "custom", label: "自定义字体栈" },
+                ]}
+                description="先从常用中文字体里挑一个；如果部署环境有自己的字体，再切到自定义输入完整 font-family。"
+              />
+              {isCustomWatermarkFontFamily ? (
+                <SettingsInputField
+                  label="自定义字体族"
+                  value={imageWatermarkFontFamily}
+                  onChange={(value) => {
+                    setImageWatermarkFontPresetKey("custom")
+                    setCustomImageWatermarkFontFamily(value)
+                    setImageWatermarkFontFamily(value)
+                  }}
+                  placeholder={'如 "Microsoft YaHei", "PingFang SC", sans-serif'}
+                  description="填写完整 CSS font-family 栈。留空时会回退到默认内置字体链。"
+                  className="md:col-span-2 xl:col-span-2"
+                />
+              ) : null}
               <ColorPicker
                 label="文字颜色"
                 value={imageWatermarkColor}
@@ -252,14 +334,43 @@ export function AdminUploadSettingsForm({
                 placeholder="#FFFFFF"
                 popoverTitle="选择文字颜色"
               />
+              <WatermarkSliderField
+                label="透明度"
+                value={normalizedImageWatermarkOpacity}
+                min={0}
+                max={100}
+                suffix="%"
+                onChange={(nextValue) => setImageWatermarkOpacity(String(nextValue))}
+                description="数值越低越隐蔽，数值越高越醒目。"
+              />
+              <WatermarkSliderField
+                label="字号"
+                value={normalizedImageWatermarkFontSize}
+                min={8}
+                max={160}
+                suffix="px"
+                onChange={(nextValue) => setImageWatermarkFontSize(String(nextValue))}
+                description="服务端会按这个字号测量、换行并绘制水印文本。"
+              />
+              <WatermarkSliderField
+                label="边距 / 间距"
+                value={normalizedImageWatermarkMargin}
+                min={0}
+                max={200}
+                suffix="px"
+                onChange={(nextValue) => setImageWatermarkMargin(String(nextValue))}
+                description="单点模式表示离边缘的距离，铺满模式表示相邻水印之间的间距。"
+              />
             </div>
             <WatermarkPreview
               enabled={imageWatermarkEnabled}
               text={imageWatermarkText}
               position={imageWatermarkPosition}
-              opacity={Number(imageWatermarkOpacity) || 0}
-              fontSize={Number(imageWatermarkFontSize) || 24}
-              margin={Number(imageWatermarkMargin) || 24}
+              tiled={imageWatermarkTiled}
+              opacity={normalizedImageWatermarkOpacity}
+              fontSize={normalizedImageWatermarkFontSize}
+              fontFamily={imageWatermarkFontFamily}
+              margin={normalizedImageWatermarkMargin}
               color={imageWatermarkColor}
             />
           </div>
@@ -308,63 +419,53 @@ function WatermarkPreview({
   enabled,
   text,
   position,
+  tiled,
   opacity,
   fontSize,
+  fontFamily,
   margin,
   color,
 }: {
   enabled: boolean
   text: string
   position: ImageWatermarkPosition
+  tiled: boolean
   opacity: number
   fontSize: number
+  fontFamily: string
   margin: number
   color: string
 }) {
-  const normalizedColor = normalizeHexColor(color || "#FFFFFF", "#FFFFFF")
-  const normalizedOpacity = Math.min(100, Math.max(0, opacity))
-  const previewFontSize = Math.max(12, Math.min(30, fontSize))
-  const previewMargin = Math.max(8, Math.min(36, margin))
-  const positionClassName = position === "TOP_LEFT"
-    ? "items-start justify-start"
-    : position === "TOP_RIGHT"
-      ? "items-end justify-start"
-      : position === "BOTTOM_LEFT"
-        ? "items-start justify-end"
-        : position === "CENTER"
-          ? "items-center justify-center"
-          : "items-end justify-end"
-  const alignClassName = position === "CENTER"
-    ? "items-center text-center"
-    : position.endsWith("RIGHT")
-      ? "items-end text-right"
-      : "items-start text-left"
+  const previewQuery = new URLSearchParams({
+    enabled: enabled ? "1" : "0",
+    text,
+    position,
+    tiled: tiled ? "1" : "0",
+    opacity: String(opacity),
+    fontSize: String(fontSize),
+    fontFamily,
+    margin: String(margin),
+    color: normalizeHexColor(color || "#FFFFFF", "#FFFFFF"),
+  }).toString()
+  const previewUrl = useDeferredValue(`/api/admin/site-settings/watermark-preview?${previewQuery}`)
 
   return (
     <div className="space-y-3 rounded-[22px] border border-border bg-card p-4">
       <div>
         <h4 className="text-sm font-semibold">效果预览</h4>
-        <p className="mt-1 text-xs leading-6 text-muted-foreground">基于当前参数做前端预览，位置、透明度和 Logo / 文字叠加关系与服务端水印保持一致。</p>
+        <p className="mt-1 text-xs leading-6 text-muted-foreground">预览图由服务端实时生成，字体、换行、阴影和透明度与实际落盘水印完全复用同一套 canvas 渲染逻辑。</p>
       </div>
-      <div className="relative overflow-hidden rounded-[24px] border border-border bg-[radial-gradient(circle_at_top_left,#fef3c7,transparent_32%),radial-gradient(circle_at_bottom_right,#bfdbfe,transparent_34%),linear-gradient(135deg,#0f172a,#1e293b_52%,#334155)]">
-        <div className="aspect-video w-full" />
-        <div className="pointer-events-none absolute inset-0">
-          <div className={`flex h-full w-full p-4 md:p-6 ${positionClassName}`} style={{ padding: previewMargin }}>
-            <div className={`flex max-w-[70%] flex-col gap-2 ${alignClassName}`} style={{ opacity: normalizedOpacity / 100 }}>
-              {text.trim() ? (
-                <span
-                  className="font-semibold tracking-[0.08em]"
-                  style={{ color: normalizedColor, fontSize: previewFontSize, lineHeight: 1.25, textShadow: "0 1px 12px rgba(15,23,42,0.45)" }}
-                >
-                  {text}
-                </span>
-              ) : null}
-              {!text.trim() ? (
-                <span className="text-xs text-white/70">当前未配置任何文字水印</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
+      <div className="relative aspect-video overflow-hidden rounded-[24px] border border-border bg-[radial-gradient(circle_at_top_left,#fef3c7,transparent_32%),radial-gradient(circle_at_bottom_right,#bfdbfe,transparent_34%),linear-gradient(135deg,#0f172a,#1e293b_52%,#334155)]">
+        <Image
+          alt="水印服务端预览"
+          className="object-cover"
+          draggable={false}
+          fill
+          loading="eager"
+          sizes="(max-width: 1024px) 100vw, 768px"
+          src={previewUrl}
+          unoptimized
+        />
         {!enabled ? (
           <div className="absolute inset-x-0 bottom-0 bg-black/45 px-4 py-2 text-center text-xs text-white/80">
             当前水印功能关闭，以上仅为配置预览
@@ -372,5 +473,57 @@ function WatermarkPreview({
         ) : null}
       </div>
     </div>
+  )
+}
+
+function WatermarkSliderField({
+  label,
+  value,
+  min,
+  max,
+  suffix,
+  onChange,
+  description,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  suffix: string
+  onChange: (value: number) => void
+  description?: string
+}) {
+  return (
+    <label className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground/80">
+          {value}
+          {suffix}
+        </span>
+      </div>
+      <Slider
+        min={min}
+        max={max}
+        step={1}
+        value={[value]}
+        className="px-1 [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:bg-foreground/10 dark:[&_[data-slot=slider-track]]:bg-white/12 [&_[data-slot=slider-range]]:bg-foreground dark:[&_[data-slot=slider-range]]:bg-white [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:border-background [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-thumb]]:shadow-[0_0_0_4px_rgba(15,23,42,0.08)] dark:[&_[data-slot=slider-thumb]]:shadow-[0_0_0_4px_rgba(255,255,255,0.12)]"
+        onValueChange={(nextValue) => {
+          const resolvedValue = Array.isArray(nextValue) ? nextValue[0] : nextValue
+          onChange(typeof resolvedValue === "number" ? resolvedValue : min)
+        }}
+      />
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="tabular-nums">
+          {min}
+          {suffix}
+        </span>
+        <span className="tabular-nums">
+          {max}
+          {suffix}
+        </span>
+      </div>
+      {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
+    </label>
   )
 }

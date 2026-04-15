@@ -38,6 +38,16 @@ export type PaymentGatewayChannelCode = (typeof PAYMENT_GATEWAY_CHANNEL_CODES)[n
 export type PaymentGatewayProviderCode = "alipay"
 export type PaymentGatewayPresentationType = "HTML_FORM" | "QR_CODE"
 
+export interface PaymentGatewayCheckoutMethodOption {
+  id: string
+  providerCode: string
+  channelCode: string
+  label: string
+  description: string
+  presentationType: PaymentGatewayPresentationType
+  checkoutClientType: PaymentGatewayClientType
+}
+
 export interface PaymentGatewayRouteRule {
   id: string
   scene: string
@@ -76,7 +86,6 @@ export interface PaymentGatewayChannelDefinition {
 }
 
 export interface PaymentGatewayAlipayConfigData {
-  enabled: boolean
   sandbox: boolean
   signMode: PaymentGatewaySignMode
   keyType: PaymentGatewayKeyType
@@ -104,6 +113,8 @@ export interface PaymentGatewayConfigData {
   orderExpireMinutes: number
   defaultCurrency: string
   defaultReturnPath: string
+  paymentSuccessEmailNotificationEnabled: boolean
+  paymentSuccessEmailRecipient: string
   topupEnabled: boolean
   topupPackages: PaymentGatewayTopupPackage[]
   topupCustomAmountEnabled: boolean

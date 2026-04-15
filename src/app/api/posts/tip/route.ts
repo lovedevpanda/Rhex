@@ -45,6 +45,6 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 }, {
   errorMessage: "打赏失败",
   logPrefix: "[api/posts/tip] unexpected error",
-  unauthorizedMessage: "请先登录后再打赏",
+  unauthorizedMessage: "请登录后参与打赏",
   allowStatuses: ["ACTIVE", "MUTED"],
 })

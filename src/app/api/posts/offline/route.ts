@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache"
 import { apiSuccess, createRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { offlineOwnPost } from "@/lib/post-offline"
+import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 
 export const POST = createRouteHandler(async ({ request }) => {
@@ -13,6 +14,7 @@ export const POST = createRouteHandler(async ({ request }) => {
   const result = await offlineOwnPost({ postId, reason })
 
   revalidateHomeSidebarStatsCache()
+  expireTaxonomyCacheImmediately()
   revalidateUserSurfaceCache(result.userId)
   revalidatePath(`/posts/${result.post.slug}`)
   revalidatePath("/")

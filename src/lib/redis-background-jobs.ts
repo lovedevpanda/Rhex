@@ -3,16 +3,23 @@ import { randomUUID } from "node:crypto"
 import type Redis from "ioredis"
 
 import {
+  createBackgroundJobLogMetadata,
   createBackgroundJobDeadLetterRecord,
+  parseBackgroundJobEnvelopeString,
   createBackgroundJobRetryEnvelope,
-  normalizeBackgroundJobEnvelope,
   type BackgroundJobEnvelope,
   type BackgroundJobTransport,
   resolveBackgroundJobConcurrency,
   runRegisteredBackgroundJob,
 } from "@/lib/background-jobs"
+import {
+  getBackgroundJobConsumerGroupName,
+  getBackgroundJobDeadLetterKey,
+  getBackgroundJobDelayedSetKey,
+  getBackgroundJobStreamKey,
+} from "@/lib/background-job-redis"
 import { logError, logInfo } from "@/lib/logger"
-import { connectRedisClient, createRedisConnection, createRedisKey } from "@/lib/redis"
+import { connectRedisClient, createRedisConnection } from "@/lib/redis"
 
 const DEFAULT_STREAM_MAX_LENGTH = 10_000
 const DEFAULT_BLOCK_TIMEOUT_MS = 5_000
@@ -29,6 +36,11 @@ type RedisStreamEntry = {
   fields: Record<string, string>
 }
 
+type RedisPendingEntry = {
+  id: string
+  idleMs: number
+}
+
 type GlobalRedisBackgroundJobState = {
   __bbsRedisBackgroundJobRuntime?: RedisBackgroundJobRuntime
 }
@@ -43,22 +55,6 @@ function parsePositiveInteger(value: string | undefined, fallback: number, min: 
   }
 
   return Math.min(max, Math.max(min, parsed))
-}
-
-function getBackgroundJobStreamKey() {
-  return createRedisKey("background-jobs", "stream")
-}
-
-function getBackgroundJobConsumerGroupName() {
-  return createRedisKey("background-jobs", "group")
-}
-
-function getBackgroundJobDelayedSetKey() {
-  return createRedisKey("background-jobs", "delayed")
-}
-
-function getBackgroundJobDeadLetterKey() {
-  return createRedisKey("background-jobs", "dead-letter")
 }
 
 function getBackgroundJobStreamMaxLength() {
@@ -174,6 +170,31 @@ function normalizeAutoClaimEntries(value: unknown) {
   return normalizeStreamEntries(value[1])
 }
 
+function normalizePendingEntries(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as RedisPendingEntry[]
+  }
+
+  return value.flatMap((entry) => {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string") {
+      return []
+    }
+
+    return [{
+      id: entry[0],
+      idleMs: Number(entry[2] ?? 0),
+    }]
+  })
+}
+
+function isRedisUnknownCommandError(error: unknown, command: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalizedMessage = message.toUpperCase()
+  const normalizedCommand = command.toUpperCase()
+
+  return normalizedMessage.includes("UNKNOWN COMMAND") && normalizedMessage.includes(normalizedCommand)
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
@@ -187,24 +208,7 @@ function parseBackgroundJobEnvelope(entry: RedisStreamEntry): BackgroundJobEnvel
     return null
   }
 
-  try {
-    const parsed = JSON.parse(encodedJob) as Partial<BackgroundJobEnvelope>
-
-    if (!parsed || typeof parsed !== "object" || typeof parsed.name !== "string" || typeof parsed.enqueuedAt !== "string" || !("payload" in parsed)) {
-      return null
-    }
-
-    return normalizeBackgroundJobEnvelope({
-      name: parsed.name,
-      payload: parsed.payload as BackgroundJobEnvelope["payload"],
-      enqueuedAt: parsed.enqueuedAt,
-      attempt: parsed.attempt,
-      maxAttempts: parsed.maxAttempts,
-      availableAt: typeof parsed.availableAt === "string" ? parsed.availableAt : undefined,
-    })
-  } catch {
-    return null
-  }
+  return parseBackgroundJobEnvelopeString(encodedJob)
 }
 
 class RedisBackgroundJobTransport implements BackgroundJobTransport {
@@ -311,6 +315,7 @@ class RedisBackgroundJobRuntime {
   readonly transport = new RedisBackgroundJobTransport()
 
   private startPromise: Promise<void> | null = null
+  private staleEntryClaimStrategy: "xautoclaim" | "xclaim" = "xautoclaim"
 
   async start() {
     this.startPromise ??= this.startInternal()
@@ -368,7 +373,7 @@ class RedisBackgroundJobRuntime {
           }
 
           for (const entry of entries) {
-            await this.processEntry(redis, entry)
+            await this.processEntry(redis, entry, consumerName)
           }
         }
       } catch (error) {
@@ -421,22 +426,116 @@ class RedisBackgroundJobRuntime {
   }
 
   private async processStaleEntries(redis: Redis, consumerName: string) {
-    const response = await redis.call(
-      "XAUTOCLAIM",
-      getBackgroundJobStreamKey(),
-      getBackgroundJobConsumerGroupName(),
-      consumerName,
-      String(getBackgroundJobPendingIdleMs()),
-      "0-0",
-      "COUNT",
-      String(getBackgroundJobPendingClaimBatchSize()),
-    )
-
-    const claimedEntries = normalizeAutoClaimEntries(response)
+    const claimedEntries = this.staleEntryClaimStrategy === "xclaim"
+      ? await this.processStaleEntriesWithXClaim(redis, consumerName)
+      : await this.processStaleEntriesWithAutoClaim(redis, consumerName)
 
     for (const entry of claimedEntries) {
-      await this.processEntry(redis, entry)
+      await this.processEntry(redis, entry, consumerName)
     }
+  }
+
+  private async processStaleEntriesWithAutoClaim(redis: Redis, consumerName: string) {
+    try {
+      const response = await redis.call(
+        "XAUTOCLAIM",
+        getBackgroundJobStreamKey(),
+        getBackgroundJobConsumerGroupName(),
+        consumerName,
+        String(getBackgroundJobPendingIdleMs()),
+        "0-0",
+        "COUNT",
+        String(getBackgroundJobPendingClaimBatchSize()),
+      )
+
+      return normalizeAutoClaimEntries(response)
+    } catch (error) {
+      if (!isRedisUnknownCommandError(error, "XAUTOCLAIM")) {
+        throw error
+      }
+
+      this.staleEntryClaimStrategy = "xclaim"
+      logInfo({
+        scope: "background-job",
+        action: "stale-claim-compat",
+        metadata: {
+          workerId: this.workerId,
+          strategy: "XPENDING+XCLAIM",
+        },
+      })
+
+      return this.processStaleEntriesWithXClaim(redis, consumerName)
+    }
+  }
+
+  private async processStaleEntriesWithXClaim(redis: Redis, consumerName: string) {
+    const maxClaimCount = getBackgroundJobPendingClaimBatchSize()
+    const minIdleMs = getBackgroundJobPendingIdleMs()
+    const scanPageSize = Math.max(2, maxClaimCount)
+    const maxScanCount = scanPageSize * 10
+    const claimedEntries: RedisStreamEntry[] = []
+    let cursor = "-"
+    let scannedCount = 0
+
+    while (claimedEntries.length < maxClaimCount && scannedCount < maxScanCount) {
+      const pendingEntriesResponse = await redis.call(
+        "XPENDING",
+        getBackgroundJobStreamKey(),
+        getBackgroundJobConsumerGroupName(),
+        cursor,
+        "+",
+        String(scanPageSize),
+      )
+      let pendingEntries = normalizePendingEntries(pendingEntriesResponse)
+
+      if (pendingEntries.length === 0) {
+        break
+      }
+
+      // Redis < 6.2 doesn't support exclusive range cursors for XPENDING, so
+      // subsequent pages may repeat the previous last entry.
+      if (cursor !== "-" && pendingEntries[0]?.id === cursor) {
+        pendingEntries = pendingEntries.slice(1)
+      }
+
+      if (pendingEntries.length === 0) {
+        break
+      }
+
+      scannedCount += pendingEntries.length
+      cursor = pendingEntries[pendingEntries.length - 1]?.id ?? cursor
+
+      const remainingClaimCount = maxClaimCount - claimedEntries.length
+      const stalePendingIds = pendingEntries
+        .filter((entry) => entry.idleMs >= minIdleMs)
+        .slice(0, remainingClaimCount)
+        .map((entry) => entry.id)
+
+      if (stalePendingIds.length === 0) {
+        if (pendingEntries.length < scanPageSize) {
+          break
+        }
+
+        continue
+      }
+
+      const response = await redis.call(
+        "XCLAIM",
+        getBackgroundJobStreamKey(),
+        getBackgroundJobConsumerGroupName(),
+        consumerName,
+        String(minIdleMs),
+        ...stalePendingIds,
+      )
+
+      claimedEntries.push(...normalizeStreamEntries(response))
+
+      if (pendingEntries.length < scanPageSize) {
+        break
+      }
+    }
+
+    return claimedEntries
   }
 
   private async promoteDueDelayedJobs(redis: Redis) {
@@ -479,7 +578,7 @@ return #jobs
     }
   }
 
-  private async processEntry(redis: Redis, entry: RedisStreamEntry) {
+  private async processEntry(redis: Redis, entry: RedisStreamEntry, consumerName: string) {
     const job = parseBackgroundJobEnvelope(entry)
 
     if (!job) {
@@ -493,14 +592,42 @@ return #jobs
       return
     }
 
+    logInfo({
+      scope: "background-job",
+      action: "start",
+      targetId: entry.id,
+      metadata: createBackgroundJobLogMetadata(job, {
+        workerId: this.workerId,
+        consumerName,
+        transport: "redis",
+      }),
+    })
+
+    const startedAtMs = Date.now()
     const result = await runRegisteredBackgroundJob(job)
+    const durationMs = Date.now() - startedAtMs
+
+    if (result.ok) {
+      logInfo({
+        scope: "background-job",
+        action: "success",
+        targetId: entry.id,
+        metadata: createBackgroundJobLogMetadata(job, {
+          workerId: this.workerId,
+          consumerName,
+          transport: "redis",
+          durationMs,
+        }),
+      })
+    }
+
     if (!result.ok) {
-      const errorMetadata = {
-        jobName: job.name,
-        enqueuedAt: job.enqueuedAt,
-        attempt: job.attempt,
-        maxAttempts: job.maxAttempts,
-      }
+      const errorMetadata = createBackgroundJobLogMetadata(job, {
+        workerId: this.workerId,
+        consumerName,
+        transport: "redis",
+        durationMs,
+      })
       const retryJob = result.retryable ? createBackgroundJobRetryEnvelope(job) : null
 
       if (retryJob) {
@@ -515,11 +642,14 @@ return #jobs
           scope: "background-job",
           action: "retry",
           targetId: entry.id,
-          metadata: {
-            ...errorMetadata,
+          metadata: createBackgroundJobLogMetadata(job, {
+            workerId: this.workerId,
+            consumerName,
+            transport: "redis",
+            durationMs,
             nextAttempt: retryJob.attempt,
             availableAt: retryJob.availableAt ?? null,
-          },
+          }),
         })
       } else {
         await this.persistDeadLetter(redis, createBackgroundJobDeadLetterRecord(job, result.error, result.retryable))

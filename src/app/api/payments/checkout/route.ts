@@ -20,6 +20,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     request.headers.get("user-agent"),
     readOptionalString(body, "clientType") || null,
   )
+  const preferredChannelCode = readOptionalString(body, "preferredChannelCode") || null
   const returnPath = readOptionalString(body, "returnPath") || null
   const metadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
     ? body.metadata as Record<string, unknown>
@@ -33,6 +34,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       bizOrderId,
       amountFen,
       clientType,
+      preferredChannelCode,
     },
   }), async () => {
     const result = await createPaymentCheckout({
@@ -43,6 +45,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       body: content,
       amountFen,
       clientType,
+      preferredChannelCode,
       returnPath,
       metadata,
       requestIp: getRequestIp(request),

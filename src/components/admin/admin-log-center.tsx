@@ -10,6 +10,7 @@ import {
 import {
   Activity,
   CalendarDays,
+  CreditCard,
   FileClock,
   LogIn,
   ReceiptText,
@@ -73,6 +74,7 @@ const tabIcons = {
   checkins: CalendarDays,
   points: Activity,
   uploads: FileClock,
+  payments: CreditCard,
   orders: ReceiptText,
 } as const
 

@@ -8,6 +8,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const packageId = typeof body.packageId === "string" ? body.packageId.trim() : ""
   const customAmountFen = typeof body.customAmountFen === "number" ? body.customAmountFen : Number(body.customAmountFen)
+  const preferredChannelCode = typeof body.preferredChannelCode === "string" ? body.preferredChannelCode.trim() : ""
   const clientType = inferCheckoutClientType(
     request.headers.get("user-agent"),
     typeof body.clientType === "string" ? body.clientType.trim() : null,
@@ -25,6 +26,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       bizOrderId: packageId || "custom",
       amountFen: Number.isInteger(customAmountFen) && customAmountFen > 0 ? customAmountFen : packageId,
       clientType,
+      preferredChannelCode: preferredChannelCode || null,
     },
   }), async () => {
     const result = await createPointTopupCheckout({
@@ -32,6 +34,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       packageId: packageId || null,
       customAmountFen: Number.isInteger(customAmountFen) && customAmountFen > 0 ? customAmountFen : null,
       clientType,
+      preferredChannelCode: preferredChannelCode || null,
       requestIp: getRequestIp(request),
     })
 

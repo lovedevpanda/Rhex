@@ -108,6 +108,10 @@ export const defaultSiteSettingsCreateInput = {
         enabled: false,
         domains: [],
       },
+      siteSecurity: {
+        loginIpChangeEmailAlertEnabled: false,
+        passwordChangeRequireEmailVerification: false,
+      },
       postSlugGeneration: {
         mode: "TITLE_TIMESTAMP",
       },
@@ -122,8 +126,10 @@ export const defaultSiteSettingsCreateInput = {
         enabled: false,
         text: "",
         position: "BOTTOM_RIGHT",
+        tiled: false,
         opacity: 22,
         fontSize: 24,
+        fontFamily: "",
         margin: 24,
         color: "#FFFFFF",
       },
@@ -137,6 +143,21 @@ export const defaultSiteSettingsCreateInput = {
           subject: "{{siteName}} 找回密码验证码",
           text: "用户 {{username}} 的找回密码验证码是 {{code}}，10 分钟内有效。如非本人操作，请尽快检查账号安全。",
           html: "<div style=\"font-family:Arial,sans-serif;line-height:1.7;color:#111\"><h2>{{siteName}} 找回密码</h2><p>账号：<strong>{{username}}</strong></p><p>你的找回密码验证码是：</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">{{code}}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件并尽快检查账号安全。</p></div>",
+        },
+        passwordChangeVerification: {
+          subject: "{{siteName}} 修改密码验证码",
+          text: "用户 {{username}} 的修改密码验证码是 {{code}}，10 分钟内有效。如非本人操作，请尽快检查账号安全。",
+          html: "<div style=\"font-family:Arial,sans-serif;line-height:1.7;color:#111\"><h2>{{siteName}} 修改密码</h2><p>账号：<strong>{{username}}</strong></p><p>你的修改密码验证码是：</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">{{code}}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件并尽快检查账号安全。</p></div>",
+        },
+        loginIpChangeAlert: {
+          subject: "{{siteName}} 登录安全提醒",
+          text: "{{displayName}}，你好。\n\n你的账号刚刚发生了一次新的登录，检测到登录 IP 与上次记录不一致。\n账号：{{username}}\n本次登录 IP：{{currentIp}}\n上次登录 IP：{{previousIp}}\n登录时间：{{loginAt}}\n设备信息：{{userAgent}}\n\n如果这是你本人操作，无需处理；如非本人操作，请尽快修改密码并检查账号安全。",
+          html: "<div style=\"font-family:Arial,sans-serif;line-height:1.7;color:#111\"><h2>{{siteName}} 登录安全提醒</h2><p>{{displayName}}，你好。</p><p>你的账号刚刚发生了一次新的登录，检测到登录 IP 与上次记录不一致。</p><table style=\"border-collapse:collapse;margin:16px 0\"><tbody><tr><td style=\"padding:6px 12px 6px 0;color:#666\">账号</td><td style=\"padding:6px 0\">{{username}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">本次登录 IP</td><td style=\"padding:6px 0\">{{currentIp}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">上次登录 IP</td><td style=\"padding:6px 0\">{{previousIp}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">登录时间</td><td style=\"padding:6px 0\">{{loginAt}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">设备信息</td><td style=\"padding:6px 0\">{{userAgent}}</td></tr></tbody></table><p>如果这是你本人操作，无需处理；如非本人操作，请尽快修改密码并检查账号安全。</p></div>",
+        },
+        paymentOrderSuccessNotification: {
+          subject: "{{siteName}} 支付成功通知 · {{orderSubject}}",
+          text: "订单标题：{{orderSubject}}\n商户单号：{{merchantOrderNo}}\n业务场景：{{bizScene}}\n支付金额：{{amount}}\n支付方式：{{providerCode}} / {{channelCode}}\n支付时间：{{paidAt}}\n付款用户：{{username}}\n{{pointName}}到账：{{totalPoints}}",
+          html: "<div style=\"font-family:Arial,sans-serif;line-height:1.7;color:#111\"><h2>{{siteName}} 支付成功通知</h2><p>订单标题：<strong>{{orderSubject}}</strong></p><table style=\"border-collapse:collapse;margin:16px 0\"><tbody><tr><td style=\"padding:6px 12px 6px 0;color:#666\">商户单号</td><td style=\"padding:6px 0\">{{merchantOrderNo}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">业务场景</td><td style=\"padding:6px 0\">{{bizScene}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">支付金额</td><td style=\"padding:6px 0\">{{amount}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">支付方式</td><td style=\"padding:6px 0\">{{providerCode}} / {{channelCode}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">支付时间</td><td style=\"padding:6px 0\">{{paidAt}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">付款用户</td><td style=\"padding:6px 0\">{{username}}</td></tr><tr><td style=\"padding:6px 12px 6px 0;color:#666\">{{pointName}}到账</td><td style=\"padding:6px 0\">{{totalPoints}}</td></tr></tbody></table><p>如需追溯，请前往后台日志中心查看支付流水。</p></div>",
         },
       },
       authPageShowcase: {

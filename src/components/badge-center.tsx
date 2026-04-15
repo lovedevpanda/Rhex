@@ -1,9 +1,11 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState, useTransition } from "react"
 
 import { LevelIcon } from "@/components/level-icon"
 import { Button } from "@/components/ui/rbutton"
+import { Tooltip } from "@/components/ui/tooltip"
 
 
 interface BadgeCenterItem {
@@ -156,7 +158,7 @@ export function BadgeCenter({ badges, isLoggedIn }: BadgeCenterProps) {
       {!isLoggedIn ? <div className="rounded-[24px] border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">登录后可以查看自己哪些勋章已达成，并手动领取。</div> : null}
       {feedback ? <div className="rounded-[20px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{feedback}</div> : null}
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {filteredItems.map((badge) => {
           const statusLabel = badge.eligibility.alreadyGranted ? "已领取" : badge.eligibility.eligible ? "可领取" : "未达成"
           const claimButtonLabel = badge.eligibility.alreadyGranted
@@ -171,56 +173,40 @@ export function BadgeCenter({ badges, isLoggedIn }: BadgeCenterProps) {
           const claimButtonDisabled = !isLoggedIn || badge.eligibility.alreadyGranted || !badge.eligibility.eligible || isPending || (badge.eligibility.purchaseRequired && !badge.eligibility.canAffordPurchase)
           const displayButtonLabel = badge.display.isDisplayed ? "取消佩戴" : "佩戴" 
           const displayButtonDisabled = !isLoggedIn || !badge.display.canDisplay || isPending || (!badge.display.isDisplayed && displayedCount >= MAX_DISPLAYED_BADGES)
+          const displayButtonTooltip = badge.display.isDisplayed
+            ? `当前已佩戴，顺序第 ${badge.display.displayOrder || 1} 位。`
+            : `已领取，可佩戴到用户名右侧，最多 ${MAX_DISPLAYED_BADGES} 个。`
 
           return (
-            <div key={badge.id} className="overflow-hidden rounded-[28px] border border-border bg-card shadow-soft">
-              <div className="p-5" style={{ background: `linear-gradient(135deg, ${badge.color}22 0%, transparent 100%)` }}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[22px] text-3xl" style={{ color: badge.color, backgroundColor: `${badge.color}14` }}>
-                      <LevelIcon icon={badge.iconText} color={badge.color} className="h-7 w-7 text-[28px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
+            <div key={badge.id} className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border bg-card shadow-soft">
+              <div className="p-4" style={{ background: `linear-gradient(135deg, ${badge.color}22 0%, transparent 100%)` }}>
+                <div className="flex items-start justify-between gap-2.5">
+                  <Link href={`/badges/${badge.code}`} className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] text-2xl" style={{ color: badge.color, backgroundColor: `${badge.color}14` }}>
+                      <LevelIcon icon={badge.iconText} color={badge.color} className="h-5.5 w-5.5 text-[22px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
                     </div>
 
-                    <div>
-                      <p className="text-xs text-muted-foreground">{badge.category || "社区成就"}</p>
-                      <h2 className="mt-1 text-lg font-semibold">{badge.name}</h2>
+                    <div className="min-w-0">
+                      <p className="truncate text-[11px] leading-4 text-muted-foreground">{badge.category || "社区成就"}</p>
+                      <h2 className="mt-0.5 line-clamp-1 text-base font-semibold leading-5">{badge.name}</h2>
                     </div>
-                  </div>
-                  <span className={badge.eligibility.alreadyGranted ? "rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700" : badge.eligibility.eligible ? "rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-700" : "rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600"}>{statusLabel}</span>
+                  </Link>
+                  <span className={badge.eligibility.alreadyGranted ? "shrink-0 whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700" : badge.eligibility.eligible ? "shrink-0 whitespace-nowrap rounded-full bg-orange-100 px-2 py-0.5 text-[11px] text-orange-700" : "shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"}>{statusLabel}</span>
                 </div>
-                <p className="mt-4 text-sm leading-7 text-muted-foreground">{badge.description || "收集社区勋章，佩戴你的独特身份。"}</p>
+                <p className="mt-3 line-clamp-3 text-[13px] leading-6 text-muted-foreground">{badge.description || "收集社区勋章，佩戴你的独特身份。"}</p>
               </div>
 
-              <div className="space-y-4 p-5 pt-0">
-                <div className="rounded-[22px] bg-secondary/40 p-4 text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">领取条件</p>
-                  <ul className="mt-2 space-y-1.5">
-                    {badge.rules.length === 0 ? <li>无门槛，登录即可领取</li> : badge.rules.map((rule) => <li key={rule.id}>- {rule.value}{rule.extraValue ? ` ~ ${rule.extraValue}` : ""}</li>)}
-                  </ul>
-                  {badge.pointsCost > 0 ? <p className="mt-3">领取时需额外支付 {badge.pointsCost} 积分。</p> : null}
-                </div>
-
-                {badge.eligibility.failedRules.length > 0 && !badge.eligibility.alreadyGranted ? (
-                  <div className="rounded-[22px] border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    当前差一点：{badge.eligibility.failedRules[0]}
-                  </div>
-                ) : null}
-
-                {badge.eligibility.alreadyGranted ? (
-                  <div className="rounded-[22px] border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    {badge.display.isDisplayed ? `当前已佩戴，佩戴顺序第 ${badge.display.displayOrder || 1} 位。` : `你已领取该勋章，可选择佩戴到帖子用户名右侧（最多 ${MAX_DISPLAYED_BADGES} 个）。`}
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">已领取 {badge.grantedUserCount ?? 0} 人</p>
+              <div className="flex flex-1 items-center p-4 pt-3">
+                <div className="flex w-full flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     {badge.display.canDisplay ? (
-                      <Button type="button" variant={badge.display.isDisplayed ? "secondary" : "outline"} disabled={displayButtonDisabled} onClick={() => handleToggleDisplay(badge.id)} className="rounded-full px-4">
-                        {displayButtonLabel}
-                      </Button>
+                      <Tooltip content={displayButtonTooltip}>
+                        <Button type="button" variant={badge.display.isDisplayed ? "secondary" : "outline"} disabled={displayButtonDisabled} onClick={() => handleToggleDisplay(badge.id)} className="h-7 rounded-full px-3 text-xs">
+                          {displayButtonLabel}
+                        </Button>
+                      </Tooltip>
                     ) : null}
-                    <Button type="button" disabled={claimButtonDisabled} onClick={() => handleClaim(badge.id)} className="rounded-full px-5">
+                    <Button type="button" disabled={claimButtonDisabled} onClick={() => handleClaim(badge.id)} className="h-7 rounded-full px-4 text-xs">
                       {claimButtonLabel}
                     </Button>
                   </div>

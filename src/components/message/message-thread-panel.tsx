@@ -3,6 +3,7 @@
 import Link from "next/link"
 import type { KeyboardEvent } from "react"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { ChevronLeft, ChevronUp, MessageSquareMore, Send, SmilePlus } from "lucide-react"
 
 import { EmojiPicker } from "@/components/emoji-picker"
@@ -82,6 +83,7 @@ function MessageThreadPanelContent({
   historyError: string
   onBack?: () => void
 }) {
+  const router = useRouter()
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
   const shouldStickToBottomRef = useRef(true)
@@ -180,6 +182,10 @@ function MessageThreadPanelContent({
           senderAvatarPath: null,
           isMine: true,
         })
+
+        if (result.conversationId !== conversation.id) {
+          router.replace(`/messages?conversation=${result.conversationId}`, { scroll: false })
+        }
       }
 
       setDraft("")
@@ -238,16 +244,7 @@ function MessageThreadPanelContent({
             <UserAvatar name={recipient.displayName} avatarPath={recipient.avatarPath} size="md" />
           )}
           <div className="min-w-0">
-            {recipientProfileHref ? (
-              <Link
-                href={recipientProfileHref}
-                className="block truncate text-[17px] font-semibold transition-colors hover:text-foreground/80 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                {conversation.title}
-              </Link>
-            ) : (
-              <h2 className="truncate text-[17px] font-semibold">{conversation.title}</h2>
-            )}
+            <h2 className="truncate text-[17px] font-semibold">{conversation.title}</h2>
             <p className="mt-1 truncate text-sm text-muted-foreground">{conversation.subtitle}</p>
           </div>
         </div>
@@ -283,7 +280,7 @@ function MessageThreadPanelContent({
             <div className={cn("max-w-[76%]", message.isMine ? "items-end" : "items-start")}>
               <div
                 className={cn(
-                  "rounded-[22px] px-4 py-3 text-sm leading-7 shadow-xs",
+                  "inline-block rounded-[20px] px-3.5 py-2 text-sm leading-6 shadow-xs",
                   message.isMine
                     ? "rounded-br-md bg-foreground text-background dark:bg-primary dark:text-primary-foreground"
                     : "rounded-bl-md border border-border bg-card text-foreground dark:bg-secondary/70 dark:text-foreground",
@@ -293,7 +290,7 @@ function MessageThreadPanelContent({
                   content={message.body}
                   markdownEmojiMap={markdownEmojiMap}
                   className={cn(
-                    "prose-p:my-0 prose-headings:my-0 prose-blockquote:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-p:text-inherit prose-headings:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-blockquote:text-inherit prose-li:text-inherit prose-a:text-inherit",
+                    "[&_p]:!my-0 [&_p]:leading-6 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0 prose-headings:my-0 prose-blockquote:my-2 prose-pre:my-2 prose-p:text-inherit prose-headings:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-blockquote:text-inherit prose-li:text-inherit prose-a:text-inherit",
                     message.isMine && "text-inherit **:text-inherit [&_.md-list]:text-inherit [&_.md-task-list_.task-list-item_label]:text-inherit [&_.md-task-list_.task-list-item:has(input[type='checkbox']:checked)]:text-inherit [&_.md-callout-title]:text-inherit",
                   )}
                 />

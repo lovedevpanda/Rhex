@@ -35,7 +35,7 @@ export function BoardSelectField({
   disabled,
   placeholder = "请选择节点",
   title = "选择节点",
-  description = "支持按分区、节点名或 slug 搜索，节点较多时也能快速定位。",
+  description = "支持按分区、节点名或 slug 搜索",
 }: BoardSelectFieldProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")

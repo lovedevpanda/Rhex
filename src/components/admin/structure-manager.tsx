@@ -46,6 +46,7 @@ import { AdminSummaryStrip } from "@/components/admin/admin-summary-strip"
 import { showConfirm } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { LevelIcon } from "@/components/level-icon"
 import {
   Card,
   CardAction,
@@ -287,7 +288,13 @@ export function StructureManager({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-base leading-none">{zone.icon}</span>
+                            <LevelIcon
+                              icon={zone.icon}
+                              className="h-5 w-5 shrink-0 text-base"
+                              emojiClassName="text-inherit leading-none"
+                              svgClassName="[&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                              title={`${zone.name} 图标`}
+                            />
                             <span className="truncate text-sm font-semibold">{zone.name}</span>
                           </div>
                           <p className="mt-1 truncate text-[11px] text-muted-foreground">/{zone.slug} · 排序 {zone.sortOrder}</p>
@@ -414,7 +421,13 @@ function BoardRow({
       <TableCell className="align-top">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-base leading-none">{board.icon}</span>
+            <LevelIcon
+              icon={board.icon}
+              className="h-5 w-5 shrink-0 text-base"
+              emojiClassName="text-inherit leading-none"
+              svgClassName="[&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+              title={`${board.name} 图标`}
+            />
             <span className="truncate text-sm font-semibold">{board.name}</span>
           </div>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">/{board.slug} · 所属分区 {board.zoneName ?? "未分配"} · 排序 {board.sortOrder}</p>

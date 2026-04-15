@@ -23,6 +23,7 @@ export interface AnonymousDisplayIdentity {
   } | null
   authorDisplayedBadges?: Array<{
     id: string
+    code?: string | null
     name: string
     description?: string | null
     color: string
@@ -54,6 +55,7 @@ function mapAnonymousIdentity(user: AnonymousMaskUserRecord): AnonymousDisplayId
       .slice(0, 3)
       .map((item) => ({
         id: item.badge.id,
+        code: item.badge.code,
         name: item.badge.name,
         description: item.badge.description,
         color: item.badge.color,
@@ -91,6 +93,7 @@ export function applyAnonymousIdentityToPost<T extends {
   } | null
   authorDisplayedBadges?: Array<{
     id: string
+    code?: string | null
     name: string
     description?: string | null
     color: string

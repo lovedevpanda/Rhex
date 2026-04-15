@@ -10,11 +10,13 @@ import {
   mergeRegisterNicknameLengthSettings,
   mergeRegistrationEmailTemplateSettings,
   mergeRegistrationRewardSettings,
+  mergeSiteSecuritySettings,
   resolveRegisterInviteCodeHelpSettings,
   resolveRegisterEmailWhitelistSettings,
   resolveRegistrationEmailTemplateSettings,
   resolveRegisterNicknameLengthSettings,
   resolveRegistrationRewardSettings,
+  resolveSiteSecuritySettings,
 } from "@/lib/site-settings-app-state"
 import { mergeAuthProviderSensitiveConfig, mergeCaptchaSensitiveConfig } from "@/lib/site-settings-sensitive-state"
 import { normalizeCaptchaMode } from "@/lib/shared/config-parsers"
@@ -66,6 +68,15 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
   const registerEmailRequired = registerEmailEnabled && Boolean(body.registerEmailRequired)
   const registerEmailVerification = registerEmailEnabled && Boolean(body.registerEmailVerification)
   const registerEmailWhitelistEnabled = registerEmailEnabled && Boolean(body.registerEmailWhitelistEnabled)
+  const existingSiteSecuritySettings = resolveSiteSecuritySettings({
+    appStateJson: existing.appStateJson,
+  })
+  const loginIpChangeEmailAlertEnabled = "loginIpChangeEmailAlertEnabled" in body
+    ? Boolean(body.loginIpChangeEmailAlertEnabled)
+    : existingSiteSecuritySettings.loginIpChangeEmailAlertEnabled
+  const passwordChangeRequireEmailVerification = "passwordChangeRequireEmailVerification" in body
+    ? Boolean(body.passwordChangeRequireEmailVerification)
+    : existingSiteSecuritySettings.passwordChangeRequireEmailVerification
   const registerEmailWhitelistDomainsInput = "registerEmailWhitelistDomains" in body
     ? readOptionalStringField(body, "registerEmailWhitelistDomains")
     : existingRegisterEmailWhitelistSettings.domains.join("\n")
@@ -107,6 +118,15 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
   const resetPasswordEmailSubject = readOptionalStringField(body, "resetPasswordEmailSubject") || existingRegistrationEmailTemplateSettings.resetPasswordVerification.subject
   const resetPasswordEmailText = readOptionalStringField(body, "resetPasswordEmailText") || existingRegistrationEmailTemplateSettings.resetPasswordVerification.text
   const resetPasswordEmailHtml = readOptionalStringField(body, "resetPasswordEmailHtml") || existingRegistrationEmailTemplateSettings.resetPasswordVerification.html
+  const passwordChangeEmailSubject = readOptionalStringField(body, "passwordChangeEmailSubject") || existingRegistrationEmailTemplateSettings.passwordChangeVerification.subject
+  const passwordChangeEmailText = readOptionalStringField(body, "passwordChangeEmailText") || existingRegistrationEmailTemplateSettings.passwordChangeVerification.text
+  const passwordChangeEmailHtml = readOptionalStringField(body, "passwordChangeEmailHtml") || existingRegistrationEmailTemplateSettings.passwordChangeVerification.html
+  const loginIpChangeAlertEmailSubject = readOptionalStringField(body, "loginIpChangeAlertEmailSubject") || existingRegistrationEmailTemplateSettings.loginIpChangeAlert.subject
+  const loginIpChangeAlertEmailText = readOptionalStringField(body, "loginIpChangeAlertEmailText") || existingRegistrationEmailTemplateSettings.loginIpChangeAlert.text
+  const loginIpChangeAlertEmailHtml = readOptionalStringField(body, "loginIpChangeAlertEmailHtml") || existingRegistrationEmailTemplateSettings.loginIpChangeAlert.html
+  const paymentOrderSuccessEmailSubject = readOptionalStringField(body, "paymentOrderSuccessEmailSubject") || existingRegistrationEmailTemplateSettings.paymentOrderSuccessNotification.subject
+  const paymentOrderSuccessEmailText = readOptionalStringField(body, "paymentOrderSuccessEmailText") || existingRegistrationEmailTemplateSettings.paymentOrderSuccessNotification.text
+  const paymentOrderSuccessEmailHtml = readOptionalStringField(body, "paymentOrderSuccessEmailHtml") || existingRegistrationEmailTemplateSettings.paymentOrderSuccessNotification.html
 
   if (registrationRequireInviteCode && !registerInviteCodeEnabled) {
     apiError(400, "注册要求必须填写邀请码时，不能关闭邀请码输入框显示")
@@ -154,6 +174,21 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
       text: resetPasswordEmailText,
       html: resetPasswordEmailHtml,
     },
+    passwordChangeVerification: {
+      subject: passwordChangeEmailSubject,
+      text: passwordChangeEmailText,
+      html: passwordChangeEmailHtml,
+    },
+    loginIpChangeAlert: {
+      subject: loginIpChangeAlertEmailSubject,
+      text: loginIpChangeAlertEmailText,
+      html: loginIpChangeAlertEmailHtml,
+    },
+    paymentOrderSuccessNotification: {
+      subject: paymentOrderSuccessEmailSubject,
+      text: paymentOrderSuccessEmailText,
+      html: paymentOrderSuccessEmailHtml,
+    },
   })
   const appStateWithAuthProviders = mergeAuthProviderSettings(appStateWithRegistrationEmailTemplates, {
     githubEnabled: authGithubEnabled,
@@ -172,7 +207,11 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
     title: registerInviteCodeHelpTitle,
     url: registerInviteCodeHelpUrl,
   })
-  const appStateJson = mergeRegisterEmailWhitelistSettings(appStateWithRegisterInviteCodeHelp, {
+  const appStateWithSiteSecurity = mergeSiteSecuritySettings(appStateWithRegisterInviteCodeHelp, {
+    loginIpChangeEmailAlertEnabled,
+    passwordChangeRequireEmailVerification,
+  })
+  const appStateJson = mergeRegisterEmailWhitelistSettings(appStateWithSiteSecurity, {
     enabled: registerEmailWhitelistEnabled,
     domains: registerEmailWhitelistDomains,
   })

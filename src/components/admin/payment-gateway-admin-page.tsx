@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { TextField } from "@/components/ui/text-field"
 import { toast } from "@/components/ui/toast"
-import { formatPreciseDateTime } from "@/lib/formatters"
+import { formatOptionalPreciseDateTime } from "@/lib/formatters"
 import {
   PAYMENT_GATEWAY_CLIENT_TYPES,
   type PaymentGatewayAdminData,
@@ -24,14 +24,6 @@ function formatAmountFen(amountFen: number, currency: string) {
   return `${currency} ${(amountFen / 100).toFixed(2)}`
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "暂无"
-  }
-
-  return formatPreciseDateTime(value) ?? value
-}
-
 function describeRouteRule(route: PaymentGatewayRouteRule, channelLabel: string) {
   return `匹配场景 ${route.scene || "*"}，客户端 ${route.clientType}；命中后优先级 ${route.priority}，走 ${channelLabel}。`
 }
@@ -42,6 +34,8 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
   const [enabled, setEnabled] = useState(initialData.config.enabled)
   const [orderExpireMinutes, setOrderExpireMinutes] = useState(String(initialData.config.orderExpireMinutes))
   const [defaultReturnPath, setDefaultReturnPath] = useState(initialData.config.defaultReturnPath)
+  const [paymentSuccessEmailNotificationEnabled, setPaymentSuccessEmailNotificationEnabled] = useState(initialData.config.paymentSuccessEmailNotificationEnabled)
+  const [paymentSuccessEmailRecipient, setPaymentSuccessEmailRecipient] = useState(initialData.config.paymentSuccessEmailRecipient)
   const [topupEnabled, setTopupEnabled] = useState(initialData.config.topupEnabled)
   const [topupPackages, setTopupPackages] = useState(initialData.config.topupPackages)
   const [topupCustomAmountEnabled, setTopupCustomAmountEnabled] = useState(initialData.config.topupCustomAmountEnabled)
@@ -63,6 +57,8 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
     setEnabled(nextData.config.enabled)
     setOrderExpireMinutes(String(nextData.config.orderExpireMinutes))
     setDefaultReturnPath(nextData.config.defaultReturnPath)
+    setPaymentSuccessEmailNotificationEnabled(nextData.config.paymentSuccessEmailNotificationEnabled)
+    setPaymentSuccessEmailRecipient(nextData.config.paymentSuccessEmailRecipient)
     setTopupEnabled(nextData.config.topupEnabled)
     setTopupPackages(nextData.config.topupPackages)
     setTopupCustomAmountEnabled(nextData.config.topupCustomAmountEnabled)
@@ -79,6 +75,8 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
         enabled,
         orderExpireMinutes: Number(orderExpireMinutes),
         defaultReturnPath,
+        paymentSuccessEmailNotificationEnabled,
+        paymentSuccessEmailRecipient,
         topupEnabled,
         topupPackages,
         topupCustomAmountEnabled,
@@ -251,7 +249,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
         <CardHeader className="border-b">
           <CardTitle>运行概览</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-4">
+        <CardContent className="grid gap-3 py-5 md:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">网关总开关</p>
             <p className="mt-2 text-base font-semibold">{enabled ? "已启用" : "未启用"}</p>
@@ -266,11 +264,6 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">启用路由</p>
             <p className="mt-2 text-base font-semibold">{activeRouteCount} 条</p>
             <p className="mt-1 text-sm text-muted-foreground">按场景和客户端类型决定最终使用哪个支付通道。</p>
-          </div>
-          <div className="rounded-xl border border-border p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">接口提供方</p>
-            <p className="mt-2 text-base font-semibold">{data.config.alipay.enabled ? "支付宝已启用" : "支付宝未启用"}</p>
-            <p className="mt-1 text-sm text-muted-foreground">具体接口参数、沙箱、密钥与证书已拆分到独立渠道页。</p>
           </div>
         </CardContent>
       </Card>
@@ -293,27 +286,35 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
             <TextField label="订单超时（分钟）" value={orderExpireMinutes} onChange={setOrderExpireMinutes} placeholder="30" />
             <TextField label="默认返回地址" value={defaultReturnPath} onChange={setDefaultReturnPath} placeholder="/settings" />
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle>渠道提供方</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 py-5 md:grid-cols-4">
-          <div className="rounded-xl border border-border p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">支付宝</p>
+          <div className="rounded-xl border border-border p-4">
+            <div className="grid gap-4 xl:grid-cols-[auto_minmax(0,1fr)] xl:items-end">
+              <div className="rounded-xl border border-border px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">支付成功邮件通知</p>
+                    <p className="mt-1 text-xs text-muted-foreground">订单支付并履约成功后，向指定邮箱发送通知。</p>
+                  </div>
+                  <Switch checked={paymentSuccessEmailNotificationEnabled} onCheckedChange={setPaymentSuccessEmailNotificationEnabled} />
+                </div>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs ${data.config.alipay.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
-                {data.config.alipay.enabled ? "已启用" : "未启用"}
-              </span>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/admin/apps/payment-gateway/alipay" className="inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
-                打开支付宝接口页
-              </Link>
+              <div className="space-y-2">
+                <TextField
+                  label="通知邮箱"
+                  value={paymentSuccessEmailRecipient}
+                  onChange={setPaymentSuccessEmailRecipient}
+                  placeholder="如 ops@example.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  邮件模板可在
+                  {" "}
+                  <Link href="/admin/settings/registration/email-templates" className="underline underline-offset-4 hover:text-foreground">
+                    /admin/settings/registration/email-templates
+                  </Link>
+                  {" "}
+                  编辑。若系统未启用 SMTP，后台任务会自动丢弃，不会阻塞支付流程。
+                </p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -321,7 +322,15 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
 
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>支付通道</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>支付通道</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">这里只保留通道启停。接口参数统一在支付宝接口页维护。</p>
+            </div>
+            <Link href="/admin/apps/payment-gateway/alipay" className="inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+              打开支付宝接口页
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-3">
           {data.channelDefinitions.map((definition) => {
@@ -452,7 +461,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
                   </select>
                 </label>
                 <label className="space-y-2">
-                  <span className="text-sm font-medium">支付接口</span>
+                  <span className="text-sm font-medium">支付通道</span>
                   <select
                     value={route.channelCode}
                     onChange={(event) => {
@@ -544,7 +553,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
                 <div>
                   <p className="text-sm font-semibold">{order.subject}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{order.bizScene} · {formatAmountFen(order.amountFen, order.currency)} · {order.status}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">履约 {order.fulfillmentStatus}{order.fulfilledAt ? ` · ${formatDateTime(order.fulfilledAt)}` : ""}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">履约 {order.fulfillmentStatus}{order.fulfilledAt ? ` · ${formatOptionalPreciseDateTime(order.fulfilledAt)}` : ""}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     单号 {order.merchantOrderNo}
                     {order.providerTradeNo ? ` · 第三方流水 ${order.providerTradeNo}` : ""}
@@ -553,7 +562,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
                 <div className="text-right text-xs text-muted-foreground">
                   <p>{order.userDisplayName}</p>
                   <p className="mt-1">{order.providerCode} / {order.channelCode}</p>
-                  <p className="mt-1">{formatDateTime(order.createdAt)}</p>
+                  <p className="mt-1">{formatOptionalPreciseDateTime(order.createdAt)}</p>
                 </div>
               </div>
               {order.lastErrorMessage ? (

@@ -101,10 +101,10 @@ export async function SiteHeader() {
               ) : null}
               <Link href="/notifications" className="relative hidden sm:inline-flex">
                 <Button variant="ghost" size="icon" className="size-8 rounded-md">
-                  <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600" : "h-4 w-4"} />
+                  <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
                 </Button>
                 {formatUnreadBadge(unreadNotificationCount) ? (
-                  <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full border border-background bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-background dark:bg-rose-300 dark:text-rose-950 dark:shadow-none">
                     {formatUnreadBadge(unreadNotificationCount)}
                   </span>
                 ) : null}

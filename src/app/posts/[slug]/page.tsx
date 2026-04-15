@@ -229,6 +229,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
   const displayPost = canViewRestrictedPost
     ? { ...postWithAuction, redPacket: redPacketSummary ?? postWithAuction.redPacket, tipping: tipSummary ? {
       enabled: tipSummary.enabled,
+      isLoggedIn: tipSummary.isLoggedIn,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
       gifts: tipSummary.gifts,

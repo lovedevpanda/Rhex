@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { TextField } from "@/components/ui/text-field"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { formatPreciseDateTime } from "@/lib/formatters"
+import { formatOptionalPreciseDateTime } from "@/lib/formatters"
 
 import type { AiReplyAdminData } from "@/lib/ai-reply"
 
@@ -35,14 +35,6 @@ const TASK_STATUS_CLASS_NAMES = {
 
 function canDeleteTaskLog(status: keyof typeof TASK_STATUS_LABELS) {
   return status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED"
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "暂无"
-  }
-
-  return formatPreciseDateTime(value) ?? value
 }
 
 function LabeledTextarea(props: {
@@ -473,7 +465,7 @@ export function AiReplyAdminPage({ initialData }: AiReplyAdminPageProps) {
 
               <p className="mt-3 text-sm font-medium">{task.postTitle}</p>
               <p className="mt-1 text-sm text-muted-foreground">触发者：{task.triggerUserDisplayName}，代理：{task.agentDisplayName}</p>
-              <p className="mt-1 text-sm text-muted-foreground">创建于 {formatDateTime(task.createdAt)}，完成于 {formatDateTime(task.finishedAt)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">创建于 {formatOptionalPreciseDateTime(task.createdAt)}，完成于 {formatOptionalPreciseDateTime(task.finishedAt)}</p>
               <p className="mt-1 text-sm text-muted-foreground">尝试次数 {task.attemptCount} / {task.maxAttempts}</p>
               {task.sourceCommentExcerpt ? <p className="mt-2 text-sm text-muted-foreground">源评论：{task.sourceCommentExcerpt}</p> : null}
               {task.resultExcerpt ? <p className="mt-2 text-sm text-muted-foreground">AI 回复：{task.resultExcerpt}</p> : null}

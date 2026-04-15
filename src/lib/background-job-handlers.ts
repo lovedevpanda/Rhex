@@ -10,6 +10,7 @@ export async function registerDefaultBackgroundJobHandlers() {
   }
 
   await Promise.all([
+    import("@/lib/account-security"),
     import("@/lib/ai-reply"),
     import("@/lib/background-task"),
     import("@/lib/check-in-streak-service"),
@@ -18,6 +19,7 @@ export async function registerDefaultBackgroundJobHandlers() {
     import("@/lib/level-system"),
     import("@/lib/notification-writes"),
     import("@/lib/post-auctions"),
+    import("@/lib/payment-gateway-email-notifications"),
   ])
 
   globalForBackgroundJobHandlers.__bbsBackgroundJobHandlersRegistered = true

@@ -88,6 +88,8 @@ const DEFAULT_SERVER_CONFIG: ServerPaymentGatewayConfigData = {
   orderExpireMinutes: 30,
   defaultCurrency: "CNY",
   defaultReturnPath: "/settings",
+  paymentSuccessEmailNotificationEnabled: false,
+  paymentSuccessEmailRecipient: "",
   topupEnabled: false,
   topupPackages: [
     {
@@ -125,7 +127,6 @@ const DEFAULT_SERVER_CONFIG: ServerPaymentGatewayConfigData = {
   channels: DEFAULT_CHANNEL_TOGGLES,
   routes: DEFAULT_ROUTES,
   alipay: {
-    enabled: false,
     sandbox: true,
     signMode: "PUBLIC_KEY",
     keyType: "PKCS1",
@@ -224,6 +225,10 @@ function normalizeString(value: unknown, fallback: string, maxLength: number) {
 
 function normalizeOptionalString(value: unknown, fallback = "", maxLength = 500) {
   return normalizeString(value, fallback, maxLength)
+}
+
+function isValidEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
 function normalizeCurrency(value: unknown, fallback: string) {
@@ -413,6 +418,8 @@ function normalizeServerConfig(
       : DEFAULT_SERVER_CONFIG.orderExpireMinutes,
     defaultCurrency: normalizeCurrency(config.defaultCurrency, DEFAULT_SERVER_CONFIG.defaultCurrency),
     defaultReturnPath: normalizePathOrUrl(config.defaultReturnPath, DEFAULT_SERVER_CONFIG.defaultReturnPath),
+    paymentSuccessEmailNotificationEnabled: normalizeBoolean(config.paymentSuccessEmailNotificationEnabled, DEFAULT_SERVER_CONFIG.paymentSuccessEmailNotificationEnabled),
+    paymentSuccessEmailRecipient: normalizeOptionalString(config.paymentSuccessEmailRecipient, DEFAULT_SERVER_CONFIG.paymentSuccessEmailRecipient, 160),
     topupEnabled: normalizeBoolean(config.topupEnabled, DEFAULT_SERVER_CONFIG.topupEnabled),
     topupPackages: normalizeTopupPackages(config.topupPackages, DEFAULT_SERVER_CONFIG.topupPackages),
     topupCustomAmountEnabled: normalizeBoolean(config.topupCustomAmountEnabled, DEFAULT_SERVER_CONFIG.topupCustomAmountEnabled),
@@ -428,7 +435,6 @@ function normalizeServerConfig(
     channels: normalizeChannelToggles(config.channels, DEFAULT_SERVER_CONFIG.channels),
     routes: normalizeRouteRules(config.routes, DEFAULT_SERVER_CONFIG.routes),
     alipay: {
-      enabled: normalizeBoolean(alipayConfig.enabled, DEFAULT_SERVER_CONFIG.alipay.enabled),
       sandbox: normalizeBoolean(alipayConfig.sandbox, DEFAULT_SERVER_CONFIG.alipay.sandbox),
       signMode: normalizeSignMode(alipayConfig.signMode, DEFAULT_SERVER_CONFIG.alipay.signMode),
       keyType: normalizeKeyType(alipayConfig.keyType, DEFAULT_SERVER_CONFIG.alipay.keyType),
@@ -456,6 +462,8 @@ function toPublicConfig(config: ServerPaymentGatewayConfigData): PaymentGatewayC
     orderExpireMinutes: config.orderExpireMinutes,
     defaultCurrency: config.defaultCurrency,
     defaultReturnPath: config.defaultReturnPath,
+    paymentSuccessEmailNotificationEnabled: config.paymentSuccessEmailNotificationEnabled,
+    paymentSuccessEmailRecipient: config.paymentSuccessEmailRecipient,
     topupEnabled: config.topupEnabled,
     topupPackages: config.topupPackages,
     topupCustomAmountEnabled: config.topupCustomAmountEnabled,
@@ -465,7 +473,6 @@ function toPublicConfig(config: ServerPaymentGatewayConfigData): PaymentGatewayC
     channels: config.channels,
     routes: config.routes,
     alipay: {
-      enabled: config.alipay.enabled,
       sandbox: config.alipay.sandbox,
       signMode: config.alipay.signMode,
       keyType: config.alipay.keyType,
@@ -528,6 +535,8 @@ function buildNextStateRecord(existing: PaymentGatewayStateRecord | null, config
       orderExpireMinutes: config.orderExpireMinutes,
       defaultCurrency: config.defaultCurrency,
       defaultReturnPath: config.defaultReturnPath,
+      paymentSuccessEmailNotificationEnabled: config.paymentSuccessEmailNotificationEnabled,
+      paymentSuccessEmailRecipient: config.paymentSuccessEmailRecipient,
       topupEnabled: config.topupEnabled,
       topupPackages: config.topupPackages,
       topupCustomAmountEnabled: config.topupCustomAmountEnabled,
@@ -537,7 +546,6 @@ function buildNextStateRecord(existing: PaymentGatewayStateRecord | null, config
       channels: config.channels,
       routes: config.routes,
       alipay: {
-        enabled: config.alipay.enabled,
         sandbox: config.alipay.sandbox,
         signMode: config.alipay.signMode,
         keyType: config.alipay.keyType,
@@ -590,24 +598,34 @@ function mergePaymentGatewaySensitiveState(
   return JSON.stringify(root)
 }
 
-function hasEnabledAlipayChannel(config: ServerPaymentGatewayConfigData) {
-  return config.channels.some((item) => item.enabled && item.channelCode.startsWith("alipay."))
-}
+function hasEffectiveAlipayRoute(config: ServerPaymentGatewayConfigData) {
+  const enabledChannels = new Set(
+    config.channels
+      .filter((item) => item.enabled && item.channelCode.startsWith("alipay."))
+      .map((item) => item.channelCode),
+  )
 
-function hasEnabledAlipayRoute(config: ServerPaymentGatewayConfigData) {
-  return config.routes.some((item) => item.enabled && item.providerCode === "alipay")
+  if (enabledChannels.size === 0) {
+    return false
+  }
+
+  return config.routes.some((item) => item.enabled && item.providerCode === "alipay" && enabledChannels.has(item.channelCode))
 }
 
 function assertRuntimeConfig(config: ServerPaymentGatewayConfigData) {
+  if (config.paymentSuccessEmailNotificationEnabled && !config.paymentSuccessEmailRecipient) {
+    apiError(400, "开启支付成功邮件通知时，必须填写接收邮箱")
+  }
+
+  if (config.paymentSuccessEmailRecipient && !isValidEmailAddress(config.paymentSuccessEmailRecipient)) {
+    apiError(400, "支付成功邮件通知邮箱格式不正确")
+  }
+
   if (!config.enabled) {
     return
   }
 
-  if (!config.alipay.enabled && (hasEnabledAlipayChannel(config) || hasEnabledAlipayRoute(config))) {
-    apiError(400, "已配置支付宝通道或路由，但支付宝提供方总开关未启用")
-  }
-
-  if (!config.alipay.enabled) {
+  if (!hasEffectiveAlipayRoute(config)) {
     return
   }
 
@@ -655,6 +673,8 @@ export async function resolvePaymentGatewayConfigDraftFromAdminInput(body: JsonO
       : current.orderExpireMinutes,
     defaultCurrency: normalizeCurrency(configInput.defaultCurrency, current.defaultCurrency),
     defaultReturnPath: normalizePathOrUrl(configInput.defaultReturnPath, current.defaultReturnPath),
+    paymentSuccessEmailNotificationEnabled: normalizeBoolean(configInput.paymentSuccessEmailNotificationEnabled, current.paymentSuccessEmailNotificationEnabled),
+    paymentSuccessEmailRecipient: normalizeOptionalString(configInput.paymentSuccessEmailRecipient, current.paymentSuccessEmailRecipient, 160),
     topupEnabled: normalizeBoolean(configInput.topupEnabled, current.topupEnabled),
     topupPackages: normalizeTopupPackages(
       configInput.topupPackages,
@@ -674,7 +694,6 @@ export async function resolvePaymentGatewayConfigDraftFromAdminInput(body: JsonO
     channels,
     routes,
     alipay: {
-      enabled: normalizeBoolean(alipayConfigInput.enabled, current.alipay.enabled),
       sandbox: normalizeBoolean(alipayConfigInput.sandbox, current.alipay.sandbox),
       signMode: normalizeSignMode(alipayConfigInput.signMode, current.alipay.signMode),
       keyType: normalizeKeyType(alipayConfigInput.keyType, current.alipay.keyType),
@@ -781,6 +800,8 @@ export async function resolvePaymentGatewayBaseConfigDraftFromAdminInput(body: J
       : current.orderExpireMinutes,
     defaultCurrency: normalizeCurrency(configInput.defaultCurrency, current.defaultCurrency),
     defaultReturnPath: normalizePathOrUrl(configInput.defaultReturnPath, current.defaultReturnPath),
+    paymentSuccessEmailNotificationEnabled: normalizeBoolean(configInput.paymentSuccessEmailNotificationEnabled, current.paymentSuccessEmailNotificationEnabled),
+    paymentSuccessEmailRecipient: normalizeOptionalString(configInput.paymentSuccessEmailRecipient, current.paymentSuccessEmailRecipient, 160),
     topupEnabled: normalizeBoolean(configInput.topupEnabled, current.topupEnabled),
     topupPackages: normalizeTopupPackages(
       configInput.topupPackages,
@@ -827,7 +848,6 @@ export async function resolvePaymentGatewayAlipayConfigDraftFromAdminInput(body:
     ...current,
     alipay: {
       ...current.alipay,
-      enabled: normalizeBoolean(alipayConfigInput.enabled, current.alipay.enabled),
       sandbox: normalizeBoolean(alipayConfigInput.sandbox, current.alipay.sandbox),
       signMode: normalizeSignMode(alipayConfigInput.signMode, current.alipay.signMode),
       keyType: normalizeKeyType(alipayConfigInput.keyType, current.alipay.keyType),

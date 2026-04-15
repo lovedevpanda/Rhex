@@ -33,6 +33,7 @@ interface PostEngagementBarProps {
 
   tipping?: {
     enabled: boolean
+    isLoggedIn: boolean
     pointName: string
     currentUserPoints: number
     gifts: SiteTippingGiftItem[]
@@ -178,6 +179,7 @@ export function PostEngagementBar({ postId, author, likeCount, favoriteCount = 0
               <PostTipPanel
                 postId={postId}
                 enabled={tipping.enabled}
+                isLoggedIn={tipping.isLoggedIn}
                 pointName={tipping.pointName}
                 currentUserPoints={tipping.currentUserPoints}
                 gifts={tipping.gifts}

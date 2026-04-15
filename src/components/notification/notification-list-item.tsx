@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
+import { cn } from "@/lib/utils"
+
 interface NotificationListItemProps {
   id: string
   href: string
@@ -49,11 +51,20 @@ export function NotificationListItem({ id, href, isRead, typeLabel, title, conte
   }
 
   return (
-    <Link href={href} onClick={handleClick} className={isRead ? "block rounded-[20px] border border-border bg-card p-4 transition-colors hover:bg-accent/40" : "block rounded-[20px] border border-emerald-200 bg-emerald-50/50 p-4 transition-colors hover:bg-accent/40"}>
+    <Link
+      href={href}
+      onClick={handleClick}
+      className={cn(
+        "block rounded-[20px] border p-4 transition-colors hover:bg-accent/40",
+        isRead
+          ? "border-border bg-card"
+          : "border-emerald-200/70 bg-emerald-50/45 dark:border-emerald-500/15 dark:bg-emerald-500/[0.07] dark:hover:border-emerald-500/20 dark:hover:bg-emerald-500/[0.1]",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm">
           <span className="rounded-full bg-secondary px-3 py-1 text-xs">{typeLabel}</span>
-          {!isRead ? <span className="rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">未读</span> : null}
+          {!isRead ? <span className="rounded-full bg-rose-100/90 px-2 py-1 text-xs text-rose-700 dark:bg-rose-400/12 dark:text-rose-200">未读</span> : null}
         </div>
         <span className="text-xs text-muted-foreground">{createdAt}</span>
       </div>

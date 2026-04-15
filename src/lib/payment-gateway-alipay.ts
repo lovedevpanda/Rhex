@@ -35,7 +35,7 @@ function formatAmountFen(amountFen: number) {
 }
 
 export function isAlipayConfigRunnable(config: ServerPaymentGatewayAlipayConfigData) {
-  if (!config.enabled || !config.appId || !config.privateKey) {
+  if (!config.appId || !config.privateKey) {
     return false
   }
 

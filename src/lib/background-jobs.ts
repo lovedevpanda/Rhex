@@ -79,6 +79,28 @@ export interface BackgroundJobPayloadMap {
   "ai-reply.process": {
     taskId: string
   }
+  "security.login-ip-change-email-alert": {
+    userId: number
+    previousIp: string
+    currentIp: string
+    userAgent?: string | null
+    loginAt: string
+  }
+  "payment-gateway.order-success-email": {
+    merchantOrderNo: string
+    bizScene: string
+    orderSubject: string
+    amountFen: number
+    currency: string
+    providerCode: string
+    channelCode: string
+    paidAt: string
+    username: string
+    pointName?: string | null
+    points?: number | null
+    bonusPoints?: number | null
+    totalPoints?: number | null
+  }
 }
 
 export type BackgroundJobName = keyof BackgroundJobPayloadMap
@@ -195,6 +217,27 @@ export function serializeBackgroundJobError(error: unknown) {
       }
 }
 
+export function parseBackgroundJobEnvelopeString(value: string) {
+  try {
+    const parsed = JSON.parse(value) as Partial<BackgroundJobEnvelope>
+
+    if (!parsed || typeof parsed !== "object" || typeof parsed.name !== "string" || typeof parsed.enqueuedAt !== "string" || !("payload" in parsed)) {
+      return null
+    }
+
+    return normalizeBackgroundJobEnvelope({
+      name: parsed.name,
+      payload: parsed.payload as BackgroundJobEnvelope["payload"],
+      enqueuedAt: parsed.enqueuedAt,
+      attempt: parsed.attempt,
+      maxAttempts: parsed.maxAttempts,
+      availableAt: typeof parsed.availableAt === "string" ? parsed.availableAt : undefined,
+    })
+  } catch {
+    return null
+  }
+}
+
 export function resolveBackgroundJobMaxAttempts(value?: number) {
   return normalizePositiveInteger(value, parsePositiveInteger(
     process.env.BACKGROUND_JOB_MAX_ATTEMPTS,
@@ -230,6 +273,18 @@ export function normalizeBackgroundJobEnvelope<Name extends BackgroundJobName>(
     ...job,
     attempt: normalizePositiveInteger(job.attempt, 1),
     maxAttempts: resolveBackgroundJobMaxAttempts(job.maxAttempts),
+  }
+}
+
+export function createBackgroundJobLogMetadata(job: BackgroundJobEnvelope, extra?: Record<string, unknown>) {
+  return {
+    jobName: job.name,
+    enqueuedAt: job.enqueuedAt,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    availableAt: job.availableAt ?? null,
+    payload: job.payload,
+    ...(extra ?? {}),
   }
 }
 
@@ -359,18 +414,36 @@ class InMemoryBackgroundJobTransport implements BackgroundJobTransport {
 
       this.activeCount += 1
 
+      logInfo({
+        scope: "background-job",
+        action: "start",
+        metadata: createBackgroundJobLogMetadata(nextJob, {
+          transport: "in-memory",
+        }),
+      })
+
+      const startedAtMs = Date.now()
+
       void runRegisteredBackgroundJob(nextJob)
         .then(async (result) => {
+          const durationMs = Date.now() - startedAtMs
+
           if (result.ok) {
+            logInfo({
+              scope: "background-job",
+              action: "success",
+              metadata: createBackgroundJobLogMetadata(nextJob, {
+                transport: "in-memory",
+                durationMs,
+              }),
+            })
             return
           }
 
-          const errorMetadata = {
-            jobName: nextJob.name,
-            enqueuedAt: nextJob.enqueuedAt,
-            attempt: nextJob.attempt,
-            maxAttempts: nextJob.maxAttempts,
-          }
+          const errorMetadata = createBackgroundJobLogMetadata(nextJob, {
+            transport: "in-memory",
+            durationMs,
+          })
           const retryJob = result.retryable ? createBackgroundJobRetryEnvelope(nextJob) : null
 
           if (retryJob) {
@@ -383,11 +456,12 @@ class InMemoryBackgroundJobTransport implements BackgroundJobTransport {
             logInfo({
               scope: "background-job",
               action: "retry",
-              metadata: {
-                ...errorMetadata,
+              metadata: createBackgroundJobLogMetadata(nextJob, {
+                transport: "in-memory",
+                durationMs,
                 nextAttempt: retryJob.attempt,
                 availableAt: retryJob.availableAt ?? null,
-              },
+              }),
             })
             return
           }

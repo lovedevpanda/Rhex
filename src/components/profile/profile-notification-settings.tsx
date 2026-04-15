@@ -85,7 +85,7 @@ export function ProfileNotificationSettings({
 
   return (
     <form onSubmit={handleSave} className="space-y-5">
-      <div className="rounded-[24px] border border-border bg-card p-5 space-y-5">
+      <div className="rounded-[24px] bg-card p-5 space-y-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">站外通知</p>

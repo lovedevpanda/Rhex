@@ -48,6 +48,7 @@ export interface SiteCommentReplyItem {
   } | null
   authorDisplayedBadges?: Array<{
     id: string
+    code?: string | null
     name: string
     description?: string | null
     color: string
@@ -99,6 +100,7 @@ export interface SiteCommentItem {
   } | null
   authorDisplayedBadges?: Array<{
     id: string
+    code?: string | null
     name: string
     description?: string | null
     color: string
@@ -157,6 +159,7 @@ interface CommentQueryUser {
     displayOrder?: number
     badge: {
       id: string
+      code: string
       name: string
       description?: string | null
       color: string
@@ -193,6 +196,7 @@ function mapDisplayedBadges(user: CommentQueryUser) {
     .slice(0, 3)
     .map((item) => ({
       id: item.badge.id,
+      code: item.badge.code,
       name: item.badge.name,
       description: item.badge.description,
       color: item.badge.color,

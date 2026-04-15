@@ -87,6 +87,7 @@ export interface SitePostItem {
   } | null
   authorDisplayedBadges?: Array<{
     id: string
+    code?: string | null
     name: string
     description?: string | null
     color: string
@@ -174,6 +175,7 @@ export interface SitePostItem {
   tipping?: {
 
     enabled: boolean
+    isLoggedIn: boolean
     pointName: string
     currentUserPoints: number
     gifts: SiteTippingGiftItem[]
@@ -312,6 +314,7 @@ function mapPostDetail(
     tipping: tipSummary ? {
 
       enabled: tipSummary.enabled,
+      isLoggedIn: tipSummary.isLoggedIn,
       pointName: tipSummary.pointName,
       currentUserPoints: tipSummary.currentUserPoints,
       gifts: tipSummary.gifts,
@@ -327,6 +330,7 @@ function mapPostDetail(
       topSupporters: tipSummary.topSupporters,
     } : {
       enabled: false,
+      isLoggedIn: false,
       pointName: "积分",
       currentUserPoints: 0,
       gifts: [],

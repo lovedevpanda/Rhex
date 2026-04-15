@@ -48,6 +48,29 @@ type MessageTransactionClient = DbTransaction
 const INITIAL_MESSAGE_PAGE_SIZE = 20
 const MESSAGE_HISTORY_BATCH_SIZE = 50
 
+type MessageRecipientRecord = NonNullable<Awaited<ReturnType<typeof findMessageRecipientById>>>
+
+type ResolvedConversationReference =
+  | { kind: "database"; conversationId: string }
+  | { kind: "draft"; recipient: MessageRecipientRecord }
+
+function mapUserProfile(
+  user: {
+    id: number
+    username: string
+    nickname: string | null
+    avatarPath: string | null
+  },
+  currentUserId: number,
+): MessageParticipantProfile {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.id === currentUserId ? "我" : getUserDisplayName(user),
+    avatarPath: user.avatarPath,
+    isCurrentUser: user.id === currentUserId,
+  }
+}
 
 function mapConversationParticipant(
   participant: {
@@ -62,13 +85,7 @@ function mapConversationParticipant(
   },
   currentUserId: number,
 ): MessageParticipantProfile {
-  return {
-    id: participant.user.id,
-    username: participant.user.username,
-    displayName: participant.userId === currentUserId ? "我" : getUserDisplayName(participant.user),
-    avatarPath: participant.user.avatarPath,
-    isCurrentUser: participant.userId === currentUserId,
-  }
+  return mapUserProfile(participant.user, currentUserId)
 }
 
 function mapMessageBubble(
@@ -309,7 +326,14 @@ async function getDatabaseConversationDetail(currentUserId: number, conversation
   }
 }
 
-export async function ensureConversationWithUser(currentUserId: number, targetUserId: number) {
+async function getValidatedMessageRecipient(
+  currentUserId: number,
+  targetUserId: number,
+  messages: {
+    blockedMessage: string
+    blockedByMessage: string
+  },
+): Promise<MessageRecipientRecord> {
   if (currentUserId === targetUserId) {
     apiError(400, "不能给自己发送私信")
   }
@@ -317,8 +341,8 @@ export async function ensureConversationWithUser(currentUserId: number, targetUs
   await ensureUsersCanInteract({
     actorId: currentUserId,
     targetUserId,
-    blockedMessage: "你已拉黑该用户，无法发起私信",
-    blockedByMessage: "对方已将你拉黑，无法发起私信",
+    blockedMessage: messages.blockedMessage,
+    blockedByMessage: messages.blockedByMessage,
   })
 
 
@@ -330,11 +354,25 @@ export async function ensureConversationWithUser(currentUserId: number, targetUs
     throw new Error("接收方不存在或不可接收私信")
   }
 
-  const conversation = await getOrCreateConversation(currentUserId, targetUserId)
-  return conversation.id
+  return recipient
 }
 
-async function resolveConversationId(currentUserId: number, conversationId?: string) {
+function buildDraftConversationDetail(currentUserId: number, recipient: MessageRecipientRecord): MessageConversationDetail {
+  const participant = mapUserProfile(recipient, currentUserId)
+
+  return {
+    id: `user-${recipient.id}`,
+    title: participant.displayName,
+    subtitle: "还没有聊天记录，发一条消息开始聊天吧",
+    updatedAt: "待发送",
+    participants: [participant],
+    recipientId: recipient.id,
+    hasMoreHistory: false,
+    messages: [],
+  }
+}
+
+async function resolveConversationReference(currentUserId: number, conversationId?: string): Promise<ResolvedConversationReference | undefined> {
   if (!conversationId) {
     return undefined
   }
@@ -343,11 +381,44 @@ async function resolveConversationId(currentUserId: number, conversationId?: str
     const targetUserId = Number(conversationId.replace("user-", ""))
 
     if (Number.isFinite(targetUserId)) {
-      return ensureConversationWithUser(currentUserId, targetUserId)
+      const recipient = await getValidatedMessageRecipient(currentUserId, targetUserId, {
+        blockedMessage: "你已拉黑该用户，无法发起私信",
+        blockedByMessage: "对方已将你拉黑，无法发起私信",
+      })
+      const pair = normalizeDirectPair(currentUserId, targetUserId)
+      const existingConversation = await findDirectConversationByUsers(pair.userLowId, pair.userHighId)
+
+      if (existingConversation) {
+        const latestMessage = await findLatestMessageByConversationId(existingConversation.conversationId)
+
+        if (latestMessage) {
+          await withDbTransaction(async (tx) => {
+            await restoreConversationForUser(tx, existingConversation.conversationId, currentUserId)
+          })
+
+          return {
+            kind: "database",
+            conversationId: existingConversation.conversationId,
+          }
+        }
+      }
+
+      return {
+        kind: "draft",
+        recipient,
+      }
     }
   }
 
-  return resolveCanonicalConversationId(currentUserId, conversationId)
+  const canonicalConversationId = await resolveCanonicalConversationId(currentUserId, conversationId)
+  if (!canonicalConversationId) {
+    return undefined
+  }
+
+  return {
+    kind: "database",
+    conversationId: canonicalConversationId,
+  }
 }
 
 export async function sendDirectMessage(senderId: number, recipientId: number, body: string) {
@@ -361,17 +432,15 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
     throw new Error("消息内容不能超过 1000 个字符")
   }
 
-  await ensureUsersCanInteract({
-    actorId: senderId,
-    targetUserId: recipientId,
+  const recipient = await getValidatedMessageRecipient(senderId, recipientId, {
     blockedMessage: "你已拉黑该用户，无法发送私信",
     blockedByMessage: "对方已将你拉黑，无法发送私信",
   })
 
   const contentSafety = await enforceSensitiveText({ scene: "message.body", text: content })
-  const conversation = await getOrCreateConversation(senderId, recipientId)
+  const conversation = await getOrCreateConversation(senderId, recipient.id)
 
-  const message = await createDirectMessageInTransaction(conversation.id, senderId, recipientId, contentSafety.sanitizedText)
+  const message = await createDirectMessageInTransaction(conversation.id, senderId, recipient.id, contentSafety.sanitizedText)
   const sender = await findMessageRecipientById(senderId)
   const occurredAt = message.createdAt.toISOString()
   const senderDisplayName = sender ? getUserDisplayName(sender) : "用户"
@@ -388,7 +457,7 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
     senderUsername,
     senderDisplayName,
     senderAvatarPath,
-    recipientId,
+    recipientId: recipient.id,
     occurredAt,
   })
 
@@ -448,10 +517,13 @@ export async function deleteConversationForUser(conversationId: string, currentU
 }
 
 export async function getMessageCenterData(currentUserId: number, conversationId?: string): Promise<MessageCenterData> {
-  const resolvedConversationId = await resolveConversationId(currentUserId, conversationId)
+  const resolvedConversation = await resolveConversationReference(currentUserId, conversationId)
   const conversations = await getDatabaseBackedConversations(currentUserId)
-  const activeId = resolvedConversationId
-  const activeConversation = activeId ? await getDatabaseConversationDetail(currentUserId, activeId) : null
+  const activeConversation = resolvedConversation?.kind === "database"
+    ? await getDatabaseConversationDetail(currentUserId, resolvedConversation.conversationId)
+    : resolvedConversation?.kind === "draft"
+      ? buildDraftConversationDetail(currentUserId, resolvedConversation.recipient)
+      : null
 
   return {
     conversations,

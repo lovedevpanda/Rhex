@@ -10,12 +10,18 @@ import { Modal } from "@/components/ui/modal"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
 import { formatNumber } from "@/lib/formatters"
-import type { PaymentGatewayTopupPackage } from "@/lib/payment-gateway.types"
+import type {
+  PaymentGatewayCheckoutMethodOption,
+  PaymentGatewayClientType,
+  PaymentGatewayTopupPackage,
+} from "@/lib/payment-gateway.types"
 
 interface PointsTopupCardProps {
   enabled: boolean
   pointName: string
   packages: PaymentGatewayTopupPackage[]
+  paymentMethods?: PaymentGatewayCheckoutMethodOption[]
+  initialRuntimeClientType?: WebRuntimeClientType
   customAmountEnabled?: boolean
   customMinAmountFen?: number
   customMaxAmountFen?: number
@@ -30,12 +36,15 @@ interface PendingTopupOrderState {
   merchantOrderNo: string
   packageTitle: string
   totalPoints: number
+  paymentMethodLabel: string
   qrCode: string
   qrDataUrl: string | null
   statusText: string
 }
 
-function submitAlipayForm(html: string) {
+type WebRuntimeClientType = Extract<PaymentGatewayClientType, "WEB_DESKTOP" | "WEB_MOBILE">
+
+function submitCheckoutForm(html: string) {
   const container = document.createElement("div")
   container.style.display = "none"
   container.innerHTML = html
@@ -72,10 +81,43 @@ function parseAmountInputToFen(value: string) {
   return Math.round(amount * 100)
 }
 
+function isVisiblePaymentMethod(method: PaymentGatewayCheckoutMethodOption, runtimeClientType: WebRuntimeClientType) {
+  if (method.checkoutClientType === "QR_CODE") {
+    return true
+  }
+
+  return method.checkoutClientType === runtimeClientType
+}
+
+function compactPaymentMethodTitle(method: PaymentGatewayCheckoutMethodOption) {
+  return method.label.split(/\s+/).filter(Boolean)[0] || method.label
+}
+
+function compactPaymentMethodHint(method: PaymentGatewayCheckoutMethodOption) {
+  if (method.presentationType === "QR_CODE") {
+    return "扫码"
+  }
+
+  switch (method.checkoutClientType) {
+    case "WEB_MOBILE":
+      return "H5"
+    case "WEB_DESKTOP":
+      return "网页"
+    case "APP":
+      return "App"
+    case "MINI_APP":
+      return "小程序"
+    default:
+      return "支付"
+  }
+}
+
 export function PointsTopupCard({
   enabled,
   pointName,
   packages,
+  paymentMethods = [],
+  initialRuntimeClientType = "WEB_DESKTOP",
   customAmountEnabled = false,
   customMinAmountFen = 0,
   customMaxAmountFen = 0,
@@ -89,8 +131,10 @@ export function PointsTopupCard({
   const [loadingId, setLoadingId] = useState("")
   const [pendingOrder, setPendingOrder] = useState<PendingTopupOrderState | null>(null)
   const [customAmountInput, setCustomAmountInput] = useState("")
+  const [runtimeClientType] = useState<WebRuntimeClientType>(initialRuntimeClientType)
+  const [selectedMethodId, setSelectedMethodId] = useState(() => paymentMethods[0]?.id ?? "")
 
-  const normalizedDescription = description.trim() || `选择一个充值套餐，支付成功后 ${pointName} 会自动到账。网页支付默认跳转支付宝，若后台路由到扫码通道，会在当前页显示收款二维码。`
+  const normalizedDescription = description.trim() || `选择一个充值套餐并确认支付方式，支付成功后 ${pointName} 会自动到账。若后台路由到扫码通道，会在当前页显示收款二维码。`
   const customAmountFen = useMemo(() => parseAmountInputToFen(customAmountInput), [customAmountInput])
   const customAmountRangeText = customAmountEnabled
     ? `范围 ${formatAmountFen(customMinAmountFen)} - ${formatAmountFen(customMaxAmountFen)}，当前按 1 元 = ${formatNumber(customPointsPerYuan)} ${pointName} 换算。`
@@ -114,6 +158,19 @@ export function PointsTopupCard({
 
     return Math.max(1, Math.floor((customAmountFen / 100) * customPointsPerYuan))
   }, [customAmountEnabled, customAmountError, customAmountFen, customPointsPerYuan])
+  const visiblePaymentMethods = useMemo(() => {
+    const filtered = paymentMethods.filter((item) => isVisiblePaymentMethod(item, runtimeClientType))
+    return filtered.length > 0 ? filtered : paymentMethods
+  }, [paymentMethods, runtimeClientType])
+  const selectedPaymentMethod = visiblePaymentMethods.find((item) => item.id === selectedMethodId) ?? visiblePaymentMethods[0] ?? null
+
+  useEffect(() => {
+    if (visiblePaymentMethods.some((item) => item.id === selectedMethodId)) {
+      return
+    }
+
+    setSelectedMethodId(visiblePaymentMethods[0]?.id ?? "")
+  }, [selectedMethodId, visiblePaymentMethods])
 
   useEffect(() => {
     const merchantOrderNo = pendingOrder?.merchantOrderNo
@@ -185,7 +242,10 @@ export function PointsTopupCard({
     }
   }, [pendingOrder?.merchantOrderNo, router])
 
-  async function createTopupOrder(payload: { packageId?: string; customAmountFen?: number }, summary: { title: string; totalPoints: number }) {
+  async function createTopupOrder(
+    payload: { packageId?: string; customAmountFen?: number; preferredChannelCode?: string; clientType?: PaymentGatewayClientType },
+    summary: { title: string; totalPoints: number; paymentMethodLabel: string },
+  ) {
     try {
       const response = await fetch("/api/payments/topup", {
         method: "POST",
@@ -209,7 +269,7 @@ export function PointsTopupCard({
       }
 
       if (order.presentation.type === "HTML_FORM" && order.presentation.html) {
-        submitAlipayForm(order.presentation.html)
+        submitCheckoutForm(order.presentation.html)
         return
       }
 
@@ -223,9 +283,10 @@ export function PointsTopupCard({
           merchantOrderNo: order.merchantOrderNo,
           packageTitle: summary.title,
           totalPoints: summary.totalPoints,
+          paymentMethodLabel: summary.paymentMethodLabel,
           qrCode: order.presentation.qrCode,
           qrDataUrl,
-          statusText: "请使用支付宝扫码完成支付，支付成功后会自动跳转结果页。",
+          statusText: `请使用 ${summary.paymentMethodLabel} 完成支付，支付成功后会自动跳转结果页。`,
         })
         return
       }
@@ -237,13 +298,23 @@ export function PointsTopupCard({
   }
 
   async function handlePackageTopup(selectedPackage: PaymentGatewayTopupPackage) {
+    if (!selectedPaymentMethod) {
+      toast.error("当前没有可用支付方式，请联系管理员检查充值通道配置", "充值失败")
+      return
+    }
+
     setLoadingId(selectedPackage.id)
     try {
       await createTopupOrder(
-        { packageId: selectedPackage.id },
+        {
+          packageId: selectedPackage.id,
+          preferredChannelCode: selectedPaymentMethod.channelCode,
+          clientType: selectedPaymentMethod.checkoutClientType,
+        },
         {
           title: selectedPackage.title,
           totalPoints: selectedPackage.points + selectedPackage.bonusPoints,
+          paymentMethodLabel: selectedPaymentMethod.label,
         },
       )
     } finally {
@@ -260,14 +331,23 @@ export function PointsTopupCard({
       toast.error(customAmountError || "请输入正确的自定义充值金额", "充值失败")
       return
     }
+    if (!selectedPaymentMethod) {
+      toast.error("当前没有可用支付方式，请联系管理员检查充值通道配置", "充值失败")
+      return
+    }
 
     setLoadingId("custom")
     try {
       await createTopupOrder(
-        { customAmountFen },
+        {
+          customAmountFen,
+          preferredChannelCode: selectedPaymentMethod.channelCode,
+          clientType: selectedPaymentMethod.checkoutClientType,
+        },
         {
           title: `自定义充值 ${formatAmountFen(customAmountFen)}`,
           totalPoints: customPoints,
+          paymentMethodLabel: selectedPaymentMethod.label,
         },
       )
     } finally {
@@ -281,7 +361,7 @@ export function PointsTopupCard({
 
   return (
     <>
-      <div className="rounded-[24px] border border-border px-4 py-4 space-y-4">
+      <div className="rounded-[24px] px-4 py-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="font-medium">{heading}</p>
@@ -293,6 +373,46 @@ export function PointsTopupCard({
             </Link>
           ) : null}
         </div>
+
+        {paymentMethods.length > 0 ? (
+          <div className="rounded-[18px] bg-card/70 p-3">
+            <p className="text-sm font-semibold">支付方式</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {visiblePaymentMethods.map((method) => {
+                const active = method.id === (selectedPaymentMethod?.id ?? "")
+
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => setSelectedMethodId(method.id)}
+                    className={`flex h-[58px] min-w-[68px] w-auto shrink-0 flex-col rounded-[14px] border px-3 py-2 text-left transition-colors ${active ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-accent hover:text-accent-foreground"}`}
+                    aria-pressed={active}
+                    title={method.label}
+                  >
+                    <div className="flex h-full flex-col">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="whitespace-nowrap text-[13px] font-semibold leading-none">{compactPaymentMethodTitle(method)}</p>
+                        {active ? (
+                          <span className="text-[10px] font-medium leading-none">选中</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-auto flex items-end justify-between gap-2">
+                        <span className={`text-[11px] leading-none ${active ? "text-background/78" : "text-muted-foreground"}`}>
+                          {compactPaymentMethodHint(method)}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-[20px] border border-dashed border-border bg-card/40 p-4 text-sm text-muted-foreground">
+            当前积分充值已开启，但还没有配置可用支付方式，请联系管理员检查支付通道和路由规则。
+          </div>
+        )}
 
         {packages.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -310,7 +430,7 @@ export function PointsTopupCard({
                   <Button
                     type="button"
                     className="mt-4 w-full"
-                    disabled={loadingId !== ""}
+                    disabled={loadingId !== "" || !selectedPaymentMethod}
                     onClick={() => void handlePackageTopup(item)}
                   >
                     {loadingId === item.id ? "创建订单中..." : `支付 ${formatAmountFen(item.amountFen)} 充值`}
@@ -345,7 +465,7 @@ export function PointsTopupCard({
               />
               <Button
                 type="button"
-                disabled={loadingId !== "" || customAmountFen === null || Boolean(customAmountError) || customPoints <= 0}
+                disabled={loadingId !== "" || customAmountFen === null || Boolean(customAmountError) || customPoints <= 0 || !selectedPaymentMethod}
                 onClick={() => void handleCustomTopup()}
               >
                 {loadingId === "custom" ? "创建订单中..." : `按输入金额充值`}
@@ -359,8 +479,8 @@ export function PointsTopupCard({
       <Modal
         open={Boolean(pendingOrder)}
         onClose={() => setPendingOrder(null)}
-        title="扫码支付"
-        description={pendingOrder?.statusText ?? "请使用支付宝扫码完成支付"}
+        title="支付二维码"
+        description={pendingOrder?.statusText ?? "请使用所选支付方式完成支付"}
         size="md"
         footer={(
           <div className="flex w-full justify-end gap-2">
@@ -373,6 +493,7 @@ export function PointsTopupCard({
             <div className="rounded-[20px] border border-border bg-background px-4 py-4 text-center">
               <p className="text-sm font-medium">{pendingOrder.packageTitle}</p>
               <p className="mt-2 text-xs text-muted-foreground">订单号 {pendingOrder.merchantOrderNo}</p>
+              <p className="mt-1 text-xs text-muted-foreground">支付方式 {pendingOrder.paymentMethodLabel}</p>
               <p className="mt-1 text-sm text-muted-foreground">到账 {formatNumber(pendingOrder.totalPoints)} {pointName}</p>
             </div>
 
@@ -380,7 +501,7 @@ export function PointsTopupCard({
               <div className="flex justify-center">
                 <Image
                   src={pendingOrder.qrDataUrl}
-                  alt="支付宝扫码支付二维码"
+                  alt="支付二维码"
                   width={240}
                   height={240}
                   unoptimized
@@ -395,7 +516,7 @@ export function PointsTopupCard({
               rel="noreferrer"
               className="block text-center text-sm text-primary underline underline-offset-4"
             >
-              无法扫码时，点这里打开收银台链接
+              无法扫码时，点这里打开支付链接
             </a>
           </div>
         ) : null}

@@ -38,7 +38,7 @@ function HeaderUnreadBadge({ count, className }: { count: number; className?: st
   }
 
   return (
-    <span className={`absolute flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white ${className ?? ""}`}>
+    <span className={`absolute flex min-h-4 min-w-4 items-center justify-center rounded-full border border-background bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-background dark:bg-rose-300 dark:text-rose-950 dark:shadow-none ${className ?? ""}`}>
       {label}
     </span>
   )
@@ -125,14 +125,14 @@ export function HeaderUserActions({ user, unreadMessageCount, unreadNotification
       <div className="flex items-center gap-1 sm:hidden">
         <Link href="/notifications" className="relative">
           <Button variant="ghost" size="icon" className="size-8 rounded-md">
-            <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600" : "h-4 w-4"} />
+            <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
           <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
         </Link>
 
         <Link href="/messages" className="relative">
           <Button variant="ghost" size="icon" className="size-8 rounded-md">
-            <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600" : "h-4 w-4"} />
+            <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
           <HeaderUnreadBadge count={unreadMessageCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
         </Link>
@@ -183,7 +183,7 @@ export function HeaderUserActions({ user, unreadMessageCount, unreadNotification
       <div className="hidden items-center gap-1.5 sm:flex">
         <Link href="/messages" className="relative">
           <Button variant="ghost" className="h-8 rounded-md px-3 gap-1.5">
-            <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600" : "h-4 w-4"} />
+            <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
           <HeaderUnreadBadge count={unreadMessageCount} className="right-1 top-0.5 min-h-4 min-w-4" />
         </Link>

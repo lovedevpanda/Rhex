@@ -23,6 +23,15 @@ interface ResolvedMailerTransportConfig {
   smtpSecure?: boolean
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
 export async function canSendEmail() {
   const settings = await getServerSiteSettings()
   return Boolean(settings.smtpEnabled && settings.smtpHost && settings.smtpPort && settings.smtpUser && settings.smtpPass && settings.smtpFrom)
@@ -102,6 +111,112 @@ export async function sendResetPasswordVerificationEmail(input: { to: string; co
     subject: renderEmailTemplate(settings.registrationEmailTemplates.resetPasswordVerification.subject, variables),
     text: renderEmailTemplate(settings.registrationEmailTemplates.resetPasswordVerification.text, variables),
     html: renderEmailTemplate(settings.registrationEmailTemplates.resetPasswordVerification.html, variables),
+  })
+}
+
+export async function sendPasswordChangeVerificationEmail(input: { to: string; code: string; username: string }) {
+  const { settings, transporter } = await createMailerContext()
+  const variables = {
+    siteName: settings.siteName,
+    code: input.code,
+    username: input.username,
+  }
+
+  await transporter.sendMail({
+    from: settings.smtpFrom,
+    to: input.to,
+    subject: renderEmailTemplate(settings.registrationEmailTemplates.passwordChangeVerification.subject, variables),
+    text: renderEmailTemplate(settings.registrationEmailTemplates.passwordChangeVerification.text, variables),
+    html: renderEmailTemplate(settings.registrationEmailTemplates.passwordChangeVerification.html, variables),
+  })
+}
+
+export async function sendLoginIpChangeAlertEmail(input: {
+  to: string
+  username: string
+  displayName?: string | null
+  previousIp: string
+  currentIp: string
+  loginAt: string
+  userAgent?: string | null
+}) {
+  const { settings, transporter } = await createMailerContext()
+  const accountName = input.displayName?.trim() || input.username
+  const userAgent = input.userAgent?.trim() || "未知设备"
+  const safeAccountName = escapeHtml(accountName)
+  const safeUsername = escapeHtml(input.username)
+  const safeCurrentIp = escapeHtml(input.currentIp)
+  const safePreviousIp = escapeHtml(input.previousIp)
+  const safeLoginAt = escapeHtml(input.loginAt)
+  const safeUserAgent = escapeHtml(userAgent)
+  const textVariables = {
+    siteName: settings.siteName,
+    displayName: accountName,
+    username: input.username,
+    currentIp: input.currentIp,
+    previousIp: input.previousIp,
+    loginAt: input.loginAt,
+    userAgent,
+  }
+  const htmlVariables = {
+    siteName: escapeHtml(settings.siteName),
+    displayName: safeAccountName,
+    username: safeUsername,
+    currentIp: safeCurrentIp,
+    previousIp: safePreviousIp,
+    loginAt: safeLoginAt,
+    userAgent: safeUserAgent,
+  }
+
+  await transporter.sendMail({
+    from: settings.smtpFrom,
+    to: input.to,
+    subject: renderEmailTemplate(settings.registrationEmailTemplates.loginIpChangeAlert.subject, textVariables),
+    text: renderEmailTemplate(settings.registrationEmailTemplates.loginIpChangeAlert.text, textVariables),
+    html: renderEmailTemplate(settings.registrationEmailTemplates.loginIpChangeAlert.html, htmlVariables),
+  })
+}
+
+export async function sendPaymentGatewayOrderSuccessEmail(input: {
+  to: string
+  merchantOrderNo: string
+  bizScene: string
+  orderSubject: string
+  amountFen: number
+  currency: string
+  providerCode: string
+  channelCode: string
+  paidAt: string
+  username: string
+  pointName?: string | null
+  points?: number | null
+  bonusPoints?: number | null
+  totalPoints?: number | null
+}) {
+  const { settings, transporter } = await createMailerContext()
+  const variables = {
+    siteName: settings.siteName,
+    merchantOrderNo: input.merchantOrderNo,
+    bizScene: input.bizScene,
+    orderSubject: input.orderSubject,
+    amount: `${input.currency} ${(input.amountFen / 100).toFixed(2)}`,
+    currency: input.currency,
+    providerCode: input.providerCode,
+    channelCode: input.channelCode,
+    paidAt: input.paidAt,
+    username: input.username,
+    pointName: input.pointName ?? "",
+    points: typeof input.points === "number" ? String(input.points) : "",
+    bonusPoints: typeof input.bonusPoints === "number" ? String(input.bonusPoints) : "",
+    totalPoints: typeof input.totalPoints === "number" ? String(input.totalPoints) : "",
+  }
+
+  await transporter.sendMail({
+    from: settings.smtpFrom,
+    to: input.to,
+    subject: renderEmailTemplate(settings.registrationEmailTemplates.paymentOrderSuccessNotification.subject, variables),
+    text: renderEmailTemplate(settings.registrationEmailTemplates.paymentOrderSuccessNotification.text, variables),
+    html: renderEmailTemplate(settings.registrationEmailTemplates.paymentOrderSuccessNotification.html, variables),
   })
 }
 

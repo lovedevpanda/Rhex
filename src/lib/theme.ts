@@ -64,12 +64,81 @@ const THEME_VARIABLE_NAMES: ThemeVariableName[] = [
 
 export const THEME_PRESETS = {
   default: {
+    label: "默认主题",
+    description: "白天纯白，黑夜纯黑，整体保持中性黑白基调。",
+    preview: ["0 0% 12%", "0 0% 100%", "0 0% 88%"],
+    values: {
+      light: {
+        background: "0 0% 100%",
+        foreground: "0 0% 8%",
+        card: "0 0% 100%",
+        "card-foreground": "0 0% 8%",
+        primary: "0 0% 12%",
+        "primary-foreground": "0 0% 100%",
+        secondary: "0 0% 96%",
+        "secondary-foreground": "0 0% 12%",
+        muted: "0 0% 96%",
+        "muted-foreground": "0 0% 42%",
+        accent: "0 0% 94%",
+        "accent-foreground": "0 0% 12%",
+        border: "0 0% 88%",
+        ring: "0 0% 24%",
+      },
+      dark: {
+        background: "0 0% 0%",
+        foreground: "0 0% 96%",
+        card: "0 0% 8%",
+        "card-foreground": "0 0% 96%",
+        primary: "0 0% 96%",
+        "primary-foreground": "0 0% 10%",
+        secondary: "0 0% 14%",
+        "secondary-foreground": "0 0% 96%",
+        muted: "0 0% 12%",
+        "muted-foreground": "0 0% 68%",
+        accent: "0 0% 16%",
+        "accent-foreground": "0 0% 96%",
+        border: "0 0% 22%",
+        ring: "0 0% 72%",
+      },
+    },
+  },
+  sea: {
     label: "海盐蓝",
-    description: "沿用站点当前默认气质。",
+    description: "保留站点原先的清爽蓝灰气质。",
     preview: ["217 91% 60%", "210 20% 98%", "214 18% 88%"],
     values: {
-      light: {},
-      dark: {},
+      light: {
+        background: "210 20% 98%",
+        foreground: "222.2 47.4% 11.2%",
+        card: "0 0% 100%",
+        "card-foreground": "222.2 47.4% 11.2%",
+        primary: "217 91% 60%",
+        "primary-foreground": "210 40% 98%",
+        secondary: "210 26% 95%",
+        "secondary-foreground": "222.2 47.4% 11.2%",
+        muted: "210 20% 96%",
+        "muted-foreground": "215.4 16.3% 46.9%",
+        accent: "214 32% 94%",
+        "accent-foreground": "221 39% 20%",
+        border: "214 18% 88%",
+        ring: "217 91% 60%",
+      },
+      dark: {
+        background: "228 22% 8%",
+        foreground: "36 33% 96%",
+        card: "228 20% 12%",
+        "card-foreground": "36 33% 96%",
+        primary: "27 96% 61%",
+        "primary-foreground": "228 22% 10%",
+        secondary: "228 16% 18%",
+        "secondary-foreground": "36 33% 96%",
+        muted: "228 16% 16%",
+        "muted-foreground": "220 12% 70%",
+        accent: "224 24% 20%",
+        "accent-foreground": "36 33% 96%",
+        border: "224 16% 24%",
+        ring: "27 96% 61%",
+      },
     },
   },
   jade: {
@@ -145,43 +214,6 @@ export const THEME_PRESETS = {
         "accent-foreground": "33 45% 95%",
         border: "21 15% 23%",
         ring: "28 94% 61%",
-      },
-    },
-  },
-  rose: {
-    label: "晚樱粉",
-    description: "更轻盈，适合偏社交感的浏览氛围。",
-    preview: ["338 82% 56%", "330 40% 98%", "334 26% 86%"],
-    values: {
-      light: {
-        background: "330 40% 98%",
-        card: "0 0% 100%",
-        primary: "338 82% 56%",
-        "primary-foreground": "340 100% 98%",
-        secondary: "330 26% 95%",
-        "secondary-foreground": "334 48% 18%",
-        muted: "330 24% 95%",
-        "muted-foreground": "334 13% 43%",
-        accent: "332 38% 92%",
-        "accent-foreground": "334 48% 18%",
-        border: "334 26% 86%",
-        ring: "338 82% 56%",
-      },
-      dark: {
-        background: "332 24% 8%",
-        foreground: "330 26% 95%",
-        card: "332 20% 11%",
-        "card-foreground": "330 26% 95%",
-        primary: "338 80% 63%",
-        "primary-foreground": "334 28% 10%",
-        secondary: "332 14% 18%",
-        "secondary-foreground": "330 26% 95%",
-        muted: "332 14% 16%",
-        "muted-foreground": "330 12% 70%",
-        accent: "332 16% 21%",
-        "accent-foreground": "330 26% 95%",
-        border: "332 13% 24%",
-        ring: "338 80% 63%",
       },
     },
   },
@@ -614,7 +646,11 @@ export function getThemeInitScript() {
           : resolvedPreference;
         var resolvedPreset = preset === "custom"
           ? "custom"
-          : (preset && presetValuesMap[preset] ? preset : "default");
+          : preset === "mono"
+            ? "default"
+            : preset === "rose"
+              ? "sea"
+              : (preset && presetValuesMap[preset] ? preset : "default");
 
         root.classList.toggle("dark", resolvedMode === "dark");
         root.style.colorScheme = resolvedMode;
@@ -822,6 +858,14 @@ export function resolveThemeMode(preference: ThemePreference): ThemeMode {
 export function resolveStoredThemePreset(value: string | null | undefined): ThemePreset {
   if (value === "custom") {
     return "custom"
+  }
+
+  if (value === "mono") {
+    return "default"
+  }
+
+  if (value === "rose") {
+    return "sea"
   }
 
   if (value && value in THEME_PRESETS) {

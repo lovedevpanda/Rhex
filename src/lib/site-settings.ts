@@ -9,26 +9,24 @@ import {
   parseHeatColors,
   parseHeatThresholds,
   parseTippingAmounts,
-  type FooterLinkItem,
 } from "@/lib/shared/config-parsers"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { parseMarkdownEmojiMapJson } from "@/lib/markdown-emoji"
-import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
-import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
-import { resolveAnonymousPostSettings, resolveAttachmentFeatureSettings, resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveBoardApplicationSettings, resolveBoardTreasurySettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveFooterCopyrightSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveImageWatermarkSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveLeftSidebarDisplaySettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostContentLengthSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolveRegisterEmailWhitelistSettings, resolvePostSlugGenerationSettings, resolveRegisterInviteCodeHelpSettings, resolveRegisterNicknameLengthSettings, resolveRegistrationEmailTemplateSettings, resolveRegistrationRewardSettings, resolveSiteBrandingSettings, resolveUploadObjectStorageSettings, resolveVipLevelIconSettings, resolveVipNameColorSettings, type ImageWatermarkPosition, type InteractionGateSettings, type LeftSidebarDisplayMode, type PostSlugGenerationMode, type RegistrationEmailTemplateSettings } from "@/lib/site-settings-app-state"
+import { normalizePostListLoadMode } from "@/lib/post-list-load-mode"
+import { normalizePostListDisplayMode } from "@/lib/post-list-display"
+import { resolveAnonymousPostSettings, resolveAttachmentFeatureSettings, resolveAuthProviderSettings, resolveAvatarChangePointCostSettings, resolveBoardApplicationSettings, resolveBoardTreasurySettings, resolveCheckInMakeUpPriceSettings, resolveCheckInRewardSettings, resolveCheckInStreakSettings, resolveCommentAccessSettings, resolveFooterCopyrightSettings, resolveHomeFeedPostListLoadSettings, resolveHomeHotFeedSettings, resolveHomeSidebarAnnouncementSettings, resolveImageWatermarkSettings, resolveInteractionGateSettings, resolveIntroductionChangePointCostSettings, resolveInviteCodePurchasePriceSettings, resolveLeftSidebarDisplaySettings, resolveMarkdownImageUploadSettings, resolveNicknameChangePointCostSettings, resolvePostContentLengthSettings, resolvePostJackpotSettings, resolvePostPageSizeSettings, resolvePostRedPacketSettings, resolvePostSlugGenerationSettings, resolveRegisterEmailWhitelistSettings, resolveRegisterInviteCodeHelpSettings, resolveRegisterNicknameLengthSettings, resolveRegistrationEmailTemplateSettings, resolveRegistrationRewardSettings, resolveSiteBrandingSettings, resolveSiteSecuritySettings, resolveUploadObjectStorageSettings, resolveVipLevelIconSettings, resolveVipNameColorSettings } from "@/lib/site-settings-app-state"
 import { resolveAuthPageShowcaseSettings } from "@/lib/site-settings-app-state"
 import { resolveAuthProviderSensitiveConfig, resolveCaptchaSensitiveConfig, resolveUploadStorageSensitiveConfig } from "@/lib/site-settings-sensitive-state"
-import { resolveSiteSearchSettings, type SiteSearchSettings } from "@/lib/site-search-settings"
-import { type VipNameColors } from "@/lib/vip-name-colors"
+import { resolveSiteSearchSettings } from "@/lib/site-search-settings"
 import { normalizePositiveInteger } from "@/lib/shared/normalizers"
+import type { SiteSettingsRecordData } from "@/lib/site-settings.record"
 import { type SiteTippingGiftItem } from "@/lib/tipping-gifts"
-import { normalizeUploadProvider, type UploadProvider } from "@/lib/upload-provider"
-import { type VipLevelIcons } from "@/lib/vip-level-icons"
-import { normalizeHeaderAppIconName, parseSiteHeaderAppLinks, type SiteHeaderAppLinkItem } from "./site-header-app-links"
+import { normalizeUploadProvider } from "@/lib/upload-provider"
+import type { ServerSiteSettingsData, SiteSettingsData } from "@/lib/site-settings.types"
+import { normalizeHeaderAppIconName, parseSiteHeaderAppLinks } from "./site-header-app-links"
 
 export type { FooterLinkItem } from "@/lib/shared/config-parsers"
 
-export type PostLinkDisplayMode = "SLUG" | "ID"
 export type { SiteSearchSettings } from "@/lib/site-search-settings"
 export type { SiteTippingGiftItem } from "@/lib/tipping-gifts"
 export type { VipNameColors } from "@/lib/vip-name-colors"
@@ -36,205 +34,7 @@ export type { InteractionGateAction, InteractionGateCondition, InteractionGateRu
 export type { LeftSidebarDisplayMode } from "@/lib/site-settings-app-state"
 export type { PostSlugGenerationMode } from "@/lib/site-settings-app-state"
 export type { RegistrationEmailTemplateSettings } from "@/lib/site-settings-app-state"
-
-export interface SiteSettingsData {
-  siteName: string
-  siteSlogan: string
-  siteDescription: string
-  siteLogoText: string
-  siteLogoPath?: string | null
-  siteIconPath?: string | null
-  siteSeoKeywords: string[]
-  pointName: string
-  redeemCodeHelpEnabled: boolean
-  redeemCodeHelpTitle: string
-  redeemCodeHelpUrl: string
-  postLinkDisplayMode: PostLinkDisplayMode
-  homeFeedPostListDisplayMode: PostListDisplayMode
-  homeFeedPostListLoadMode: PostListLoadMode
-  homeFeedPostPageSize: number
-  zonePostPageSize: number
-  boardPostPageSize: number
-  commentPageSize: number
-  postTitleMinLength: number
-  postTitleMaxLength: number
-  postContentMinLength: number
-  postContentMaxLength: number
-  commentContentMinLength: number
-  commentContentMaxLength: number
-  homeSidebarHotTopicsCount: number
-  postSidebarRelatedTopicsCount: number
-  homeHotRecentWindowHours: number
-  homeSidebarStatsCardEnabled: boolean
-  homeSidebarAnnouncementsEnabled: boolean
-  leftSidebarDisplayMode: LeftSidebarDisplayMode
-  postSlugGenerationMode: PostSlugGenerationMode
-  footerCopyrightText: string
-  footerBrandingVisible: boolean
-  vipLevelIcons: VipLevelIcons
-  vipNameColors: VipNameColors
-  footerLinks: FooterLinkItem[]
-  headerAppLinks: SiteHeaderAppLinkItem[]
-  headerAppIconName: string
-  search: SiteSearchSettings
-  analyticsCode?: string | null
-  friendLinksEnabled: boolean
-  friendLinkApplicationEnabled: boolean
-  friendLinkAnnouncement: string
-  checkInEnabled: boolean
-  checkInReward: number
-  checkInVip1Reward: number
-  checkInVip2Reward: number
-  checkInVip3Reward: number
-  checkInMakeUpCardPrice: number
-  checkInVipMakeUpCardPrice: number
-  checkInVip1MakeUpCardPrice: number
-  checkInVip2MakeUpCardPrice: number
-  checkInVip3MakeUpCardPrice: number
-  checkInMakeUpCountsTowardStreak: boolean
-  postOfflinePrice: number
-  postOfflineVip1Price: number
-  postOfflineVip2Price: number
-  postOfflineVip3Price: number
-  inviteRewardInviter: number
-  inviteRewardInvitee: number
-  registerInitialPoints: number
-  registrationEnabled: boolean
-  authPageShowcaseEnabled: boolean
-  registrationRequireInviteCode: boolean
-  registerInviteCodeEnabled: boolean
-  registerInviteCodeHelpEnabled: boolean
-  registerInviteCodeHelpTitle: string
-  registerInviteCodeHelpUrl: string
-  inviteCodePurchaseEnabled: boolean
-  boardApplicationEnabled: boolean
-  inviteCodePrice: number
-  inviteCodeVip1Price: number
-  inviteCodeVip2Price: number
-  inviteCodeVip3Price: number
-  registerCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
-  loginCaptchaMode: "OFF" | "TURNSTILE" | "BUILTIN" | "POW"
-  turnstileSiteKey?: string | null
-  nicknameChangePointCost: number
-  nicknameChangeVip1PointCost: number
-  nicknameChangeVip2PointCost: number
-  nicknameChangeVip3PointCost: number
-  introductionChangePointCost: number
-  introductionChangeVip1PointCost: number
-  introductionChangeVip2PointCost: number
-  introductionChangeVip3PointCost: number
-  avatarChangePointCost: number
-  avatarChangeVip1PointCost: number
-  avatarChangeVip2PointCost: number
-  avatarChangeVip3PointCost: number
-  postEditableMinutes: number
-  commentEditableMinutes: number
-  guestCanViewComments: boolean
-  commentInitialVisibleReplies: number
-  anonymousPostEnabled: boolean
-  anonymousPostPrice: number
-  anonymousPostDailyLimit: number
-  anonymousPostMaskUserId: number | null
-  anonymousPostAllowReplySwitch: boolean
-  anonymousPostDefaultReplyAnonymous: boolean
-  interactionGates: InteractionGateSettings
-  tippingEnabled: boolean
-  tippingDailyLimit: number
-  tippingPerPostLimit: number
-  tippingAmounts: number[]
-  tippingGifts: SiteTippingGiftItem[]
-  tipGiftTaxEnabled: boolean
-  tipGiftTaxRateBps: number
-  postRedPacketEnabled: boolean
-  postRedPacketMaxPoints: number
-  postRedPacketDailyLimit: number
-  postRedPacketRandomClaimProbability: number
-  postJackpotEnabled: boolean
-  postJackpotMinInitialPoints: number
-  postJackpotMaxInitialPoints: number
-  postJackpotReplyIncrementPoints: number
-  postJackpotHitProbability: number
-  heatViewWeight: number
-  heatCommentWeight: number
-  heatLikeWeight: number
-  heatTipCountWeight: number
-  heatTipPointsWeight: number
-  heatStageThresholds: number[]
-  heatStageColors: string[]
-  registerEmailEnabled: boolean
-  registerEmailRequired: boolean
-  registerEmailVerification: boolean
-  registerEmailWhitelistEnabled: boolean
-  registerEmailWhitelistDomains: string[]
-  registerPhoneEnabled: boolean
-  registerPhoneRequired: boolean
-  registerPhoneVerification: boolean
-  registerNicknameEnabled: boolean
-  registerNicknameRequired: boolean
-  registerNicknameMinLength: number
-  registerNicknameMaxLength: number
-  registerGenderEnabled: boolean
-  registerGenderRequired: boolean
-  registerInviterEnabled: boolean
-  registrationEmailTemplates: RegistrationEmailTemplateSettings
-  authGithubEnabled: boolean
-  authGoogleEnabled: boolean
-  authPasskeyEnabled: boolean
-  smtpEnabled: boolean
-  vipMonthlyPrice: number
-  vipQuarterlyPrice: number
-  vipYearlyPrice: number
-  uploadProvider: UploadProvider
-  uploadLocalPath: string
-  uploadBaseUrl?: string | null
-  uploadOssBucket?: string | null
-  uploadOssRegion?: string | null
-  uploadOssEndpoint?: string | null
-  uploadS3ForcePathStyle: boolean
-  uploadRequireLogin: boolean
-  uploadAllowedImageTypes: string[]
-  uploadMaxFileSizeMb: number
-  uploadAvatarMaxFileSizeMb: number
-  markdownImageUploadEnabled: boolean
-  imageWatermarkEnabled: boolean
-  imageWatermarkText: string
-  imageWatermarkPosition: ImageWatermarkPosition
-  imageWatermarkOpacity: number
-  imageWatermarkFontSize: number
-  imageWatermarkMargin: number
-  imageWatermarkColor: string
-  imageWatermarkLogoPath: string
-  imageWatermarkLogoScalePercent: number
-  attachmentUploadEnabled: boolean
-  attachmentDownloadEnabled: boolean
-  attachmentMinUploadLevel: number
-  attachmentMinUploadVipLevel: number
-  attachmentAllowedExtensions: string[]
-  attachmentMaxFileSizeMb: number
-  markdownEmojiMapJson?: string | null
-  markdownEmojiMap: Array<{ shortcode: string; label: string; icon: string }>
-  appStateJson?: string | null
-}
-
-/** 含敏感字段的完整配置，仅在服务端内部使用（mailer、lottery 等），禁止序列化到客户端 */
-export interface ServerSiteSettingsData extends SiteSettingsData {
-  githubClientId?: string | null
-  githubClientSecret?: string | null
-  googleClientId?: string | null
-  googleClientSecret?: string | null
-  passkeyRpId?: string | null
-  passkeyRpName?: string | null
-  passkeyOrigin?: string | null
-  turnstileSecretKey?: string | null
-  uploadS3AccessKeyId?: string | null
-  uploadS3SecretAccessKey?: string | null
-  smtpHost?: string | null
-  smtpPort?: number | null
-  smtpUser?: string | null
-  smtpPass?: string | null
-  smtpFrom?: string | null
-  smtpSecure: boolean
-}
+export type { PostLinkDisplayMode, ServerSiteSettingsData, SiteSettingsData } from "@/lib/site-settings.types"
 
 function getDefaultServerSiteSettings(): ServerSiteSettingsData {
   return mapSiteSettings({
@@ -268,6 +68,12 @@ function normalizeLegacyServerSiteSettings(data: ServerSiteSettingsData): Server
     registerEmailWhitelistDomains: Array.isArray(data.registerEmailWhitelistDomains)
       ? data.registerEmailWhitelistDomains.filter((item): item is string => typeof item === "string")
       : defaults.registerEmailWhitelistDomains,
+    loginIpChangeEmailAlertEnabled: typeof data.loginIpChangeEmailAlertEnabled === "boolean"
+      ? data.loginIpChangeEmailAlertEnabled
+      : defaults.loginIpChangeEmailAlertEnabled,
+    passwordChangeRequireEmailVerification: typeof data.passwordChangeRequireEmailVerification === "boolean"
+      ? data.passwordChangeRequireEmailVerification
+      : defaults.passwordChangeRequireEmailVerification,
     redeemCodeHelpEnabled: typeof data.redeemCodeHelpEnabled === "boolean"
       ? data.redeemCodeHelpEnabled
       : defaults.redeemCodeHelpEnabled,
@@ -328,94 +134,7 @@ async function readSiteSettingsFromDB(): Promise<ServerSiteSettingsData> {
 
 export const SITE_SETTINGS_CACHE_TAG = "site-settings"
 
-function mapSiteSettings(record: {
-  siteName: string
-  siteSlogan: string
-  siteDescription: string
-  siteLogoText: string
-  siteLogoPath?: string | null
-  siteSeoKeywords?: string | null
-  pointName: string
-  postLinkDisplayMode?: "SLUG" | "ID" | string | null
-  homeFeedPostListDisplayMode?: string | null
-  homeSidebarStatsCardEnabled: boolean
-  footerLinksJson?: string | null
-  headerAppLinksJson?: string | null
-  headerAppIconName?: string | null
-  analyticsCode?: string | null
-  checkInEnabled: boolean
-  checkInReward: number
-  checkInMakeUpCardPrice: number
-  checkInVipMakeUpCardPrice: number
-  postOfflinePrice: number
-  postOfflineVip1Price: number
-  postOfflineVip2Price: number
-  postOfflineVip3Price: number
-  inviteRewardInviter: number
-  inviteRewardInvitee: number
-  registrationEnabled: boolean
-  registrationRequireInviteCode: boolean
-  registerInviteCodeEnabled: boolean
-  inviteCodePurchaseEnabled: boolean
-  inviteCodePrice: number
-  registerCaptchaMode: string
-  loginCaptchaMode: string
-  turnstileSiteKey?: string | null
-  nicknameChangePointCost: number
-  postEditableMinutes: number
-  commentEditableMinutes: number
-  tippingEnabled: boolean
-  tippingDailyLimit: number
-  tippingPerPostLimit: number
-  tippingAmounts: string
-  postRedPacketEnabled: boolean
-  postRedPacketMaxPoints: number
-  postRedPacketDailyLimit: number
-  heatViewWeight: number
-  heatCommentWeight: number
-  heatLikeWeight: number
-  heatTipCountWeight: number
-  heatTipPointsWeight: number
-  heatStageThresholds: string
-  heatStageColors: string
-  registerEmailEnabled: boolean
-  registerEmailRequired: boolean
-  registerEmailVerification: boolean
-  registerPhoneEnabled: boolean
-  registerPhoneRequired: boolean
-  registerPhoneVerification: boolean
-  registerNicknameEnabled: boolean
-  registerNicknameRequired: boolean
-  registerGenderEnabled: boolean
-  registerGenderRequired: boolean
-  registerInviterEnabled: boolean
-  smtpEnabled: boolean
-  smtpHost?: string | null
-  smtpPort?: number | null
-  smtpUser?: string | null
-  smtpPass?: string | null
-  smtpFrom?: string | null
-  smtpSecure: boolean
-  vipMonthlyPrice: number
-  vipQuarterlyPrice: number
-  vipYearlyPrice: number
-  uploadProvider: string
-  uploadLocalPath: string
-  uploadBaseUrl?: string | null
-  uploadOssBucket?: string | null
-  uploadOssRegion?: string | null
-  uploadOssEndpoint?: string | null
-  uploadRequireLogin: boolean
-  uploadAllowedImageTypes: string
-  uploadMaxFileSizeMb: number
-  uploadAvatarMaxFileSizeMb: number
-  markdownEmojiMapJson?: string | null
-  appStateJson?: string | null
-  sensitiveStateJson?: string | null
-  friendLinksEnabled: boolean
-  friendLinkApplicationEnabled: boolean
-  friendLinkAnnouncement: string
-}, tippingGifts: SiteTippingGiftItem[] = []): ServerSiteSettingsData {
+function mapSiteSettings(record: SiteSettingsRecordData, tippingGifts: SiteTippingGiftItem[] = []): ServerSiteSettingsData {
   const checkInRewards = resolveCheckInRewardSettings({
     appStateJson: record.appStateJson,
     normalReward: record.checkInReward,
@@ -495,8 +214,10 @@ function mapSiteSettings(record: {
     enabledFallback: false,
     textFallback: "",
     positionFallback: "BOTTOM_RIGHT",
+    tiledFallback: false,
     opacityFallback: 22,
     fontSizeFallback: 24,
+    fontFamilyFallback: "",
     marginFallback: 24,
     colorFallback: "#FFFFFF",
     logoPathFallback: "",
@@ -548,6 +269,9 @@ function mapSiteSettings(record: {
     appStateJson: record.appStateJson,
   })
   const registerEmailWhitelistSettings = resolveRegisterEmailWhitelistSettings({
+    appStateJson: record.appStateJson,
+  })
+  const siteSecuritySettings = resolveSiteSecuritySettings({
     appStateJson: record.appStateJson,
   })
   const redeemCodeHelpSettings = resolveRedeemCodeHelpSettingsFromAppState(record.appStateJson)
@@ -725,6 +449,8 @@ function mapSiteSettings(record: {
     registerEmailEnabled: record.registerEmailEnabled,
     registerEmailRequired: record.registerEmailRequired,
     registerEmailVerification: record.registerEmailVerification,
+    loginIpChangeEmailAlertEnabled: siteSecuritySettings.loginIpChangeEmailAlertEnabled,
+    passwordChangeRequireEmailVerification: siteSecuritySettings.passwordChangeRequireEmailVerification,
     registerEmailWhitelistEnabled: registerEmailWhitelistSettings.enabled,
     registerEmailWhitelistDomains: registerEmailWhitelistSettings.domains,
     registerPhoneEnabled: record.registerPhoneEnabled,
@@ -776,8 +502,10 @@ function mapSiteSettings(record: {
     imageWatermarkEnabled: imageWatermarkSettings.enabled,
     imageWatermarkText: imageWatermarkSettings.text,
     imageWatermarkPosition: imageWatermarkSettings.position,
+    imageWatermarkTiled: imageWatermarkSettings.tiled,
     imageWatermarkOpacity: imageWatermarkSettings.opacity,
     imageWatermarkFontSize: imageWatermarkSettings.fontSize,
+    imageWatermarkFontFamily: imageWatermarkSettings.fontFamily,
     imageWatermarkMargin: imageWatermarkSettings.margin,
     imageWatermarkColor: imageWatermarkSettings.color,
     imageWatermarkLogoPath: imageWatermarkSettings.logoPath,

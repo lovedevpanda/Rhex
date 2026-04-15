@@ -1,3 +1,5 @@
+import { persistBackgroundJobExecutionLog } from "@/lib/background-job-log-store"
+
 export interface LogContext {
   scope: string
   action?: string
@@ -23,7 +25,19 @@ function buildPayload(level: "info" | "error", context: LogContext, extra?: Reco
 }
 
 export function logInfo(context: LogContext, extra?: Record<string, unknown>) {
-  if (!shouldEmitInfoLogs()) {
+  const shouldEmit = shouldEmitInfoLogs()
+
+  void persistBackgroundJobExecutionLog({
+    level: "info",
+    scope: context.scope,
+    action: context.action ?? null,
+    userId: context.userId ?? null,
+    targetId: context.targetId ?? null,
+    metadata: context.metadata ?? null,
+    extra: extra ?? null,
+  })
+
+  if (!shouldEmit) {
     return
   }
 
@@ -31,11 +45,29 @@ export function logInfo(context: LogContext, extra?: Record<string, unknown>) {
 }
 
 export function logError(context: LogContext, error: unknown, extra?: Record<string, unknown>) {
+  const normalizedError = error instanceof Error
+    ? {
+        name: error.name,
+        message: error.message,
+      }
+    : {
+        name: "Error",
+        message: String(error),
+      }
+
+  void persistBackgroundJobExecutionLog({
+    level: "error",
+    scope: context.scope,
+    action: context.action ?? null,
+    userId: context.userId ?? null,
+    targetId: context.targetId ?? null,
+    metadata: context.metadata ?? null,
+    extra: extra ?? null,
+    error: normalizedError,
+  })
+
   console.error(JSON.stringify(buildPayload("error", context, {
     ...extra,
-    error: error instanceof Error ? {
-      name: error.name,
-      message: error.message,
-    } : String(error),
+    error: normalizedError,
   })))
 }

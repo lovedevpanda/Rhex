@@ -35,7 +35,7 @@ export default async function AdminAppsPage() {
           <CardHeader className="border-b">
             <CardTitle>应用</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 py-4 lg:grid-cols-2">
+          <CardContent className="grid gap-4 py-4 lg:grid-cols-4">
             {HOST_APPS.map((app) => (
               <div key={app.id} className="rounded-xl border border-border p-5">
                 <div className="flex items-start justify-between gap-3">

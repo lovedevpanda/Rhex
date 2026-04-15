@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Heart, Plus, Settings, Star, Users, Wallet } from "lucide-react"
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Heart, Plus, Settings, Star, Users, Wallet, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Modal } from "@/components/ui/modal"
@@ -457,7 +457,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
             <InlineStatBlock label="粉丝" value={currentUser.followerCount} icon={<Users className="h-3 w-3" />} href="/settings?tab=follows&followTab=followers" />
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-[18px] border border-amber-200 bg-amber-50/70 px-3 py-2.5 dark:border-amber-400/20 dark:bg-amber-400/10">
+          <div className="flex items-center justify-between gap-3">
             <Link href="/settings?tab=points" className="flex min-w-0 items-center gap-2 text-amber-900 transition-opacity hover:opacity-80 dark:text-amber-100">
               <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/80 text-amber-600 shadow-xs shadow-amber-950/5 dark:bg-amber-50/10 dark:text-amber-200">
                 <Wallet className="h-4 w-4" />
@@ -496,12 +496,13 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
         size="md"
         title="签到日历"
         description={`在日历中查看签到记录。连续签到:${currentCheckInStreak}天，最长连续:${Math.max(maxCheckInStreak, currentCheckInStreak)}天，${checkInStreakDescription}`}
+        hideHeaderCloseButtonOnMobile
       >
         <div className="space-y-3">
   
 
           <div className="flex flex-col gap-3 rounded-[20px] border border-border p-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center justify-center gap-2 md:w-auto md:justify-start">
               <Button type="button" variant="outline" className="h-9 rounded-lg px-3" onClick={() => setCalendarMonth((current) => getMonthKey(addMonths(new Date(`${current}-01T00:00:00`), -1)))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -511,12 +512,12 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
               </Button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <Tooltip
                 content={checkInButtonTooltip}
                 align="center"
               >
-                <Button type="button" className="h-9 rounded-lg px-4 text-xs" onClick={handleCheckIn} disabled={checkedInToday || loading}>
+                <Button type="button" className="h-9 w-full rounded-lg px-4 text-xs sm:w-auto" onClick={handleCheckIn} disabled={checkedInToday || loading}>
                   {checkedInToday ? (
                     <span className="inline-flex items-center gap-1">
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -525,9 +526,15 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
                   ) : loading ? "签到中..." : "签到"}
                 </Button>
               </Tooltip>
-              <Button type="button" variant="outline" className="h-9 rounded-lg px-4 text-xs" onClick={() => void loadCalendar(calendarMonth)} disabled={calendarLoading}>
-                {calendarLoading ? "加载中..." : "刷新"}
-              </Button>
+              <div className="flex items-center gap-2 sm:contents">
+                <Button type="button" variant="outline" className="h-9 flex-1 rounded-lg px-4 text-xs sm:flex-none" onClick={() => void loadCalendar(calendarMonth)} disabled={calendarLoading}>
+                  {calendarLoading ? "加载中..." : "刷新"}
+                </Button>
+                <Button type="button" variant="ghost" className="h-9 flex-1 rounded-lg px-4 text-xs sm:hidden" onClick={() => setCalendarOpen(false)}>
+                  <X className="h-3.5 w-3.5" />
+                  关闭
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -541,7 +548,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
             <div className="grid grid-cols-7 gap-2">
               {calendarDays.map((cell, index) => {
                 if (!cell.date || !cell.day) {
-                  return <div key={`empty-${index}`} className="aspect-square rounded-2xl border border-dashed border-border/60 bg-muted/20" />
+                  return <div key={`empty-${index}`} className="aspect-square rounded-xl border border-dashed border-border/60 bg-muted/20 sm:rounded-2xl" />
                 }
 
                 const activeDate = cell.date
@@ -564,7 +571,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
                         }
                       }}
                       className={cn(
-                        "aspect-square rounded-2xl border p-2 text-left transition",
+                        "aspect-square rounded-xl border p-1.5 text-left transition sm:rounded-2xl sm:p-2",
                         entry ? "border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100" : "border-border bg-background",
                         canMakeUp ? "hover:border-amber-300 hover:bg-amber-50/60 dark:hover:border-amber-400/30 dark:hover:bg-amber-400/10" : "cursor-default",
                         isToday && !entry ? "border-amber-300 bg-amber-50/70 dark:border-amber-400/30 dark:bg-amber-400/10" : null,
@@ -573,24 +580,31 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
                     >
                       <div className="flex h-full flex-col justify-between">
                         <div className="flex items-start justify-between gap-1">
-                          <span className="text-sm font-semibold">{cell.day}</span>
-                          {entry ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : null}
+                          <span className="text-xs font-semibold sm:text-sm">{cell.day}</span>
+                          {entry ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" /> : null}
                         </div>
-                        <div className="space-y-1 text-[10px] leading-4">
+                        <div className="min-h-4 text-[9px] leading-3 sm:min-h-5 sm:text-[10px] sm:leading-4">
                           {entry ? (
-                            <>
-                              <div>{entry.isMakeUp ? "已补签" : "已签到"}</div>
-                            </>
+                            <div className="font-medium">
+                              <span className="sm:hidden">{entry.isMakeUp ? "补" : "签"}</span>
+                              <span className="hidden sm:inline">{entry.isMakeUp ? "已补签" : "已签到"}</span>
+                            </div>
                           ) : canMakeUp ? (
-                            <>
-                              <div className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-200">
-                                <Wallet className="h-2.5 w-2.5" /> 补签
-                              </div>
-                            </>
+                            <div className="inline-flex items-center gap-0.5 font-medium text-amber-700 dark:text-amber-200 sm:gap-1">
+                              <Wallet className="h-2.5 w-2.5" />
+                              <span className="sm:hidden">补</span>
+                              <span className="hidden sm:inline">补签</span>
+                            </div>
                           ) : isToday ? (
-                            <div>可签到</div>
+                            <div className="font-medium">
+                              <span className="sm:hidden">今</span>
+                              <span className="hidden sm:inline">可签到</span>
+                            </div>
                           ) : (
-                            <div className="text-muted-foreground">未签到</div>
+                            <div className="text-muted-foreground">
+                              <span className="sm:hidden">未</span>
+                              <span className="hidden sm:inline">未签到</span>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -633,4 +647,3 @@ function InlineStatBlock({ label, value, icon, href }: { label: string; value: n
     </div>
   )
 }
-

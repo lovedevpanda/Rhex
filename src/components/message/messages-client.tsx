@@ -89,6 +89,18 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
   }, [activeConversationId, conversationId])
 
   useEffect(() => {
+    if (!conversationId?.startsWith("user-")) {
+      return
+    }
+
+    if (!activeConversationId || activeConversationId === conversationId) {
+      return
+    }
+
+    router.replace(`/messages?conversation=${activeConversationId}`, { scroll: false })
+  }, [activeConversationId, conversationId, router])
+
+  useEffect(() => {
     dataRef.current = data
   }, [data])
 
@@ -135,8 +147,9 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
   }
 
   function handleLocalMessageSent(message: MessageBubbleItem) {
-    const conversationKey = data?.activeConversation?.id
-    if (!conversationKey) {
+    const activeConversation = data?.activeConversation
+    const conversationKey = activeConversation?.id
+    if (!activeConversation || !conversationKey) {
       return
     }
 
@@ -145,8 +158,12 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
       ...current,
       [conversationKey]: {
         ...current[conversationKey],
+        title: activeConversation.title,
         subtitle: "实时会话",
+        preview: message.body,
+        updatedAt: message.createdAt,
         unreadCount: 0,
+        participants: activeConversation.participants,
       },
     }))
 

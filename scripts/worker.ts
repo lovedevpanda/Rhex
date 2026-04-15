@@ -1,6 +1,7 @@
 import "dotenv/config"
 
 import { ensureBackgroundJobRuntimeReady } from "../src/lib/background-jobs"
+import { startPostAuctionSettlementRecoveryLoop } from "../src/lib/post-auctions"
 import { startRssWorkerLoop } from "../src/lib/rss-harvest"
 
 const controller = new AbortController()
@@ -28,11 +29,17 @@ async function main() {
   await ensureBackgroundJobRuntimeReady()
   console.log("[worker] background jobs runtime ready")
 
+  console.log("[worker] starting post auction recovery loop")
   console.log("[worker] starting RSS worker loop")
-  await startRssWorkerLoop({
-    workerId: process.env.RSS_WORKER_ID?.trim() || process.env.WORKER_ID?.trim() || undefined,
-    signal: controller.signal,
-  })
+  await Promise.all([
+    startPostAuctionSettlementRecoveryLoop({
+      signal: controller.signal,
+    }),
+    startRssWorkerLoop({
+      workerId: process.env.RSS_WORKER_ID?.trim() || process.env.WORKER_ID?.trim() || undefined,
+      signal: controller.signal,
+    }),
+  ])
 
   console.log("[worker] stopped")
 }

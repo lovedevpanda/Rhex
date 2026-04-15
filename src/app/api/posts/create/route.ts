@@ -5,6 +5,7 @@ import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { enqueueEvaluateUserLevelProgress } from "@/lib/level-system"
 import { createPostFlow } from "@/lib/post-create-service"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
+import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 
 export const POST = createUserRouteHandler(async ({ request }) => {
@@ -28,6 +29,7 @@ export const POST = createUserRouteHandler(async ({ request }) => {
   revalidateUserSurfaceCache(result.author.id)
   if (!result.shouldPending) {
     revalidateHomeSidebarStatsCache()
+    expireTaxonomyCacheImmediately()
   }
 
   void enqueueEvaluateUserLevelProgress(result.author.id, { notifyOnUpgrade: true })

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
 import { apiError, createRouteHandler, apiSuccess, readJsonBody, readOptionalStringField } from "@/lib/api-route"
+import { maybeEnqueueLoginIpChangeAlert } from "@/lib/account-security"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { verifyPowCaptchaSolution } from "@/lib/pow-captcha"
 import { getRequestIp } from "@/lib/request-ip"
@@ -105,6 +106,13 @@ export const POST = createRouteHandler(async ({ request }) => {
           userAgent: request.headers.get("user-agent"),
         },
       })
+    })
+
+    void maybeEnqueueLoginIpChangeAlert({
+      userId: user.id,
+      previousIp: user.lastLoginIp,
+      currentIp: loginIp,
+      userAgent: request.headers.get("user-agent"),
     })
 
     const response = NextResponse.json(apiSuccess({ username: user.username }, "success"))

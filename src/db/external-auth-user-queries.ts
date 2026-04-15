@@ -57,6 +57,7 @@ export function findAuthenticatedUserSummaryById(userId: number, client?: DbClie
       id: true,
       username: true,
       status: true,
+      lastLoginIp: true,
     },
   })
 }
