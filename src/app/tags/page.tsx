@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
@@ -88,7 +89,12 @@ export default async function TagsPage(props: PageProps<"/tags">) {
           main={(
             <main className="pb-12 py-1 mt-5">
             <div className="space-y-6">
-              <Card className="overflow-hidden border-none bg-linear-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
+              <AddonSlotRenderer slot="tags.page.before" />
+              <AddonSurfaceRenderer surface="tags.page" props={{ currentSort, settings, tagPage }}>
+                <>
+              <AddonSlotRenderer slot="tags.hero.before" />
+              <AddonSurfaceRenderer surface="tags.hero" props={{ currentSort, settings, tagPage }}>
+                <Card className="overflow-hidden border-none bg-linear-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
                 <CardContent className="space-y-5 p-8">
                   <div>
                     <p className="text-sm text-white/70">标签广场</p>
@@ -101,7 +107,11 @@ export default async function TagsPage(props: PageProps<"/tags">) {
                   </div>
                 </CardContent>
               </Card>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tags.hero.after" />
 
+              <AddonSlotRenderer slot="tags.content.before" />
+              <AddonSurfaceRenderer surface="tags.content" props={{ currentSort, settings, tagPage }}>
               <Card>
                 <CardContent className="space-y-6 p-6">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -160,12 +170,21 @@ export default async function TagsPage(props: PageProps<"/tags">) {
                   </div>
                 </CardContent>
               </Card>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tags.content.after" />
+                </>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tags.page.after" />
             </div>
             </main>
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              <AddonSlotRenderer slot="tags.sidebar.before" />
+              <AddonSurfaceRenderer surface="tags.sidebar" props={{ hotTopics, settings }}>
+                <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tags.sidebar.after" />
             </aside>
           )}
         />

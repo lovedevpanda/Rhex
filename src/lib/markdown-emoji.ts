@@ -64,9 +64,12 @@ function buildSvgMarkup(svg: string) {
   return svg.trim()
 }
 
-export function normalizeMarkdownEmojiItems(input: unknown): MarkdownEmojiItem[] {
+export function normalizeOptionalMarkdownEmojiItems(
+  input: unknown,
+  fallback: MarkdownEmojiItem[] = [],
+): MarkdownEmojiItem[] {
   if (!Array.isArray(input)) {
-    return DEFAULT_MARKDOWN_EMOJI_ITEMS
+    return fallback
   }
 
   const seen = new Set<string>()
@@ -90,7 +93,11 @@ export function normalizeMarkdownEmojiItems(input: unknown): MarkdownEmojiItem[]
     })
     .filter(Boolean) as MarkdownEmojiItem[]
 
-  return normalized.length > 0 ? normalized : DEFAULT_MARKDOWN_EMOJI_ITEMS
+  return normalized.length > 0 ? normalized : fallback
+}
+
+export function normalizeMarkdownEmojiItems(input: unknown): MarkdownEmojiItem[] {
+  return normalizeOptionalMarkdownEmojiItems(input, DEFAULT_MARKDOWN_EMOJI_ITEMS)
 }
 
 export function parseMarkdownEmojiMapJson(raw: string | null | undefined) {

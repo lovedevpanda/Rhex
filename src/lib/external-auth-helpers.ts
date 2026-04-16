@@ -105,8 +105,9 @@ export async function buildPendingExternalAuthState(identity: ExternalAuthIdenti
   } satisfies PendingExternalAuthState
 }
 
-export function buildExternalAuthMetadataJson(identity: Pick<ExternalAuthIdentity, "displayName" | "avatarUrl" | "emailVerified">) {
+export function buildExternalAuthMetadataJson(identity: Pick<ExternalAuthIdentity, "displayName" | "avatarUrl" | "emailVerified" | "providerLabel">) {
   return JSON.stringify({
+    providerLabel: identity.providerLabel ?? null,
     displayName: identity.displayName ?? null,
     avatarUrl: identity.avatarUrl ?? null,
     emailVerified: Boolean(identity.emailVerified),

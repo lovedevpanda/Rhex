@@ -386,6 +386,13 @@ enum PaymentFulfillmentStatus {
   FAILED
 }
 
+enum AddonRegistryState {
+  ENABLED
+  DISABLED
+  UNINSTALLED
+  ERROR
+}
+
 model User {
   id                               Int                            @id @default(autoincrement())
   username                         String                         @unique
@@ -1847,6 +1854,58 @@ model RssEntry {
   @@index([reviewStatus, createdAt])
   @@index([reviewedById, reviewedAt])
   @@map("rss_entry")
+}
+
+model AddonRegistry {
+  id               String             @id @default(cuid())
+  addonId          String             @unique
+  name             String
+  version          String
+  description      String?
+  sourceDir        String?
+  state            AddonRegistryState @default(ENABLED)
+  enabled          Boolean            @default(true)
+  manifestJson     Json?
+  permissionsJson  Json?
+  installedAt      DateTime?          @db.Timestamptz(3)
+  disabledAt       DateTime?          @db.Timestamptz(3)
+  uninstalledAt    DateTime?          @db.Timestamptz(3)
+  lastErrorAt      DateTime?          @db.Timestamptz(3)
+  lastErrorMessage String?
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
+  logs             AddonLifecycleLog[]
+
+  @@index([state, updatedAt])
+  @@map("addon_registry")
+}
+
+model AddonLifecycleLog {
+  id          String        @id @default(cuid())
+  addonId     String
+  action      String
+  status      String
+  message     String?
+  metadataJson Json?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  addon       AddonRegistry @relation(fields: [addonId], references: [addonId], onDelete: Cascade)
+
+  @@index([addonId, createdAt])
+  @@index([action, createdAt])
+  @@map("addon_lifecycle_log")
+}
+
+model AddonConfig {
+  id        String   @id @default(cuid())
+  addonId   String
+  configKey String
+  valueJson Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([addonId, configKey])
+  @@index([addonId, updatedAt])
+  @@map("addon_config")
 }
 
 model SiteSetting {

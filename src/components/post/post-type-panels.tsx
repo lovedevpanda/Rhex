@@ -160,6 +160,8 @@ export function LotteryPanel({ postId, isOwnerOrAdmin, lottery }: LotteryPanelPr
     isLocked,
     triggerMode: lottery.triggerMode,
   })
+  const showCountdownStageLabel = (!isDrawn && hasNotStarted && Boolean(lottery.startsAt))
+    || (!isDrawn && !isLocked && Boolean(lottery.endsAt))
   const summaryChips = [
     `参与 ${formatNumber(lottery.participantCount)} 人`,
     `中奖名额 ${formatNumber(totalPrizeQuantity)} 份`,
@@ -333,7 +335,7 @@ export function LotteryPanel({ postId, isOwnerOrAdmin, lottery }: LotteryPanelPr
                   <div className="flex min-w-0 items-center gap-1.5 text-foreground sm:gap-2">
                     <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
                     <span className="shrink-0 whitespace-nowrap text-[1.35rem] font-semibold leading-none tracking-tight sm:text-[1.9rem]">{countdown}</span>
-                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:text-sm">{currentStageText}</span>
+                    {showCountdownStageLabel ? <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:text-sm">{currentStageText}</span> : null}
                   </div>
                   <Badge variant="outline" className="shrink-0 rounded-full bg-background/80">
                     {participationBadgeText}

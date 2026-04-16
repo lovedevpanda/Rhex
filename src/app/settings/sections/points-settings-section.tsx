@@ -6,33 +6,26 @@ import { Button } from "@/components/ui/rbutton"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatDateTime, formatNumber } from "@/lib/formatters"
 import { getPointLogEventLabel, POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
+import { buildSettingsHref } from "@/app/settings/settings-page-loader"
 import type { SettingsPageData } from "@/app/settings/settings-page-loader"
 
 type PointLogList = NonNullable<SettingsPageData["pointLogs"]>
 
-function buildPointsPageHref(pointLogs: PointLogList, cursorKey: "pointsBefore" | "pointsAfter", cursor: string | null) {
+function buildPointsPageHref(route: SettingsPageData["route"], pointLogs: PointLogList, cursorKey: "pointsBefore" | "pointsAfter", cursor: string | null) {
   if (!cursor) {
     return "#"
   }
 
-  const searchParams = new URLSearchParams({
+  return buildSettingsHref(route, {
     tab: "points",
     [cursorKey]: cursor,
+    pointsChangeType: pointLogs.filters.changeType !== "ALL" ? pointLogs.filters.changeType : undefined,
+    pointsEventType: pointLogs.filters.eventType !== "ALL" ? pointLogs.filters.eventType : undefined,
   })
-
-  if (pointLogs.filters.changeType !== "ALL") {
-    searchParams.set("pointsChangeType", pointLogs.filters.changeType)
-  }
-
-  if (pointLogs.filters.eventType !== "ALL") {
-    searchParams.set("pointsEventType", pointLogs.filters.eventType)
-  }
-
-  return `/settings?${searchParams.toString()}`
 }
 
 export function PointsSettingsSection({ data }: { data: SettingsPageData }) {
-  const { pointLogs, profile, settings } = data
+  const { pointLogs, profile, route, settings } = data
 
   if (!pointLogs) {
     return (
@@ -60,6 +53,7 @@ export function PointsSettingsSection({ data }: { data: SettingsPageData }) {
         <CardContent className="space-y-4">
           <form action="/settings" className="grid gap-3 rounded-[20px] border border-border bg-secondary/25 p-4 md:grid-cols-[180px_220px_auto_auto] md:items-end">
             <input type="hidden" name="tab" value="points" />
+            {route.mobileView === "detail" ? <input type="hidden" name="mobile" value="detail" /> : null}
             <label className="space-y-2">
               <span className="text-sm font-medium">收支类型</span>
               <select
@@ -93,7 +87,7 @@ export function PointsSettingsSection({ data }: { data: SettingsPageData }) {
               筛选
             </Button>
 
-            <Link href="/settings?tab=points" className="inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-foreground">
+            <Link href={buildSettingsHref(route, { tab: "points" })} className="inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-foreground">
               重置
             </Link>
           </form>
@@ -168,14 +162,14 @@ export function PointsSettingsSection({ data }: { data: SettingsPageData }) {
           {pointLogs.total > 0 ? (
             <div className="flex items-center justify-end gap-2 pt-2">
               <Link
-                href={pointLogs.hasPrevPage ? buildPointsPageHref(pointLogs, "pointsBefore", pointLogs.prevCursor) : "#"}
+                href={pointLogs.hasPrevPage ? buildPointsPageHref(route, pointLogs, "pointsBefore", pointLogs.prevCursor) : "#"}
                 aria-disabled={!pointLogs.hasPrevPage}
                 className={pointLogs.hasPrevPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
               >
                 上一页
               </Link>
               <Link
-                href={pointLogs.hasNextPage ? buildPointsPageHref(pointLogs, "pointsAfter", pointLogs.nextCursor) : "#"}
+                href={pointLogs.hasNextPage ? buildPointsPageHref(route, pointLogs, "pointsAfter", pointLogs.nextCursor) : "#"}
                 aria-disabled={!pointLogs.hasNextPage}
                 className={pointLogs.hasNextPage ? "rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-accent/40" : "pointer-events-none rounded-full border border-border px-4 py-2 text-sm text-muted-foreground opacity-50"}
               >

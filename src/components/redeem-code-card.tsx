@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
 import { formatNumber } from "@/lib/formatters"
 
+const REDEEM_PRIMARY_BUTTON_CLASS = "bg-foreground text-background hover:bg-foreground/90"
 
 interface RedeemCodeCardProps {
   pointName: string
@@ -73,7 +74,7 @@ export function RedeemCodeCard({ pointName, currentPoints, helpLinkEnabled = fal
           placeholder="请输入兑换码"
           className="h-11 flex-1 rounded-full border border-border bg-background px-4 text-sm uppercase tracking-[0.2em] outline-hidden"
         />
-        <Button disabled={isPending || !code.trim()}>{isPending ? "兑换中..." : `兑换${pointName}`}</Button>
+        <Button className={REDEEM_PRIMARY_BUTTON_CLASS} disabled={isPending || !code.trim()}>{isPending ? "兑换中..." : `兑换${pointName}`}</Button>
       </form>
 
     </div>

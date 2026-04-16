@@ -167,6 +167,7 @@ export interface RegisterEmailWhitelistSettings {
 }
 
 export interface SiteSecuritySettings {
+  sessionIpMismatchLogoutEnabled: boolean
   loginIpChangeEmailAlertEnabled: boolean
   passwordChangeRequireEmailVerification: boolean
 }
@@ -269,7 +270,9 @@ export interface RedeemCodeHelpSettings {
 }
 
 export interface CheckInStreakSettings {
+  enabled: boolean
   makeUpCountsTowardStreak: boolean
+  oldestDayLimit: number
 }
 
 export interface PostJackpotSettings {

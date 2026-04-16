@@ -51,6 +51,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
 
   const activeChannelCount = channels.filter((item) => item.enabled).length
   const activeRouteCount = routes.filter((item) => item.enabled).length
+  const defaultRouteChannelCode = data.channelDefinitions[0]?.channelCode ?? "channel.code"
 
   function syncDraftFromData(nextData: PaymentGatewayAdminData) {
     setData(nextData)
@@ -322,14 +323,47 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
 
       <Card>
         <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle>支付通道</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">这里只保留通道启停。接口参数统一在支付宝接口页维护。</p>
+          <CardTitle>支付提供方</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-3">
+          {data.providerEntries.length > 0 ? data.providerEntries.map((provider) => (
+            <div key={provider.code} className="rounded-xl border border-border p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">{provider.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{provider.description}</p>
+                </div>
+                <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+                  {provider.source === "builtin" ? "内置" : "插件"}
+                </span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span className="rounded-full border border-border px-3 py-1">{provider.code}</span>
+                {provider.addonId ? (
+                  <span className="rounded-full border border-border px-3 py-1">{provider.addonId}</span>
+                ) : null}
+              </div>
+              {provider.settingsHref ? (
+                <Link href={provider.settingsHref} className="mt-4 inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+                  {provider.settingsLabel ?? "打开配置"}
+                </Link>
+              ) : (
+                <p className="mt-4 text-xs text-muted-foreground">该提供方未声明专用配置入口。</p>
+              )}
             </div>
-            <Link href="/admin/apps/payment-gateway/alipay" className="inline-flex h-10 items-center justify-center rounded-full border border-border px-4 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
-              打开支付宝接口页
-            </Link>
+          )) : (
+            <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              当前还没有可用的支付提供方。内置提供方未加载或插件尚未注册 payment provider。
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="border-b">
+          <div>
+            <CardTitle>支付通道</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">这里只保留通道启停。具体密钥、签名和第三方接口参数请进入对应提供方配置页维护。</p>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 py-5 md:grid-cols-2 xl:grid-cols-3">
@@ -435,7 +469,7 @@ export function PaymentGatewayAdminPage({ initialData }: PaymentGatewayAdminPage
         <CardContent className="space-y-4 py-5">
           {routes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              当前没有路由规则。你可以新增一条 `* + WEB_DESKTOP` 指向 `alipay.page` 的默认规则作为起点。
+              当前没有路由规则。你可以新增一条 `* + WEB_DESKTOP` 指向 <code>{defaultRouteChannelCode}</code> 的默认规则作为起点。
             </div>
           ) : null}
 

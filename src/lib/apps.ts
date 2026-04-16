@@ -57,7 +57,7 @@ export const HOST_APPS = [
     id: "payment-gateway",
     slug: "payment-gateway",
     name: "支付网关",
-    description: "统一管理支付渠道、路由规则、敏感密钥和异步通知，首期内置支付宝网页/H5/扫码通道。",
+    description: "统一管理支付渠道、路由规则、内置与插件化支付提供方配置，以及异步通知与履约状态。",
     href: "/admin/apps/payment-gateway",
     adminHref: "/admin/apps/payment-gateway",
     category: "交易",

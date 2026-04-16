@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
+import { useInboxRealtime } from "@/components/inbox-realtime-provider"
 import { Button } from "@/components/ui/rbutton"
 
-export function NotificationsToolbar({ unreadCount }: { unreadCount: number }) {
+export function NotificationsToolbar() {
   const router = useRouter()
+  const { unreadNotificationCount: unreadCount } = useInboxRealtime()
   const [isPending, setIsPending] = useState(false)
 
   async function handleReadAll() {

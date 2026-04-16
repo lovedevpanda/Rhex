@@ -1,7 +1,9 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { ChevronDown, Info, Loader2 } from "lucide-react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
 import { BoardSelectField } from "@/components/board/board-select-field"
 import {
   AuctionSettingsSection,
@@ -11,7 +13,7 @@ import {
   PostEnhancementsSection,
 } from "@/components/post/create-post-form-sections"
 import { PostDraftNotice, type PostDraftNoticeAction } from "@/components/post/post-draft-notice"
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
+import { AddonEditor } from "@/components/addon-editor"
 import { Button } from "@/components/ui/rbutton"
 import { Tooltip } from "@/components/ui/tooltip"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
@@ -25,6 +27,17 @@ import { formatDateTime } from "@/lib/formatters"
 interface CreatePostFormShellProps {
   boardOptions: CreatePostFormBoardGroup[]
   pointName: string
+  addonCaptcha?: ReactNode
+  addonFormBefore?: ReactNode
+  addonFormAfter?: ReactNode
+  addonToolsBefore?: ReactNode
+  addonToolsAfter?: ReactNode
+  addonEditorBefore?: ReactNode
+  addonEditorAfter?: ReactNode
+  addonEnhancementsBefore?: ReactNode
+  addonEnhancementsAfter?: ReactNode
+  addonSubmitBefore?: ReactNode
+  addonSubmitAfter?: ReactNode
   markdownEmojiMap?: MarkdownEmojiItem[]
   viewLevelOptions: AccessThresholdOption[]
   viewVipLevelOptions: AccessThresholdOption[]
@@ -36,6 +49,17 @@ interface CreatePostFormShellProps {
 export function CreatePostFormShell({
   boardOptions,
   pointName,
+  addonCaptcha,
+  addonFormBefore,
+  addonFormAfter,
+  addonToolsBefore,
+  addonToolsAfter,
+  addonEditorBefore,
+  addonEditorAfter,
+  addonEnhancementsBefore,
+  addonEnhancementsAfter,
+  addonSubmitBefore,
+  addonSubmitAfter,
   markdownEmojiMap,
   viewLevelOptions,
   viewVipLevelOptions,
@@ -124,8 +148,9 @@ export function CreatePostFormShell({
     variant: "outline",
   })
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+  const toolsContent = (
+    <>
+      {addonToolsBefore}
       <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
         <div className="space-y-2">
           <p className="text-sm font-medium">选择节点</p>
@@ -305,30 +330,31 @@ export function CreatePostFormShell({
           disabled={isEditMode}
         />
       ) : null}
+      {addonToolsAfter}
+    </>
+  )
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium">标题</p>
-        <input
-          value={draft.title}
-          onChange={(event) => updateDraftField("title", event.target.value)}
-          className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-hidden"
-          placeholder="写一个让人愿意点进来的标题"
-        />
+  const editorContent = (
+    <div className="space-y-2">
+      {addonEditorBefore}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">公开正文</p>
+        <p className="text-xs text-muted-foreground">请遵守社区规则，文明发帖！</p>
       </div>
+      <AddonEditor
+        context="post"
+        value={draft.content}
+        onChange={(value) => updateDraftField("content", value)}
+        placeholder="文明社区，文明发言。支持 Markdown 语法"
+        markdownEmojiMap={markdownEmojiMap}
+      />
+      {addonEditorAfter}
+    </div>
+  )
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium">公开正文</p>
-          <p className="text-xs text-muted-foreground">请遵守社区规则，文明发帖！</p>
-        </div>
-        <RefinedRichPostEditor
-          value={draft.content}
-          onChange={(value) => updateDraftField("content", value)}
-          placeholder="文明社区，文明发言。支持 Markdown 语法"
-          markdownEmojiMap={markdownEmojiMap}
-        />
-      </div>
-
+  const enhancementsContent = (
+    <>
+      {addonEnhancementsBefore}
       <PostEnhancementsSection
         pointName={pointName}
         rewardPoolEnabled={showRewardPoolEntry}
@@ -423,7 +449,13 @@ export function CreatePostFormShell({
             updateDraftField("redPacketPacketCount", value),
         }}
       />
+      {addonEnhancementsAfter}
+    </>
+  )
 
+  const submitContent = (
+    <>
+      {addonSubmitBefore}
       <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:items-center">
         <div>
           <PostDraftNotice
@@ -475,6 +507,98 @@ export function CreatePostFormShell({
           )}
         </Button>
       </div>
+      {addonSubmitAfter}
+    </>
+  )
+
+  const formContent = (
+    <>
+      <AddonSurfaceClientRenderer
+        surface="post.create.tools"
+        surfaceProps={{
+          boardOptions,
+          canPostInBoard,
+          currentUser,
+          currentUserSummary,
+          currentUserVipClassName,
+          draft,
+          draftController,
+          isEditMode,
+          minPostVipLevel,
+          pointName,
+          selectedBoard,
+          selectedPostTypeOption,
+          showBoardTips,
+          viewLevelOptions,
+          viewVipLevelOptions,
+        }}
+        fallback={toolsContent}
+      />
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">标题</p>
+        <input
+          value={draft.title}
+          onChange={(event) => updateDraftField("title", event.target.value)}
+          className="h-11 w-full rounded-full border border-border bg-card px-4 text-sm outline-hidden"
+          placeholder="写一个让人愿意点进来的标题"
+        />
+      </div>
+
+      <AddonSurfaceClientRenderer
+        surface="post.create.editor"
+        surfaceProps={{
+          draft,
+          draftController,
+          markdownEmojiMap,
+        }}
+        fallback={editorContent}
+      />
+
+      <AddonSurfaceClientRenderer
+        surface="post.create.enhancements"
+        surfaceProps={{
+          draft,
+          draftController,
+          pointName,
+        }}
+        fallback={enhancementsContent}
+      />
+
+      {addonCaptcha}
+
+      <AddonSurfaceClientRenderer
+        surface="post.create.submit"
+        surfaceProps={{
+          canPostInBoard,
+          draft,
+          draftController,
+          pointName,
+          submitController,
+        }}
+        fallback={submitContent}
+      />
+    </>
+  )
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {addonFormBefore}
+      <AddonSurfaceClientRenderer
+        surface="post.create.form"
+        surfaceProps={{
+          addonCaptcha,
+          boardOptions,
+          draft,
+          draftController,
+          pointName,
+          submitController,
+          viewLevelOptions,
+          viewVipLevelOptions,
+        }}
+        fallback={formContent}
+      />
+      {addonFormAfter}
     </form>
   )
 }

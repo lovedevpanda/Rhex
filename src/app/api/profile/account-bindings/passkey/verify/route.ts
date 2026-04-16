@@ -56,6 +56,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       credential: credentialPayload,
     }),
     userId: currentUser.id,
+    request,
   })
 
   logRouteWriteSuccess({

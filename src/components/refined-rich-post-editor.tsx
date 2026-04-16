@@ -1,8 +1,13 @@
 "use client"
 
-import { useMemo, useRef, useSyncExternalStore } from "react"
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
+import { useAddonEditorToolbarItems } from "@/addons-host/client/addon-runtime-provider"
+import type {
+  AddonEditorTarget,
+  AddonEditorToolbarApi,
+} from "@/addons-host/editor-types"
 import { MarkdownEditorHelpDialog } from "@/components/post/markdown-editor-help-dialog"
 import { TOOLBAR_TIPS } from "@/components/refined-rich-post-editor/constants"
 import {
@@ -14,7 +19,11 @@ import {
   TableInsertPanel,
 } from "@/components/refined-rich-post-editor/editor-panels"
 import { EditorBody, EditorHeader, EditorToolbar } from "@/components/refined-rich-post-editor/editor-surface"
-import type { EditorSelectionRange, RefinedRichPostEditorProps } from "@/components/refined-rich-post-editor/types"
+import type {
+  EditorSelectionRange,
+  EditorSelectionStore,
+  RefinedRichPostEditorProps,
+} from "@/components/refined-rich-post-editor/types"
 import { useEditorCommands } from "@/components/refined-rich-post-editor/use-editor-commands"
 import { useEditorPanels } from "@/components/refined-rich-post-editor/use-editor-panels"
 import { useEditorSelection } from "@/components/refined-rich-post-editor/use-editor-selection"
@@ -22,6 +31,37 @@ import { useEditorViewState } from "@/components/refined-rich-post-editor/use-ed
 import { useMarkdownEmojiMap, useMarkdownImageUploadEnabled } from "@/components/site-settings-provider"
 import { useImageUpload } from "@/hooks/use-image-upload"
 import { getClientPlatform } from "@/lib/client-platform"
+import {
+  insertSelection,
+  setHeadingLevel,
+  wrapSelection,
+} from "@/lib/markdown-editor-shortcuts"
+
+function createEditorSelectionStore(initialSelection: EditorSelectionRange): EditorSelectionStore {
+  let selection = initialSelection
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => selection,
+    subscribe: (listener) => {
+      listeners.add(listener)
+
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    setSelection: (nextSelection) => {
+      if (selection.start === nextSelection.start && selection.end === nextSelection.end) {
+        return
+      }
+
+      selection = nextSelection
+      listeners.forEach((listener) => {
+        listener()
+      })
+    },
+  }
+}
 
 export function RefinedRichPostEditor({
   value,
@@ -32,10 +72,21 @@ export function RefinedRichPostEditor({
   uploadFolder = "posts",
   markdownEmojiMap: externalMarkdownEmojiMap,
   markdownImageUploadEnabled: externalMarkdownImageUploadEnabled,
-}: RefinedRichPostEditorProps) {
+  context = "generic",
+}: RefinedRichPostEditorProps & {
+  context?: AddonEditorTarget
+}) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const selectionRef = useRef<EditorSelectionRange>({ start: 0, end: 0 })
+  const selectionStore = useMemo(
+    () => createEditorSelectionStore({ start: 0, end: 0 }),
+    [],
+  )
+  const updateSelection = useCallback((nextSelection: EditorSelectionRange) => {
+    selectionRef.current = nextSelection
+    selectionStore.setSelection(nextSelection)
+  }, [selectionStore])
 
   const isClient = useSyncExternalStore(
     () => () => undefined,
@@ -45,13 +96,14 @@ export function RefinedRichPostEditor({
   const shortcutPlatform = useMemo(() => (isClient ? getClientPlatform() : "other"), [isClient])
   const markdownEmojiMap = useMarkdownEmojiMap(externalMarkdownEmojiMap)
   const markdownImageUploadEnabled = useMarkdownImageUploadEnabled(externalMarkdownImageUploadEnabled)
+  const toolbarItems = useAddonEditorToolbarItems(context)
   const imageToolbarTip = markdownImageUploadEnabled ? TOOLBAR_TIPS.imageUpload : TOOLBAR_TIPS.imageRemote
 
   const viewState = useEditorViewState({
     value,
     minHeight,
     textareaRef,
-    selectionRef,
+    updateSelection,
   })
 
   const selectionState = useEditorSelection({
@@ -59,6 +111,7 @@ export function RefinedRichPostEditor({
     onChange,
     textareaRef,
     selectionRef,
+    updateSelection,
     onRestoreScrollTop: viewState.setEditorScrollTop,
   })
 
@@ -106,6 +159,48 @@ export function RefinedRichPostEditor({
     closeBase64Dialog: panels.base64Dialog.closeDialog,
   })
 
+  const toolbarApi = useMemo<AddonEditorToolbarApi>(() => ({
+    focus: () => {
+      textareaRef.current?.focus()
+    },
+    preserveSelection: () => selectionState.syncSelection(),
+    getSelection: () => ({
+      start: selectionRef.current.start,
+      end: selectionRef.current.end,
+    }),
+    getValue: () => value,
+    setValue: (nextValue: string) => {
+      onChange(nextValue)
+    },
+    insertTemplate: (template: string) => {
+      selectionState.insertMarkdownTemplate(template)
+    },
+    replaceSelection: (nextValue: string) => {
+      selectionState.applyEditorUpdate(
+        insertSelection(selectionState.getEditorState(), () => nextValue),
+      )
+    },
+    wrapSelection: (before: string, after = "") => {
+      selectionState.applyEditorUpdate(
+        wrapSelection(selectionState.getEditorState(), before, after),
+      )
+    },
+    setHeadingLevel: (level: 1 | 2 | 3) => {
+      selectionState.applyEditorUpdate(
+        setHeadingLevel(selectionState.getEditorState(), level),
+      )
+    },
+    toggleBold: commands.toolbarActions.bold,
+    toggleUnderline: commands.toolbarActions.underline,
+    toggleStrike: commands.toolbarActions.strike,
+    toggleHighlight: commands.toolbarActions.highlight,
+    formatCode: commands.toolbarActions.codeFormat,
+    toggleQuote: commands.toolbarActions.quote,
+    formatList: commands.toolbarActions.listFormat,
+    insertDivider: commands.toolbarActions.insertDivider,
+    align: commands.toolbarActions.align,
+  }), [commands.toolbarActions, onChange, selectionState, value])
+
   const editorShell = (
     <div className={viewState.isFullscreen ? "fixed inset-0 z-[120] bg-black/45 p-4 md:p-6" : ""}>
       <div className={viewState.isFullscreen ? "flex h-full w-full items-center justify-center" : ""}>
@@ -145,8 +240,13 @@ export function RefinedRichPostEditor({
           />
           <div className={viewState.activeTab === "write" || viewState.activeTab === "live-preview" ? (viewState.isFullscreen ? "px-3 pb-4 sm:px-5 sm:pb-8" : "px-3 pb-4 sm:px-5") : "px-3 pb-4 sm:px-5"}>
             <EditorToolbar
+              context={context}
               visible={viewState.activeTab === "write" || viewState.activeTab === "live-preview"}
               disabled={disabled}
+              toolbarItems={toolbarItems}
+              toolbarApi={toolbarApi}
+              selectionStore={selectionStore}
+              value={value}
               isFullscreen={viewState.isFullscreen}
               platform={shortcutPlatform}
               imageToolbarTip={imageToolbarTip}

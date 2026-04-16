@@ -21,6 +21,7 @@ export const POST = createRouteHandler(async ({ request }) => {
     email,
     code,
     password,
+    request,
   })
 
   return apiSuccess(undefined, "密码已重置，请使用新密码登录")

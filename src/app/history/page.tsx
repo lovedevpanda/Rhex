@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ReadingHistoryPanel } from "@/components/post/reading-history-panel"
 import { SiteHeader } from "@/components/site-header"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -19,14 +20,21 @@ export default function ReadingHistoryPage() {
       <SiteHeader />
 
       <main className="mx-auto max-w-[960px] px-3 py-6 sm:px-4">
-        <div className="space-y-4">
-          <ReadingHistoryPanel
-            variant="page"
-            title="足迹"
-            showClearButton
-            emptyDescription="打开帖子详情后会自动写入当前浏览器本地，可用于今日访问和阅读记录扩展。"
-          />
-        </div>
+        <AddonSlotRenderer slot="history.page.before" />
+        <AddonSurfaceRenderer surface="history.page">
+          <div className="space-y-4">
+            <ReadingHistoryPanel
+              variant="page"
+              surface="history.panel"
+              beforeContent={<AddonSlotRenderer slot="history.panel.before" />}
+              afterContent={<AddonSlotRenderer slot="history.panel.after" />}
+              title="足迹"
+              showClearButton
+              emptyDescription="打开帖子详情后会自动写入当前浏览器本地，可用于今日访问和阅读记录扩展。"
+            />
+          </div>
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="history.page.after" />
       </main>
     </div>
   )

@@ -9,9 +9,22 @@ import { enqueueEvaluateUserLevelProgress } from "@/lib/level-system"
 import { enqueueNotifications } from "@/lib/notification-writes"
 import { logRequestSucceeded } from "@/lib/request-log"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
+  const requestUrl = new URL(request.url)
+
+  await executeAddonActionHook("comment.create.before", {
+    authorId: currentUser.id,
+    authorUsername: currentUser.username,
+    body,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
   const result = await createCommentFlow({
     body,
     currentUser: {
@@ -61,8 +74,8 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
         userId: result.postAuthorId,
         type: NotificationType.REPLY_POST,
         senderId: currentUser.id,
-        relatedType: "POST",
-        relatedId: result.postId,
+        relatedType: "COMMENT",
+        relatedId: result.created.id,
         title: "你的帖子有了新回复",
         content: `${result.senderName} 回复了你的帖子：${result.created.content.slice(0, 80)}`,
       })
@@ -113,6 +126,18 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       mentionedUserIds: result.mentionUserIds,
     })
   }
+
+  await executeAddonActionHook("comment.create.after", {
+    commentId: result.created.id,
+    postId: result.postId,
+    authorId: currentUser.id,
+    status: result.created.status,
+    parentId: result.created.parentId ?? null,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 
   return apiSuccess({
     id: result.created.id,

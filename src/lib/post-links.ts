@@ -1,5 +1,13 @@
 import type { PostLinkDisplayMode } from "@/lib/site-settings"
 
+interface PostCommentPathOptions {
+  mode?: PostLinkDisplayMode
+  sort?: "oldest" | "newest"
+  view?: "tree" | "flat"
+  page?: number
+  highlight?: string
+}
+
 
 export function getPostRouteSegment(post: { id: string; slug: string }, mode: PostLinkDisplayMode = "SLUG") {
   return mode === "ID" ? post.id : post.slug
@@ -23,8 +31,34 @@ export function getPostPath(post: { id: string; slug: string }, options?: PostLi
 
 
 
-export function getPostCommentPath(post: { id: string; slug: string; title?: string }, commentId: string, options?: PostLinkDisplayMode | { mode?: PostLinkDisplayMode }) {
-  return `${getPostPath(post, options)}#comment-${commentId}`
+export function getPostCommentPath(
+  post: { id: string; slug: string; title?: string },
+  commentId: string,
+  options?: PostLinkDisplayMode | PostCommentPathOptions,
+) {
+  const mode = typeof options === "string" ? options : options?.mode
+  const searchParams = new URLSearchParams()
+
+  if (typeof options === "object") {
+    if (options.sort) {
+      searchParams.set("sort", options.sort)
+    }
+
+    if (options.view) {
+      searchParams.set("view", options.view)
+    }
+
+    if (typeof options.page === "number" && Number.isFinite(options.page) && options.page >= 1) {
+      searchParams.set("page", String(Math.floor(options.page)))
+    }
+
+    if (options.highlight) {
+      searchParams.set("highlight", options.highlight)
+    }
+  }
+
+  const queryString = searchParams.toString()
+  return `${getPostPath(post, mode)}${queryString ? `?${queryString}` : ""}#comment-${commentId}`
 }
 
 

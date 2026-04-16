@@ -71,6 +71,9 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
   const existingSiteSecuritySettings = resolveSiteSecuritySettings({
     appStateJson: existing.appStateJson,
   })
+  const sessionIpMismatchLogoutEnabled = "sessionIpMismatchLogoutEnabled" in body
+    ? Boolean(body.sessionIpMismatchLogoutEnabled)
+    : existingSiteSecuritySettings.sessionIpMismatchLogoutEnabled
   const loginIpChangeEmailAlertEnabled = "loginIpChangeEmailAlertEnabled" in body
     ? Boolean(body.loginIpChangeEmailAlertEnabled)
     : existingSiteSecuritySettings.loginIpChangeEmailAlertEnabled
@@ -208,6 +211,7 @@ export async function updateRegistrationSiteSettingsSection(existing: SiteSettin
     url: registerInviteCodeHelpUrl,
   })
   const appStateWithSiteSecurity = mergeSiteSecuritySettings(appStateWithRegisterInviteCodeHelp, {
+    sessionIpMismatchLogoutEnabled,
     loginIpChangeEmailAlertEnabled,
     passwordChangeRequireEmailVerification,
   })

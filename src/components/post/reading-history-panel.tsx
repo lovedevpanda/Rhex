@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { ArrowRight, Clock3, Eraser, History } from "lucide-react"
-import { useMemo, useSyncExternalStore } from "react"
+import { type ReactNode, useMemo, useSyncExternalStore } from "react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
 import { Button } from "@/components/ui/rbutton"
 import { Tooltip } from "@/components/ui/tooltip"
 import { formatDateTime, formatRelativeTime, getLocalDateKey } from "@/lib/formatters"
@@ -21,6 +22,9 @@ const EMPTY_READING_HISTORY_SNAPSHOT: ReadingHistoryEntry[] = []
 
 interface ReadingHistoryPanelProps {
   variant?: ReadingHistoryPanelVariant
+  beforeContent?: ReactNode
+  afterContent?: ReactNode
+  surface?: string
   title?: string
   emptyTitle?: string
   emptyDescription?: string
@@ -38,6 +42,9 @@ interface ReadingHistoryPanelProps {
 
 export function ReadingHistoryPanel({
   variant = "page",
+  beforeContent,
+  afterContent,
+  surface,
   title,
   emptyTitle,
   emptyDescription,
@@ -111,60 +118,82 @@ export function ReadingHistoryPanel({
 
   return (
     <section className={cn(cardClassName, className)}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className={cn(
-            "inline-flex shrink-0 items-center justify-center rounded-full",
-            variant === "sidebar" ? "h-7 w-7 bg-sky-500/10 text-sky-600 dark:text-sky-300" : "h-9 w-9 bg-sky-500/10 text-sky-600 dark:text-sky-300",
-          )}>
-            <Icon className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className={cn("truncate font-semibold", variant === "page" ? "text-base" : "text-sm")}>{panelTitle}</h3>
-              {!showOnlyToday && snapshot.length > 0 ? <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{snapshot.length}</span> : null}
+      {beforeContent}
+      <AddonSurfaceClientRenderer
+        surface={surface ?? ""}
+        surfaceProps={{
+          cardClassName,
+          entries,
+          moreHref,
+          moreLabel,
+          panelTitle,
+          showClearButton,
+          showOnlyToday,
+          snapshot,
+          title,
+          variant,
+          onClear: clearReadingHistory,
+        }}
+        fallback={(
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className={cn(
+                  "inline-flex shrink-0 items-center justify-center rounded-full",
+                  variant === "sidebar" ? "h-7 w-7 bg-sky-500/10 text-sky-600 dark:text-sky-300" : "h-9 w-9 bg-sky-500/10 text-sky-600 dark:text-sky-300",
+                )}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={cn("truncate font-semibold", variant === "page" ? "text-base" : "text-sm")}>{panelTitle}</h3>
+                    {!showOnlyToday && snapshot.length > 0 ? <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{snapshot.length}</span> : null}
+                  </div>
+                  {variant === "page" ? <p className="mt-0.5 text-xs text-muted-foreground">数据保存在当前浏览器本地，最多保留 2000 条。</p> : null}
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1">
+                {showClearButton ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 rounded-full px-2.5 text-xs text-muted-foreground"
+                    onClick={() => clearReadingHistory()}
+                    disabled={snapshot.length === 0}
+                  >
+                    <Eraser className="mr-1 h-3.5 w-3.5" />
+                    清空
+                  </Button>
+                ) : null}
+                {moreHref ? (
+                  <Link href={moreHref} className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                    {moreLabel}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                ) : null}
+              </div>
             </div>
-            {variant === "page" ? <p className="mt-0.5 text-xs text-muted-foreground">数据保存在当前浏览器本地，最多保留 2000 条。</p> : null}
-          </div>
-        </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          {showClearButton ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-8 rounded-full px-2.5 text-xs text-muted-foreground"
-              onClick={() => clearReadingHistory()}
-              disabled={snapshot.length === 0}
-            >
-              <Eraser className="mr-1 h-3.5 w-3.5" />
-              清空
-            </Button>
-          ) : null}
-          {moreHref ? (
-            <Link href={moreHref} className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-              {moreLabel}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          ) : null}
-        </div>
-      </div>
-
-      {entries.length === 0 ? (
-        <div className={cn(
-          "mt-3 rounded-[18px] border border-dashed border-border bg-secondary/15 text-muted-foreground",
-          variant === "page" ? "px-4 py-6" : variant === "sidebar" ? "px-2.5 py-3" : "px-3 py-4",
-        )}>
-          <p className="text-sm font-medium text-foreground/80">{resolvedEmptyTitle}</p>
-          <p className="mt-1 text-xs leading-6">{resolvedEmptyDescription}</p>
-        </div>
-      ) : (
-        <div className={cn("mt-3", variant === "page" ? "space-y-2.5" : "space-y-1.5")}>
-          {entries.map((entry) => (
-            <HistoryRow key={buildReadingHistoryRowKey(entry)} entry={entry} variant={variant} />
-          ))}
-        </div>
-      )}
+            {entries.length === 0 ? (
+              <div className={cn(
+                "mt-3 rounded-[18px] border border-dashed border-border bg-secondary/15 text-muted-foreground",
+                variant === "page" ? "px-4 py-6" : variant === "sidebar" ? "px-2.5 py-3" : "px-3 py-4",
+              )}>
+                <p className="text-sm font-medium text-foreground/80">{resolvedEmptyTitle}</p>
+                <p className="mt-1 text-xs leading-6">{resolvedEmptyDescription}</p>
+              </div>
+            ) : (
+              <div className={cn("mt-3", variant === "page" ? "space-y-2.5" : "space-y-1.5")}>
+                {entries.map((entry) => (
+                  <HistoryRow key={buildReadingHistoryRowKey(entry)} entry={entry} variant={variant} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      />
+      {afterContent}
     </section>
   )
 }

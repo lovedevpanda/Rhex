@@ -1,5 +1,6 @@
 import { NotificationType, RelatedType } from "@/db/types"
 
+import { findRootCommentPageById } from "@/db/comment-queries"
 import { countUnreadNotifications, findCommentsWithPostByIds, findNotificationsByUserIdCursor, findPostsByIds, findUsersByIds } from "@/db/notification-read-queries"
 import { decodeTimestampCursor, encodeTimestampCursor } from "@/lib/cursor-pagination"
 import { formatMonthDayTime } from "@/lib/formatters"
@@ -69,11 +70,12 @@ async function preloadNotificationTargets(notifications: NotificationCursorRows)
   }
 }
 
-function resolveNotificationUrl(
+async function resolveNotificationUrl(
   relatedType: RelatedType,
   relatedId: string,
   settings: Awaited<ReturnType<typeof getSiteSettings>>,
   targets: Awaited<ReturnType<typeof preloadNotificationTargets>>,
+  rootCommentPageCache: Map<string, Promise<number>>,
 ) {
   if (relatedType === RelatedType.POST) {
     const post = targets.postMap.get(relatedId)
@@ -84,7 +86,36 @@ function resolveNotificationUrl(
   if (relatedType === RelatedType.COMMENT) {
     const comment = targets.commentMap.get(relatedId)
 
-    return comment?.post ? getPostCommentPath({ id: comment.post.id, slug: comment.post.slug }, comment.id, settings.postLinkDisplayMode) : "/notifications"
+    if (!comment?.post) {
+      return "/notifications"
+    }
+
+    const rootCommentId = comment.parentId ?? comment.id
+    const cacheKey = `${comment.post.id}:${rootCommentId}`
+    let rootCommentPagePromise = rootCommentPageCache.get(cacheKey)
+
+    if (!rootCommentPagePromise) {
+      rootCommentPagePromise = findRootCommentPageById({
+        postId: comment.post.id,
+        rootCommentId,
+        pageSize: settings.commentPageSize,
+        sort: "oldest",
+      })
+      rootCommentPageCache.set(cacheKey, rootCommentPagePromise)
+    }
+
+    const page = await rootCommentPagePromise
+    return getPostCommentPath(
+      { id: comment.post.id, slug: comment.post.slug },
+      comment.id,
+      {
+        mode: settings.postLinkDisplayMode,
+        sort: "oldest",
+        view: "tree",
+        page,
+        highlight: comment.id,
+      },
+    )
   }
 
   if (relatedType === RelatedType.USER) {
@@ -127,7 +158,16 @@ export async function getUserNotifications(
     ])
 
     const targets = await preloadNotificationTargets(notifications)
-    const relatedUrls = notifications.map((notification) => resolveNotificationUrl(notification.relatedType, notification.relatedId, settings, targets))
+    const rootCommentPageCache = new Map<string, Promise<number>>()
+    const relatedUrls = await Promise.all(
+      notifications.map((notification) => resolveNotificationUrl(
+        notification.relatedType,
+        notification.relatedId,
+        settings,
+        targets,
+        rootCommentPageCache,
+      )),
+    )
 
     return {
       items: notifications.map((notification, index) => ({

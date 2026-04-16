@@ -1,8 +1,11 @@
 import { prisma } from "@/db/client"
+import { getUnreadConversationCount } from "@/db/message-read-queries"
+import { countUnreadNotifications } from "@/db/notification-read-queries"
 import { ConversationKind } from "@/db/types"
 import { createUserRouteHandler } from "@/lib/api-route"
 import { formatMonthDayTime } from "@/lib/formatters"
 import {
+  buildInboxSnapshotPayload,
   buildCursorPayload,
   buildHeartbeatPayload,
   buildMessageEventPayload,
@@ -15,6 +18,7 @@ import {
   type MessageStreamEvent,
   type MessageStreamCursor,
 } from "@/lib/message-event-bus"
+import { notificationEventBus } from "@/lib/notification-event-bus"
 import { getUserDisplayName } from "@/lib/user-display"
 
 export const dynamic = "force-dynamic"
@@ -26,6 +30,18 @@ const MESSAGE_CATCH_UP_BATCH_SIZE = 50
 interface MessageStreamEventEnvelope {
   cursor: MessageStreamCursor
   event: MessageStreamEvent
+}
+
+async function getInboxSnapshot(userId: number) {
+  const [unreadMessageCount, unreadNotificationCount] = await Promise.all([
+    getUnreadConversationCount(userId),
+    countUnreadNotifications(userId),
+  ])
+
+  return {
+    unreadMessageCount,
+    unreadNotificationCount,
+  }
 }
 
 function mapMessageRowToEnvelope(
@@ -160,17 +176,22 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
   const cursorParam = requestUrl.searchParams.get("cursor")
   const lastEventId = request.headers.get("last-event-id")
   const requestedCursor = parseMessageStreamCursor(cursorParam) ?? parseMessageStreamCursor(lastEventId)
-  const initialCursor = requestedCursor ?? await findLatestCursor(currentUser.id)
+  const [initialCursor, inboxSnapshot] = await Promise.all([
+    requestedCursor ? Promise.resolve(requestedCursor) : findLatestCursor(currentUser.id),
+    getInboxSnapshot(currentUser.id),
+  ])
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
     start(controller) {
       let closed = false
       let cursor = initialCursor
-      let unsubscribe: (() => void) | null = null
+      let unsubscribeMessageEvents: (() => void) | null = null
+      let unsubscribeNotificationEvents: (() => void) | null = null
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null
       let catchUpReady = false
-      const bufferedEvents: MessageStreamEventEnvelope[] = []
+      const bufferedCursorEvents: MessageStreamEventEnvelope[] = []
+      const bufferedLiveEvents: MessageStreamEvent[] = []
 
       const push = (payload: string) => {
         if (!closed) {
@@ -192,13 +213,17 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
         pushCursor(cursor)
       }
 
-      const flushBufferedEvents = () => {
-        if (bufferedEvents.length === 0) {
+      const deliverLiveEvent = (event: MessageStreamEvent) => {
+        push(buildMessageEventPayload(event))
+      }
+
+      const flushBufferedCursorEvents = () => {
+        if (bufferedCursorEvents.length === 0) {
           return
         }
 
-        const pendingEvents = bufferedEvents
-          .splice(0, bufferedEvents.length)
+        const pendingEvents = bufferedCursorEvents
+          .splice(0, bufferedCursorEvents.length)
           .sort((left, right) => compareMessageStreamCursor(left.cursor, right.cursor))
 
         for (const envelope of pendingEvents) {
@@ -208,6 +233,42 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
 
           deliverEnvelope(envelope)
         }
+      }
+
+      const flushBufferedLiveEvents = () => {
+        if (bufferedLiveEvents.length === 0) {
+          return
+        }
+
+        const pendingEvents = bufferedLiveEvents.splice(0, bufferedLiveEvents.length)
+
+        for (const event of pendingEvents) {
+          if (closed) {
+            return
+          }
+
+          deliverLiveEvent(event)
+        }
+      }
+
+      const bufferOrDeliverEvent = (event: MessageStreamEvent) => {
+        const nextCursor = getMessageStreamCursorFromEvent(event)
+
+        if (!catchUpReady) {
+          if (nextCursor) {
+            bufferedCursorEvents.push({ cursor: nextCursor, event })
+          } else {
+            bufferedLiveEvents.push(event)
+          }
+          return
+        }
+
+        if (nextCursor) {
+          deliverEnvelope({ cursor: nextCursor, event })
+          return
+        }
+
+        deliverLiveEvent(event)
       }
 
       const close = () => {
@@ -220,7 +281,8 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer)
         }
-        unsubscribe?.()
+        unsubscribeMessageEvents?.()
+        unsubscribeNotificationEvents?.()
         controller.close()
       }
 
@@ -257,26 +319,25 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
         }
       }
 
-      unsubscribe = messageEventBus.subscribe(currentUser.id, (event) => {
+      unsubscribeMessageEvents = messageEventBus.subscribe(currentUser.id, (event) => {
         const nextCursor = getMessageStreamCursorFromEvent(event)
-        if (!nextCursor || !isMessageStreamCursorAfter(nextCursor, cursor)) {
+        if (nextCursor && !isMessageStreamCursorAfter(nextCursor, cursor)) {
           return
         }
 
-        const envelope = {
-          cursor: nextCursor,
-          event,
-        }
+        bufferOrDeliverEvent(event)
+      })
 
-        if (!catchUpReady) {
-          bufferedEvents.push(envelope)
-          return
-        }
-
-        deliverEnvelope(envelope)
+      unsubscribeNotificationEvents = notificationEventBus.subscribe(currentUser.id, (event) => {
+        bufferOrDeliverEvent(event)
       })
 
       push(buildHeartbeatPayload())
+      push(buildInboxSnapshotPayload({
+        unreadMessageCount: inboxSnapshot.unreadMessageCount,
+        unreadNotificationCount: inboxSnapshot.unreadNotificationCount,
+        occurredAt: new Date().toISOString(),
+      }))
       if (cursor) {
         pushCursor(cursor)
       }
@@ -289,9 +350,11 @@ export const GET = createUserRouteHandler(async ({ request, currentUser }) => {
 
       void drainCatchUp()
         .then(() => {
-          flushBufferedEvents()
+          flushBufferedCursorEvents()
+          flushBufferedLiveEvents()
           catchUpReady = true
-          flushBufferedEvents()
+          flushBufferedCursorEvents()
+          flushBufferedLiveEvents()
         })
         .catch(handleStreamFailure)
     },

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
+import { AddonEditor } from "@/components/addon-editor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
@@ -81,7 +81,8 @@ function HiddenContentModalBody({ open, title, description, initialValue, initia
           </div>
         ) : null}
 
-        <RefinedRichPostEditor
+        <AddonEditor
+          context="post"
           value={draftValue}
           onChange={setDraftValue}
           placeholder="写下这部分隐藏内容，支持 Markdown、图片和表情。"

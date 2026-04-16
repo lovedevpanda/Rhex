@@ -69,6 +69,7 @@ export async function GET(request: Request, props: OAuthProviderRouteProps) {
       await connectExternalAuthIdentityToUser({
         identity,
         userId: currentUser.id,
+        request,
       })
 
       const redirectLocation = await buildRedirectUrl(fallbackTarget)

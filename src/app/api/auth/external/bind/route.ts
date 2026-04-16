@@ -18,6 +18,7 @@ export const POST = createRouteHandler(async ({ request }) => {
     state: pendingState,
     login,
     password,
+    request,
   })
 
   await recordSuccessfulExternalLogin(request, user)

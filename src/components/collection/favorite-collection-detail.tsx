@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useTransition } from "react"
+import { type ReactNode, useState, useTransition } from "react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
 import { ForumPostListItem } from "@/components/forum/forum-post-list-item"
 import { PageNumberPagination } from "@/components/page-number-pagination"
 import { Button } from "@/components/ui/rbutton"
@@ -12,6 +13,12 @@ import type { SitePostItem } from "@/lib/posts"
 
 interface FavoriteCollectionDetailProps {
   postLinkDisplayMode?: "SLUG" | "ID"
+  heroBefore?: ReactNode
+  heroAfter?: ReactNode
+  pendingBefore?: ReactNode
+  pendingAfter?: ReactNode
+  contentBefore?: ReactNode
+  contentAfter?: ReactNode
   initialData: {
     id: string
     title: string
@@ -110,7 +117,16 @@ function mapCollectionPostToForumItem(item: FavoriteCollectionDetailProps["initi
   }
 }
 
-export function FavoriteCollectionDetail({ initialData, postLinkDisplayMode = "SLUG" }: FavoriteCollectionDetailProps) {
+export function FavoriteCollectionDetail({
+  initialData,
+  postLinkDisplayMode = "SLUG",
+  heroBefore,
+  heroAfter,
+  pendingBefore,
+  pendingAfter,
+  contentBefore,
+  contentAfter,
+}: FavoriteCollectionDetailProps) {
   const [data, setData] = useState(initialData)
   const [isPending, startTransition] = useTransition()
 
@@ -203,119 +219,156 @@ export function FavoriteCollectionDetail({ initialData, postLinkDisplayMode = "S
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-semibold sm:text-xl">{data.title}</h1>
-              <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">{data.visibility === "PUBLIC" ? "公开" : "私有"}</span>
-              {data.allowOtherUsersToContribute ? <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">{data.requireContributionApproval ? "允许投稿 / 需审核" : "允许投稿 / 免审核"}</span> : null}
+      {heroBefore}
+      <AddonSurfaceClientRenderer
+        surface="collection.hero"
+        surfaceProps={{ data, isPending }}
+        fallback={(
+          <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-lg font-semibold sm:text-xl">{data.title}</h1>
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">{data.visibility === "PUBLIC" ? "公开" : "私有"}</span>
+                  {data.allowOtherUsersToContribute ? <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">{data.requireContributionApproval ? "允许投稿 / 需审核" : "允许投稿 / 免审核"}</span> : null}
+                </div>
+                {data.description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{data.description}</p> : null}
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>创建者 {data.ownerName}</span>
+                  <span>帖子 {data.postCount}</span>
+                  <span>更新于 {new Date(data.updatedAt).toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href="/collections" className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground">合集广场</Link>
+                {data.isOwner ? <Link href="/settings?tab=post-management&postTab=collections" className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground">我的合集</Link> : null}
+              </div>
             </div>
-            {data.description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{data.description}</p> : null}
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-              <span>创建者 {data.ownerName}</span>
-              <span>帖子 {data.postCount}</span>
-              <span>更新于 {new Date(data.updatedAt).toLocaleString()}</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/collections" className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground">合集广场</Link>
-            {data.isOwner ? <Link href="/settings?tab=post-management&postTab=collections" className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground">我的合集</Link> : null}
-          </div>
-        </div>
-      </section>
+          </section>
+        )}
+      />
+      {heroAfter}
 
       {data.isOwner && data.pendingSubmissions.length > 0 ? (
-        <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">待审核投稿</h2>
-              <p className="mt-1 text-xs text-muted-foreground">只有创建者可见，通过后帖子会正式进入合集。</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] text-amber-700">待审核 {data.pendingPagination.total}</span>
-          </div>
+        <>
+          {pendingBefore}
+          <AddonSurfaceClientRenderer
+            surface="collection.pending"
+            surfaceProps={{
+              buildPendingPageHref,
+              data,
+              isPending,
+              reviewSubmission,
+            }}
+            fallback={(
+              <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold">待审核投稿</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">只有创建者可见，通过后帖子会正式进入合集。</p>
+                  </div>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] text-amber-700">待审核 {data.pendingPagination.total}</span>
+                </div>
 
-          <div className="mt-3 space-y-2.5">
-            {data.pendingSubmissions.map((submission) => (
-              <div key={submission.id} className="rounded-[18px] border border-border bg-secondary/10 px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/posts/${submission.postSlug}`} className="block truncate text-sm font-medium text-foreground transition hover:text-primary">
-                      {submission.postTitle}
-                    </Link>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                      <span>投稿人 {submission.submittedByName}</span>
-                      <span>{new Date(submission.submittedAt).toLocaleString()}</span>
+                <div className="mt-3 space-y-2.5">
+                  {data.pendingSubmissions.map((submission) => (
+                    <div key={submission.id} className="rounded-[18px] border border-border bg-secondary/10 px-4 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link href={`/posts/${submission.postSlug}`} className="block truncate text-sm font-medium text-foreground transition hover:text-primary">
+                            {submission.postTitle}
+                          </Link>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                            <span>投稿人 {submission.submittedByName}</span>
+                            <span>{new Date(submission.submittedAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button type="button" className="h-8 px-3 text-[11px]" disabled={isPending} onClick={() => reviewSubmission(submission.id, "APPROVE")}>通过</Button>
+                          <Button type="button" variant="outline" className="h-8 px-3 text-[11px]" disabled={isPending} onClick={() => reviewSubmission(submission.id, "REJECT")}>驳回</Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" className="h-8 px-3 text-[11px]" disabled={isPending} onClick={() => reviewSubmission(submission.id, "APPROVE")}>通过</Button>
-                    <Button type="button" variant="outline" className="h-8 px-3 text-[11px]" disabled={isPending} onClick={() => reviewSubmission(submission.id, "REJECT")}>驳回</Button>
-                  </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
 
-          {data.pendingPagination.totalPages > 1 ? (
-            <div className="mt-5">
-              <PageNumberPagination
-                page={data.pendingPagination.page}
-                totalPages={data.pendingPagination.totalPages}
-                hasPrevPage={data.pendingPagination.hasPrevPage}
-                hasNextPage={data.pendingPagination.hasNextPage}
-                buildHref={buildPendingPageHref}
-              />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">已收录帖子</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{data.items.length > 0 ? "按加入时间倒序显示。" : "这个合集里还没有帖子。"}</p>
-          </div>
-          <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{data.pagination.total} 帖</span>
-        </div>
-
-        <div className="mt-3 space-y-2.5">
-          {data.items.length === 0 ? <div className="rounded-[18px] border border-dashed border-border bg-secondary/10 px-4 py-6 text-sm text-muted-foreground">当前合集还没有帖子。</div> : null}
-          {data.items.map((item) => (
-            <div key={item.id} className="rounded-[18px] border border-border bg-secondary/10 px-2 py-1.5 sm:px-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <ForumPostListItem
-                    item={mapCollectionPostToForumItem(item)}
-                    showBoard
-                    postLinkDisplayMode={postLinkDisplayMode}
-                  />
-                </div>
-                {data.isOwner ? (
-                  <div className="px-2 pb-2 sm:px-0 sm:pb-0">
-                    <Button type="button" variant="ghost" className="h-8 px-3 text-[11px] text-red-600 hover:text-red-500" disabled={isPending} onClick={() => void removePost(item.postId)}>
-                      移出合集
-                    </Button>
+                {data.pendingPagination.totalPages > 1 ? (
+                  <div className="mt-5">
+                    <PageNumberPagination
+                      page={data.pendingPagination.page}
+                      totalPages={data.pendingPagination.totalPages}
+                      hasPrevPage={data.pendingPagination.hasPrevPage}
+                      hasNextPage={data.pendingPagination.hasNextPage}
+                      buildHref={buildPendingPageHref}
+                    />
                   </div>
                 ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
+              </section>
+            )}
+          />
+          {pendingAfter}
+        </>
+      ) : null}
 
-        {data.pagination.totalPages > 1 ? (
-          <div className="mt-5">
-            <PageNumberPagination
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              hasPrevPage={data.pagination.hasPrevPage}
-              hasNextPage={data.pagination.hasNextPage}
-              buildHref={buildPageHref}
-            />
-          </div>
-        ) : null}
-      </section>
+      {contentBefore}
+      <AddonSurfaceClientRenderer
+        surface="collection.content"
+        surfaceProps={{
+          buildPageHref,
+          data,
+          isPending,
+          postLinkDisplayMode,
+          removePost,
+        }}
+        fallback={(
+          <section className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">已收录帖子</h2>
+                <p className="mt-1 text-xs text-muted-foreground">{data.items.length > 0 ? "按加入时间倒序显示。" : "这个合集里还没有帖子。"}</p>
+              </div>
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{data.pagination.total} 帖</span>
+            </div>
+
+            <div className="mt-3 space-y-2.5">
+              {data.items.length === 0 ? <div className="rounded-[18px] border border-dashed border-border bg-secondary/10 px-4 py-6 text-sm text-muted-foreground">当前合集还没有帖子。</div> : null}
+              {data.items.map((item) => (
+                <div key={item.id} className="rounded-[18px] border border-border bg-secondary/10 px-2 py-1.5 sm:px-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <ForumPostListItem
+                        item={mapCollectionPostToForumItem(item)}
+                        showBoard
+                        postLinkDisplayMode={postLinkDisplayMode}
+                      />
+                    </div>
+                    {data.isOwner ? (
+                      <div className="px-2 pb-2 sm:px-0 sm:pb-0">
+                        <Button type="button" variant="ghost" className="h-8 px-3 text-[11px] text-red-600 hover:text-red-500" disabled={isPending} onClick={() => void removePost(item.postId)}>
+                          移出合集
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {data.pagination.totalPages > 1 ? (
+              <div className="mt-5">
+                <PageNumberPagination
+                  page={data.pagination.page}
+                  totalPages={data.pagination.totalPages}
+                  hasPrevPage={data.pagination.hasPrevPage}
+                  hasNextPage={data.pagination.hasNextPage}
+                  buildHref={buildPageHref}
+                />
+              </div>
+            ) : null}
+          </section>
+        )}
+      />
+      {contentAfter}
     </div>
   )
 }

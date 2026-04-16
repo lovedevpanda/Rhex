@@ -2,6 +2,7 @@ import type { CurrentUserRecord } from "@/db/current-user"
 import { executeUserCheckIn, listUserCheckInLogsInRange } from "@/db/check-in-queries"
 
 import { apiError } from "@/lib/api-route"
+import { getCheckInMakeUpEarliestDateKey, normalizeCheckInMakeUpOldestDayLimit } from "@/lib/check-in-policy"
 import { getUserCheckInStreakSummary } from "@/lib/check-in-streak-service"
 import { getLocalDateKey, getMonthKey } from "@/lib/date-key"
 import { evaluateUserLevelProgress } from "@/lib/level-system"
@@ -11,7 +12,9 @@ import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 interface CheckInSettingsSnapshot {
   pointName: string
+  checkInMakeUpEnabled: boolean
   checkInMakeUpCountsTowardStreak: boolean
+  checkInMakeUpOldestDayLimit: number
   checkInReward: number
   checkInVip1Reward: number
   checkInVip2Reward: number
@@ -57,7 +60,9 @@ export interface CheckInOverview {
   pointName: string
   currentStreak: number
   maxStreak: number
+  makeUpEnabled: boolean
   makeUpCountsTowardStreak: boolean
+  makeUpOldestDayLimit: number
   checkInReward: number
   vip1CheckInReward: number
   vip2CheckInReward: number
@@ -120,7 +125,9 @@ function assertCheckInEnabled(settings: { checkInEnabled: boolean }) {
 function readCheckInSettingsSnapshot(settings: CheckInSettingsSnapshot) {
   return {
     pointName: settings.pointName,
+    checkInMakeUpEnabled: settings.checkInMakeUpEnabled,
     checkInMakeUpCountsTowardStreak: settings.checkInMakeUpCountsTowardStreak,
+    checkInMakeUpOldestDayLimit: normalizeCheckInMakeUpOldestDayLimit(settings.checkInMakeUpOldestDayLimit),
     normalReward: Math.max(0, settings.checkInReward),
     vip1Reward: Math.max(0, settings.checkInVip1Reward),
     vip2Reward: Math.max(0, settings.checkInVip2Reward),
@@ -236,7 +243,9 @@ export async function getCheckInOverview(user: CurrentUserRecord, month = getMon
     pointName: snapshot.pointName,
     currentStreak: streakSummary.currentStreak,
     maxStreak: streakSummary.maxStreak,
+    makeUpEnabled: snapshot.checkInMakeUpEnabled,
     makeUpCountsTowardStreak: streakSummary.makeUpCountsTowardStreak,
+    makeUpOldestDayLimit: snapshot.checkInMakeUpOldestDayLimit,
     checkInReward: resolveUserCheckInReward(snapshot, user),
     vip1CheckInReward: snapshot.vip1Reward,
     vip2CheckInReward: snapshot.vip2Reward,
@@ -306,6 +315,15 @@ export async function submitCheckInAction(user: CurrentUserRecord, body: unknown
   const targetDateKey = getLocalDateKey(parsedDate)
   if (targetDateKey >= todayKey) {
     apiError(400, "只能补签今天之前的日期")
+  }
+
+  if (!snapshot.checkInMakeUpEnabled) {
+    apiError(403, "补签功能暂未开启")
+  }
+
+  const earliestMakeUpDateKey = getCheckInMakeUpEarliestDateKey(todayKey, snapshot.checkInMakeUpOldestDayLimit)
+  if (earliestMakeUpDateKey && targetDateKey < earliestMakeUpDateKey) {
+    apiError(400, `当前仅允许补签最近 ${snapshot.checkInMakeUpOldestDayLimit} 天内的历史日期`)
   }
 
   const makeUpCost = resolveUserMakeUpPrice(snapshot, user)

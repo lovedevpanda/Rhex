@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { CreatePostForm } from "@/components/post/create-post-form"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/rbutton"
@@ -90,17 +91,25 @@ export default async function WritePage(props: PageProps<"/write">) {
       <div className="min-h-screen ">
         <SiteHeader />
         <main className="mx-auto max-w-[720px] px-4 py-10 lg:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>发布帖子前请先登录</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm leading-7 text-muted-foreground">
-              <p>为了确保每篇内容都能追溯到明确作者，当前发帖功能需要先登录后再提交。</p>
-              <Link href="/login">
-                <Button>前往登录</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <AddonSlotRenderer slot="write.page.before" />
+          <AddonSurfaceRenderer surface="write.page" props={{ mode, settings, user: null }}>
+            <Card>
+              <CardHeader>
+                <AddonSlotRenderer slot="write.header.before" />
+                <AddonSurfaceRenderer surface="write.header" props={{ mode, settings, user: null }}>
+                  <CardTitle>发布帖子前请先登录</CardTitle>
+                </AddonSurfaceRenderer>
+                <AddonSlotRenderer slot="write.header.after" />
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm leading-7 text-muted-foreground">
+                <p>为了确保每篇内容都能追溯到明确作者，当前发帖功能需要先登录后再提交。</p>
+                <Link href="/login">
+                  <Button>前往登录</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="write.page.after" />
         </main>
       </div>
     )
@@ -120,53 +129,72 @@ export default async function WritePage(props: PageProps<"/write">) {
   const isAdmin = user.role === "ADMIN"
   const canEditThisPost = Boolean(editingPost && (editingPost.authorId === user.id || isAdmin))
   const isStillEditable = Boolean(editingPost && isPostStillEditable(editingPost.createdAt, settings.postEditableMinutes)) || isAdmin
+  const addonFormSlots = {
+    addonFormBefore: <AddonSlotRenderer slot="post.create.form.before" />,
+    addonFormAfter: <AddonSlotRenderer slot="post.create.form.after" />,
+    addonToolsBefore: <AddonSlotRenderer slot="post.create.tools.before" />,
+    addonToolsAfter: <AddonSlotRenderer slot="post.create.tools.after" />,
+    addonEditorBefore: <AddonSlotRenderer slot="post.create.editor.before" />,
+    addonEditorAfter: <AddonSlotRenderer slot="post.create.editor.after" />,
+    addonEnhancementsBefore: <AddonSlotRenderer slot="post.create.enhancements.before" />,
+    addonEnhancementsAfter: <AddonSlotRenderer slot="post.create.enhancements.after" />,
+    addonSubmitBefore: <AddonSlotRenderer slot="post.create.submit.before" />,
+    addonSubmitAfter: <AddonSlotRenderer slot="post.create.submit.after" />,
+  }
 
   return (
     <div className="min-h-screen ">
       <SiteHeader />
       <main className="mx-auto max-w-[900px] px-4 py-6 lg:px-6">
-        <Card className="min-[1220px]:overflow-visible">
-          <CardHeader>
-            <CardTitle>{mode === "edit" ? "编辑帖子" : "发布新帖子"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {mode === "edit" ? (
-              !editingPost ? (
-                <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">未找到要编辑的帖子。</div>
-              ) : !canEditThisPost ? (
-                <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">你无权编辑这篇帖子。</div>
-              ) : !isStillEditable ? (
-                <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">该帖子已超过 {settings.postEditableMinutes} 分钟编辑窗口，请回到详情页使用附言追加功能。</div>
-              ) : (
-                <CreatePostForm
-                  boardOptions={boardOptions}
-                  pointName={settings.pointName}
-                  anonymousPostEnabled={settings.anonymousPostEnabled}
-                  anonymousPostPrice={settings.anonymousPostPrice}
-                  markdownEmojiMap={settings.markdownEmojiMap}
-                  currentUser={{
-                    username: user.username,
-                    nickname: user.nickname,
-                    role: user.role,
-                    level: user.level,
-                    points: user.points,
-                    vipLevel: user.vipLevel,
-                    vipExpiresAt: user.vipExpiresAt?.toISOString?.() ? user.vipExpiresAt.toISOString() : (user.vipExpiresAt as unknown as string | null),
-                  }}
-                  attachmentFeature={{
-                    uploadEnabled: settings.attachmentUploadEnabled,
-                    minUploadLevel: settings.attachmentMinUploadLevel,
-                    minUploadVipLevel: settings.attachmentMinUploadVipLevel,
-                    allowedExtensions: settings.attachmentAllowedExtensions,
-                    maxFileSizeMb: settings.attachmentMaxFileSizeMb,
-                  }}
-                  viewLevelOptions={viewLevelOptions}
-                  viewVipLevelOptions={viewVipLevelOptions}
-                  mode="edit"
-                  postId={editingPost.id}
-                  successSlug={editingPost.slug}
-                  postLinkDisplayMode={settings.postLinkDisplayMode}
-                  initialValues={{
+        <AddonSlotRenderer slot="write.page.before" />
+        <AddonSurfaceRenderer surface="write.page" props={{ mode, preferredBoardSlug, settings, user }}>
+          <Card className="min-[1220px]:overflow-visible">
+            <CardHeader>
+              <AddonSlotRenderer slot="write.header.before" />
+              <AddonSurfaceRenderer surface="write.header" props={{ mode, settings, user }}>
+                <CardTitle>{mode === "edit" ? "编辑帖子" : "发布新帖子"}</CardTitle>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="write.header.after" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {mode === "edit" ? (
+                !editingPost ? (
+                  <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">未找到要编辑的帖子。</div>
+                ) : !canEditThisPost ? (
+                  <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">你无权编辑这篇帖子。</div>
+                ) : !isStillEditable ? (
+                  <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">该帖子已超过 {settings.postEditableMinutes} 分钟编辑窗口，请回到详情页使用附言追加功能。</div>
+                ) : (
+                  <CreatePostForm
+                    boardOptions={boardOptions}
+                    pointName={settings.pointName}
+                    addonCaptcha={null}
+                    anonymousPostEnabled={settings.anonymousPostEnabled}
+                    anonymousPostPrice={settings.anonymousPostPrice}
+                    markdownEmojiMap={settings.markdownEmojiMap}
+                    currentUser={{
+                      username: user.username,
+                      nickname: user.nickname,
+                      role: user.role,
+                      level: user.level,
+                      points: user.points,
+                      vipLevel: user.vipLevel,
+                      vipExpiresAt: user.vipExpiresAt?.toISOString?.() ? user.vipExpiresAt.toISOString() : (user.vipExpiresAt as unknown as string | null),
+                    }}
+                    attachmentFeature={{
+                      uploadEnabled: settings.attachmentUploadEnabled,
+                      minUploadLevel: settings.attachmentMinUploadLevel,
+                      minUploadVipLevel: settings.attachmentMinUploadVipLevel,
+                      allowedExtensions: settings.attachmentAllowedExtensions,
+                      maxFileSizeMb: settings.attachmentMaxFileSizeMb,
+                    }}
+                    viewLevelOptions={viewLevelOptions}
+                    viewVipLevelOptions={viewVipLevelOptions}
+                    mode="edit"
+                    postId={editingPost.id}
+                    successSlug={editingPost.slug}
+                    postLinkDisplayMode={settings.postLinkDisplayMode}
+                    initialValues={{
                     title: editingPost.title,
                     content: publicBlock?.text ?? editingPost.content,
                     isAnonymous: editingPost.isAnonymous,
@@ -228,7 +256,25 @@ export default async function WritePage(props: PageProps<"/write">) {
                           packetCount: rewardPoolConfig.mode === "RED_PACKET" ? editingPost.redPacket.packetCount : undefined,
                         }
                       : undefined,
-                  }}
+                    }}
+                    postRedPacketEnabled={settings.postRedPacketEnabled}
+                    postRedPacketMaxPoints={settings.postRedPacketMaxPoints}
+                    postJackpotEnabled={settings.postJackpotEnabled}
+                    postJackpotMinInitialPoints={settings.postJackpotMinInitialPoints}
+                    postJackpotMaxInitialPoints={settings.postJackpotMaxInitialPoints}
+                    postJackpotReplyIncrementPoints={settings.postJackpotReplyIncrementPoints}
+                    postJackpotHitProbability={settings.postJackpotHitProbability}
+                    {...addonFormSlots}
+                  />
+                )
+              ) : (
+                <CreatePostForm
+                  boardOptions={boardOptions}
+                  pointName={settings.pointName}
+                  addonCaptcha={<AddonSlotRenderer slot="post.create.captcha" />}
+                  {...addonFormSlots}
+                  anonymousPostEnabled={settings.anonymousPostEnabled}
+                  anonymousPostPrice={settings.anonymousPostPrice}
                   postRedPacketEnabled={settings.postRedPacketEnabled}
                   postRedPacketMaxPoints={settings.postRedPacketMaxPoints}
                   postJackpotEnabled={settings.postJackpotEnabled}
@@ -236,46 +282,33 @@ export default async function WritePage(props: PageProps<"/write">) {
                   postJackpotMaxInitialPoints={settings.postJackpotMaxInitialPoints}
                   postJackpotReplyIncrementPoints={settings.postJackpotReplyIncrementPoints}
                   postJackpotHitProbability={settings.postJackpotHitProbability}
+                  markdownEmojiMap={settings.markdownEmojiMap}
+                  currentUser={{
+                    username: user.username,
+                    nickname: user.nickname,
+                    role: user.role,
+                    level: user.level,
+                    points: user.points,
+                    vipLevel: user.vipLevel,
+                    vipExpiresAt: user.vipExpiresAt?.toISOString?.() ? user.vipExpiresAt.toISOString() : (user.vipExpiresAt as unknown as string | null),
+                  }}
+                  attachmentFeature={{
+                    uploadEnabled: settings.attachmentUploadEnabled,
+                    minUploadLevel: settings.attachmentMinUploadLevel,
+                    minUploadVipLevel: settings.attachmentMinUploadVipLevel,
+                    allowedExtensions: settings.attachmentAllowedExtensions,
+                    maxFileSizeMb: settings.attachmentMaxFileSizeMb,
+                  }}
+                  viewLevelOptions={viewLevelOptions}
+                  viewVipLevelOptions={viewVipLevelOptions}
+                  postLinkDisplayMode={settings.postLinkDisplayMode}
+                  initialValues={preferredBoardSlug ? { title: "", content: "", isAnonymous: false, boardSlug: preferredBoardSlug, postType: "NORMAL" } : undefined}
                 />
-              )
-            ) : (
-              <CreatePostForm
-                boardOptions={boardOptions}
-                pointName={settings.pointName}
-                anonymousPostEnabled={settings.anonymousPostEnabled}
-                anonymousPostPrice={settings.anonymousPostPrice}
-                postRedPacketEnabled={settings.postRedPacketEnabled}
-                postRedPacketMaxPoints={settings.postRedPacketMaxPoints}
-                postJackpotEnabled={settings.postJackpotEnabled}
-                postJackpotMinInitialPoints={settings.postJackpotMinInitialPoints}
-                postJackpotMaxInitialPoints={settings.postJackpotMaxInitialPoints}
-                postJackpotReplyIncrementPoints={settings.postJackpotReplyIncrementPoints}
-                postJackpotHitProbability={settings.postJackpotHitProbability}
-                markdownEmojiMap={settings.markdownEmojiMap}
-                currentUser={{
-                  username: user.username,
-                  nickname: user.nickname,
-                  role: user.role,
-                  level: user.level,
-                  points: user.points,
-                  vipLevel: user.vipLevel,
-                  vipExpiresAt: user.vipExpiresAt?.toISOString?.() ? user.vipExpiresAt.toISOString() : (user.vipExpiresAt as unknown as string | null),
-                }}
-                attachmentFeature={{
-                  uploadEnabled: settings.attachmentUploadEnabled,
-                  minUploadLevel: settings.attachmentMinUploadLevel,
-                  minUploadVipLevel: settings.attachmentMinUploadVipLevel,
-                  allowedExtensions: settings.attachmentAllowedExtensions,
-                  maxFileSizeMb: settings.attachmentMaxFileSizeMb,
-                }}
-                viewLevelOptions={viewLevelOptions}
-                viewVipLevelOptions={viewVipLevelOptions}
-                postLinkDisplayMode={settings.postLinkDisplayMode}
-                initialValues={preferredBoardSlug ? { title: "", content: "", isAnonymous: false, boardSlug: preferredBoardSlug, postType: "NORMAL" } : undefined}
-              />
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="write.page.after" />
       </main>
     </div>
   )

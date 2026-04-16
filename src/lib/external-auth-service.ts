@@ -43,11 +43,26 @@ import type { ExternalAuthIdentity, PendingExternalAuthState } from "@/lib/exter
 import type { SiteSettingsData } from "@/lib/site-settings"
 import type { StoredPasskeyCredential } from "@/lib/external-auth-store"
 import type { ExternalAuthProvider } from "@/lib/external-auth-types"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 interface AuthenticatedUserSummary {
   id: number
   username: string
   lastLoginIp?: string | null
+}
+
+function createAddonHookInput(request?: Request, throwOnError = false) {
+  if (!request) {
+    return throwOnError ? { throwOnError: true } : undefined
+  }
+
+  const requestUrl = new URL(request.url)
+  return {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    ...(throwOnError ? { throwOnError: true } : {}),
+  }
 }
 
 interface ExternalAuthPendingResult {
@@ -324,6 +339,7 @@ async function linkIdentityToUser(input: {
 export async function connectExternalAuthIdentityToUser(input: {
   identity: ExternalAuthIdentity
   userId: number
+  request?: Request
 }) {
   const user = await findAuthUserStatusById(input.userId)
 
@@ -333,23 +349,85 @@ export async function connectExternalAuthIdentityToUser(input: {
 
   assertUserCanUseAuth(user.status, "绑定新的登录方式")
 
+  await executeAddonActionHook("auth.identity.bind.before", {
+    userId: user.id,
+    username: user.username,
+    method: input.identity.method,
+    provider: input.identity.provider ?? null,
+    providerLabel: input.identity.providerLabel,
+  }, createAddonHookInput(input.request, true))
+
   await linkIdentityToUser(input)
+
+  await executeAddonActionHook("auth.identity.bind.after", {
+    userId: user.id,
+    username: user.username,
+    method: input.identity.method,
+    provider: input.identity.provider ?? null,
+    providerLabel: input.identity.providerLabel,
+  }, createAddonHookInput(input.request))
 }
 
-export async function disconnectExternalAuthProviderFromUser(userId: number, provider: ExternalAuthProvider) {
+export async function disconnectExternalAuthProviderFromUser(userId: number, provider: ExternalAuthProvider, request?: Request) {
+  const user = await findAuthUserStatusById(userId)
+
+  if (!user) {
+    apiError(404, "站内账户不存在")
+  }
+
+  await executeAddonActionHook("auth.identity.unbind.before", {
+    userId: user.id,
+    username: user.username,
+    method: "oauth",
+    provider,
+    providerLabel: getExternalAuthProviderLabel(provider),
+  }, createAddonHookInput(request, true))
+
   const deletedCount = await deleteExternalAuthAccountsByUserIdAndProvider(userId, provider)
 
   if (deletedCount < 1) {
     apiError(404, `${getExternalAuthProviderLabel(provider)} 尚未绑定`)
   }
+
+  await executeAddonActionHook("auth.identity.unbind.after", {
+    userId: user.id,
+    username: user.username,
+    method: "oauth",
+    provider,
+    providerLabel: getExternalAuthProviderLabel(provider),
+  }, createAddonHookInput(request))
 }
 
-export async function disconnectPasskeyCredentialFromUser(userId: number, credentialId: string) {
+export async function disconnectPasskeyCredentialFromUser(userId: number, credentialId: string, request?: Request) {
+  const user = await findAuthUserStatusById(userId)
+
+  if (!user) {
+    apiError(404, "站内账户不存在")
+  }
+
+  await executeAddonActionHook("auth.identity.unbind.before", {
+    userId: user.id,
+    username: user.username,
+    method: "passkey",
+    provider: null,
+    providerLabel: "Passkey",
+    credentialId,
+  }, createAddonHookInput(request, true))
+
   const deletedCount = await deletePasskeyCredentialByIdAndUserId(credentialId, userId)
 
   if (deletedCount < 1) {
     apiError(404, "指定的 Passkey 不存在或不属于当前账户")
   }
+
+  await executeAddonActionHook("auth.identity.unbind.after", {
+    userId: user.id,
+    username: user.username,
+    method: "passkey",
+    provider: null,
+    providerLabel: "Passkey",
+    credentialId,
+  }, createAddonHookInput(request))
 }
 
 export async function resolveExternalAuth(identity: ExternalAuthIdentity, siteSettings: Pick<SiteSettingsData, "inviteRewardInvitee" | "inviteRewardInviter" | "pointName" | "registerEmailWhitelistDomains" | "registerEmailWhitelistEnabled" | "registerInitialPoints" | "registrationEnabled" | "registrationRequireInviteCode">, request: Request): Promise<ExternalAuthResolutionResult> {
@@ -450,6 +528,7 @@ export async function completePendingExternalAuthBind(input: {
   state: PendingExternalAuthState
   login: string
   password: string
+  request?: Request
 }) {
   if (input.state.kind !== "email_bind_required") {
     apiError(400, "当前流程不需要绑定已有账户")
@@ -472,10 +551,26 @@ export async function completePendingExternalAuthBind(input: {
 
   assertUserCanUseAuth(matchedUser.status, "绑定第三方登录")
 
+  await executeAddonActionHook("auth.identity.bind.before", {
+    userId: matchedUser.id,
+    username: matchedUser.username,
+    method: input.state.method,
+    provider: input.state.provider ?? null,
+    providerLabel: input.state.providerLabel,
+  }, createAddonHookInput(input.request, true))
+
   await linkIdentityToUser({
     identity: input.state,
     userId: matchedUser.id,
   })
+
+  await executeAddonActionHook("auth.identity.bind.after", {
+    userId: matchedUser.id,
+    username: matchedUser.username,
+    method: input.state.method,
+    provider: input.state.provider ?? null,
+    providerLabel: input.state.providerLabel,
+  }, createAddonHookInput(input.request))
 
   return {
     id: matchedUser.id,
@@ -495,8 +590,33 @@ export async function recordSuccessfulExternalLogin(request: Request, user: Auth
 }
 
 export async function attachAuthenticatedSession(response: NextResponse, request: Request, user: AuthenticatedUserSummary) {
-  const sessionToken = await createSessionToken(user.username, getRequestIp(request))
+  const loginIp = getRequestIp(request)
+  const requestUrl = new URL(request.url)
+
+  await executeAddonActionHook("auth.login.before", {
+    userId: user.id,
+    username: user.username,
+    loginIp,
+    method: "external",
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
+
+  const sessionToken = await createSessionToken(user.username, loginIp)
   response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
+  await executeAddonActionHook("auth.login.after", {
+    userId: user.id,
+    username: user.username,
+    loginIp,
+    method: "external",
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 }
 
 export async function findPasskeyLinkedUserByCredentialId(credentialId: string): Promise<{ credential: StoredPasskeyCredential; user: AuthenticatedUserSummary } | null> {

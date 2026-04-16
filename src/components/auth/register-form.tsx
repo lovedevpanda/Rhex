@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import type { ReactNode } from "react"
 import {
   ArrowRight,
   LockKeyhole,
@@ -40,14 +41,24 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { collectAddonAuthFieldsFromFormData } from "@/lib/addon-auth-fields"
+import type { AddonExternalAuthEntry } from "@/lib/addon-external-auth-providers"
 import { isEmailInWhitelist } from "@/lib/email"
 import type { SiteSettingsData } from "@/lib/site-settings"
 
 interface RegisterFormProps {
   settings: SiteSettingsData
+  addonCaptcha?: ReactNode
+  addonAfterFields?: ReactNode
+  addonExternalAuthEntries?: AddonExternalAuthEntry[]
 }
 
-export function RegisterForm({ settings }: RegisterFormProps) {
+export function RegisterForm({
+  settings,
+  addonCaptcha,
+  addonAfterFields,
+  addonExternalAuthEntries = [],
+}: RegisterFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialInviterUsername = searchParams.get("invite") ?? searchParams.get("inviter") ?? ""
@@ -104,8 +115,8 @@ export function RegisterForm({ settings }: RegisterFormProps) {
 
   const hiddenInviterBound = useMemo(() => !settings.registerInviterEnabled && !!inviterUsername, [settings.registerInviterEnabled, inviterUsername])
   const hiddenInviteCodeBound = useMemo(() => !settings.registerInviteCodeEnabled && !!inviteCode, [settings.registerInviteCodeEnabled, inviteCode])
-  const hasAlternativeAuth = settings.authGithubEnabled || settings.authGoogleEnabled || settings.authPasskeyEnabled
-  const hasSecurityStep = useTurnstile || useBuiltinCaptcha || usePowCaptcha
+  const hasAlternativeAuth = settings.authGithubEnabled || settings.authGoogleEnabled || settings.authPasskeyEnabled || addonExternalAuthEntries.length > 0
+  const hasSecurityStep = useTurnstile || useBuiltinCaptcha || usePowCaptcha || Boolean(addonCaptcha)
 
   function emailPassesWhitelist(value: string) {
     return !settings.registerEmailWhitelistEnabled
@@ -143,6 +154,9 @@ export function RegisterForm({ settings }: RegisterFormProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
+    const addonFields = collectAddonAuthFieldsFromFormData(
+      new FormData(event.currentTarget),
+    )
 
 
     if ((useTurnstile || useBuiltinCaptcha || usePowCaptcha) && !captchaToken) {
@@ -207,6 +221,7 @@ export function RegisterForm({ settings }: RegisterFormProps) {
         captchaToken,
         builtinCaptchaCode,
         powNonce,
+        addonFields,
       }),
     })
 
@@ -437,7 +452,13 @@ export function RegisterForm({ settings }: RegisterFormProps) {
               onLoadError={(message) => toast.error(message, "PoW 验证")}
             />
           ) : null}
+
+          {addonCaptcha}
         </AuthFormSection>
+      ) : null}
+
+      {addonAfterFields ? (
+        <AuthFormSection>{addonAfterFields}</AuthFormSection>
       ) : null}
 
       <div className="flex flex-col gap-3">
@@ -456,7 +477,7 @@ export function RegisterForm({ settings }: RegisterFormProps) {
         </Button>
       </div>
 
-      {hasAlternativeAuth ? <ExternalAuthEntry settings={settings} mode="register" /> : null}
+      {hasAlternativeAuth ? <ExternalAuthEntry settings={settings} mode="register" addonEntries={addonExternalAuthEntries} /> : null}
     </form>
   )
 }

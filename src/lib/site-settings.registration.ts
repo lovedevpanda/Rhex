@@ -17,6 +17,7 @@ export interface SiteSettingsRegistrationData {
   registerEmailEnabled: boolean
   registerEmailRequired: boolean
   registerEmailVerification: boolean
+  sessionIpMismatchLogoutEnabled: boolean
   loginIpChangeEmailAlertEnabled: boolean
   passwordChangeRequireEmailVerification: boolean
   registerEmailWhitelistEnabled: boolean

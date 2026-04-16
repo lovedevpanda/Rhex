@@ -176,6 +176,32 @@ export function validateAuthPayload(body: unknown, options: NicknameValidationOp
   }
 }
 
+export function validateLoginPayload(body: unknown): ValidationResult<{
+  login: string
+  password: string
+}> {
+  const rawLogin = normalizeString(getField(body, "login")) || normalizeString(getField(body, "username"))
+  const password = normalizeString(getField(body, "password"))
+  const normalizedEmail = normalizeEmailAddress(rawLogin)
+  const login = isValidEmail(normalizedEmail) ? normalizedEmail : rawLogin
+
+  if (!login || !password) {
+    return { success: false, message: "缺少邮箱/用户名或密码" }
+  }
+
+  if (password.length < 6 || password.length > 64) {
+    return { success: false, message: "密码长度需为 6-64 位" }
+  }
+
+  return {
+    success: true,
+    data: {
+      login,
+      password,
+    },
+  }
+}
+
 export function validatePostPayload(body: unknown, options: PostPayloadValidationOptions = {}): ValidationResult<{
   title: string
   content: string

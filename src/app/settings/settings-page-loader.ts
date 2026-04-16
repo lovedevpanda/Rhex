@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation"
 
+import { executeAddonAsyncWaterfallHook } from "@/addons-host/runtime/hooks"
+import type { AddonRenderResult } from "@/addons-host/types"
 import { getUserAccountBindingView } from "@/lib/account-binding"
 import { getCurrentUser } from "@/lib/auth"
 import { getBoardApplicationPageData } from "@/lib/board-applications"
@@ -19,8 +21,31 @@ import type { SessionActor } from "@/lib/auth"
 
 export type SettingsTabKey = "profile" | "invite" | "post-management" | "board-applications" | "level" | "badges" | "verifications" | "points" | "follows"
 export type ProfileTabKey = "basic" | "privacy" | "notifications" | "accounts" | "browsing"
-export type PostManagementTabKey = "posts" | "replies" | "favorites" | "collections" | "likes"
+export type BuiltInPostManagementTabKey = "posts" | "replies" | "favorites" | "collections" | "likes"
+export type PostManagementTabKey = string
 export type FollowTabKey = "boards" | "users" | "followers" | "tags" | "posts" | "history" | "blocks"
+
+export interface SettingsPostManagementTabOption {
+  key: string
+  label: string
+}
+
+export interface AddonSettingsPostManagementTab {
+  key: string
+  label: string
+  addonId: string | null
+  order: number
+  panel: AddonRenderResult
+}
+
+const DEFAULT_POST_MANAGEMENT_TAB_KEY = "posts"
+const BUILT_IN_POST_MANAGEMENT_TAB_KEYS = new Set<string>([
+  "posts",
+  "replies",
+  "favorites",
+  "collections",
+  "likes",
+])
 
 export const settingsTabs: SettingsTabKey[] = ["profile", "invite", "post-management", "board-applications", "level", "badges", "verifications", "points", "follows"]
 export const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
@@ -30,7 +55,7 @@ export const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
   { key: "accounts", label: "账号绑定" },
   { key: "browsing", label: "浏览设置" },
 ]
-export const postManagementTabs: Array<{ key: PostManagementTabKey; label: string }> = [
+export const postManagementTabs: Array<{ key: BuiltInPostManagementTabKey; label: string }> = [
   { key: "posts", label: "我的帖子" },
   { key: "replies", label: "我的回复" },
   { key: "favorites", label: "我的收藏" },
@@ -59,11 +84,14 @@ export const settingsTabTitles: Record<SettingsTabKey, string> = {
   follows: "关注管理",
 }
 
+type SettingsMobileView = "detail"
+
 interface RawSettingsSearchParams {
   tab?: string | string[]
   profileTab?: string | string[]
   postTab?: string | string[]
   followTab?: string | string[]
+  mobile?: string | string[]
   collectionPage?: string | string[]
   listAfter?: string | string[]
   listBefore?: string | string[]
@@ -73,11 +101,106 @@ interface RawSettingsSearchParams {
   pointsEventType?: string | string[]
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function normalizeOptionalString(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function normalizeAddonRenderResult(value: unknown): AddonRenderResult | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const result: AddonRenderResult = {}
+  const html = normalizeOptionalString(value.html)
+  const text = normalizeOptionalString(value.text)
+  const clientModule = normalizeOptionalString(value.clientModule)
+  const containerClassName = normalizeOptionalString(value.containerClassName)
+
+  if (html) {
+    result.html = html
+  }
+
+  if (text) {
+    result.text = text
+  }
+
+  if (clientModule) {
+    result.clientModule = clientModule
+  }
+
+  if (isRecord(value.clientProps)) {
+    result.clientProps = value.clientProps
+  }
+
+  if (value.containerTag === "div" || value.containerTag === "section" || value.containerTag === "aside") {
+    result.containerTag = value.containerTag
+  }
+
+  if (containerClassName) {
+    result.containerClassName = containerClassName
+  }
+
+  return result.html || result.text || result.clientModule ? result : null
+}
+
+function normalizeAddonPostManagementTabs(value: unknown): AddonSettingsPostManagementTab[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const normalized: AddonSettingsPostManagementTab[] = []
+  const seenKeys = new Set<string>()
+
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue
+    }
+
+    const key = normalizeOptionalString(item.key)
+    const label = normalizeOptionalString(item.label)
+    const addonId = normalizeOptionalString(item.addonId) || null
+    const panel = normalizeAddonRenderResult(item.panel)
+    const orderValue = Number(item.order)
+    const order = Number.isFinite(orderValue) ? Math.floor(orderValue) : 100
+
+    if (!key || !label || !panel || BUILT_IN_POST_MANAGEMENT_TAB_KEYS.has(key) || seenKeys.has(key)) {
+      continue
+    }
+
+    seenKeys.add(key)
+    normalized.push({
+      key,
+      label,
+      addonId,
+      order,
+      panel,
+    })
+  }
+
+  return normalized.sort((left, right) => {
+    if (left.order !== right.order) {
+      return left.order - right.order
+    }
+
+    return `${left.addonId ?? ""}:${left.key}`.localeCompare(`${right.addonId ?? ""}:${right.key}`, "zh-CN")
+  })
+}
+
+async function listAddonPostManagementTabs() {
+  const hooked = await executeAddonAsyncWaterfallHook("settings.post-management.tabs", [])
+  return normalizeAddonPostManagementTabs(hooked.value)
+}
+
 export interface ResolvedSettingsRoute {
   currentTab: SettingsTabKey
   currentProfileTab: ProfileTabKey
   currentPostTab: PostManagementTabKey
   currentFollowTab: FollowTabKey
+  mobileView: SettingsMobileView | null
   collectionPage: number
   listAfter: string | null
   listBefore: string | null
@@ -107,6 +230,8 @@ export interface SettingsPageData {
   favoritePosts: Awaited<ReturnType<typeof getUserFavoritePosts>> | null
   favoriteCollections: Awaited<ReturnType<typeof getUserFavoriteCollectionManageData>> | null
   likedPosts: Awaited<ReturnType<typeof getUserLikedPosts>> | null
+  postManagementTabs: SettingsPostManagementTabOption[]
+  activePostManagementAddonTab: AddonSettingsPostManagementTab | null
   followedBoards: Awaited<ReturnType<typeof getUserBoardFollows>> | null
   followedUsers: Awaited<ReturnType<typeof getUserUserFollows>> | null
   followers: Awaited<ReturnType<typeof getUserFollowers>> | null
@@ -149,11 +274,24 @@ function resolveTabKey<T extends string>(value: string | undefined, candidates: 
   return candidates.includes((value ?? fallback) as T) ? ((value ?? fallback) as T) : fallback
 }
 
-export function resolveSettingsRoute(searchParams?: RawSettingsSearchParams): ResolvedSettingsRoute {
+export function resolveSettingsRoute(
+  searchParams?: RawSettingsSearchParams,
+  options?: {
+    postManagementTabs?: SettingsPostManagementTabOption[]
+  },
+): ResolvedSettingsRoute {
   const currentTab = resolveTabKey(readSearchParam(searchParams?.tab), settingsTabs, "profile")
   const currentProfileTab = resolveTabKey(readSearchParam(searchParams?.profileTab), profileTabs.map((tab) => tab.key), "basic")
-  const currentPostTab = resolveTabKey(readSearchParam(searchParams?.postTab), postManagementTabs.map((tab) => tab.key), "posts")
+  const resolvedPostManagementTabs = options?.postManagementTabs?.length
+    ? options.postManagementTabs
+    : postManagementTabs
+  const currentPostTab = resolveTabKey(
+    readSearchParam(searchParams?.postTab),
+    resolvedPostManagementTabs.map((tab) => tab.key),
+    resolvedPostManagementTabs[0]?.key ?? DEFAULT_POST_MANAGEMENT_TAB_KEY,
+  )
   const currentFollowTab = resolveTabKey(readSearchParam(searchParams?.followTab), followTabs.map((tab) => tab.key), "boards")
+  const mobileView = readSearchParam(searchParams?.mobile) === "detail" ? "detail" : null
   const collectionPageValue = Number(readSearchParam(searchParams?.collectionPage) ?? "1")
   const listAfter = readSearchParam(searchParams?.listAfter) ?? null
   const listBefore = readSearchParam(searchParams?.listBefore) ?? null
@@ -167,6 +305,7 @@ export function resolveSettingsRoute(searchParams?: RawSettingsSearchParams): Re
     currentProfileTab,
     currentPostTab,
     currentFollowTab,
+    mobileView,
     collectionPage: Number.isFinite(collectionPageValue) && collectionPageValue > 0 ? Math.floor(collectionPageValue) : 1,
     listAfter,
     listBefore,
@@ -175,6 +314,26 @@ export function resolveSettingsRoute(searchParams?: RawSettingsSearchParams): Re
     pointsChangeType,
     pointsEventType,
   }
+}
+
+export function buildSettingsHref(
+  route: Pick<ResolvedSettingsRoute, "mobileView">,
+  searchParams: Record<string, string | null | undefined>,
+) {
+  const nextSearchParams = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (typeof value === "string" && value.length > 0) {
+      nextSearchParams.set(key, value)
+    }
+  }
+
+  if (route.mobileView === "detail") {
+    nextSearchParams.set("mobile", "detail")
+  }
+
+  const queryString = nextSearchParams.toString()
+  return queryString ? `/settings?${queryString}` : "/settings"
 }
 
 async function loadSettingsTabData(
@@ -339,8 +498,24 @@ function resolveVipPricing(
 }
 
 export async function loadSettingsPageData(searchParams?: RawSettingsSearchParams): Promise<SettingsPageData> {
-  const route = resolveSettingsRoute(searchParams)
-  const [currentUser, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])
+  const initialRoute = resolveSettingsRoute(searchParams)
+  const [currentUser, settings, addonPostManagementTabs] = await Promise.all([
+    getCurrentUser(),
+    getSiteSettings(),
+    initialRoute.currentTab === "post-management"
+      ? listAddonPostManagementTabs()
+      : Promise.resolve([]),
+  ])
+  const resolvedPostManagementTabs: SettingsPostManagementTabOption[] = [
+    ...postManagementTabs,
+    ...addonPostManagementTabs.map((tab) => ({
+      key: tab.key,
+      label: tab.label,
+    })),
+  ]
+  const route = resolveSettingsRoute(searchParams, {
+    postManagementTabs: resolvedPostManagementTabs,
+  })
 
   if (!currentUser) {
     redirect("/login?redirect=/settings")
@@ -360,6 +535,9 @@ export async function loadSettingsPageData(searchParams?: RawSettingsSearchParam
     redirect("/")
   }
 
+  const activePostManagementAddonTab = route.currentTab === "post-management"
+    ? addonPostManagementTabs.find((tab) => tab.key === route.currentPostTab) ?? null
+    : null
   const invitePath = `/register?invite=${encodeURIComponent(profile.username)}`
   const pricing = resolveVipPricing(currentUser, settings)
   const badgeDisplayItems = tabData.badges.map((badge) => ({
@@ -401,6 +579,8 @@ export async function loadSettingsPageData(searchParams?: RawSettingsSearchParam
     introductionChangePriceDescription: pricing.introductionChangePriceDescription,
     avatarChangePointCost: pricing.avatarChangePointCost,
     avatarChangePriceDescription: pricing.avatarChangePriceDescription,
+    postManagementTabs: resolvedPostManagementTabs,
+    activePostManagementAddonTab,
     badgeDisplayItems,
     ...tabData,
   }

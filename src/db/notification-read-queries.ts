@@ -12,6 +12,35 @@ export function countUnreadNotifications(userId: number) {
   })
 }
 
+export async function countUnreadNotificationsByUserIds(userIds: number[]) {
+  const normalizedUserIds = [...new Set(userIds.filter((userId) => Number.isInteger(userId) && userId > 0))]
+
+  if (normalizedUserIds.length === 0) {
+    return new Map<number, number>()
+  }
+
+  const rows = await prisma.notification.groupBy({
+    by: ["userId"],
+    where: {
+      userId: {
+        in: normalizedUserIds,
+      },
+      isRead: false,
+    },
+    _count: {
+      _all: true,
+    },
+  })
+
+  const unreadCountByUserId = new Map<number, number>()
+
+  for (const row of rows) {
+    unreadCountByUserId.set(row.userId, row._count._all)
+  }
+
+  return unreadCountByUserId
+}
+
 function buildNotificationCursorWhere(userId: number, cursor: TimestampCursorPayload, direction: "after" | "before"): Prisma.NotificationWhereInput {
   const createdAt = new Date(cursor.createdAt)
 
@@ -99,6 +128,7 @@ export function findCommentsWithPostByIds(commentIds: string[]) {
     },
     select: {
       id: true,
+      parentId: true,
       post: {
         select: {
           id: true,

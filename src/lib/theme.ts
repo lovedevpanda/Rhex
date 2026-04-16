@@ -7,6 +7,7 @@ export const THEME_SETTINGS_CHANGE_EVENT = "rhex-theme-settings-change"
 export const CUSTOM_THEME_STYLE_ELEMENT_ID = "rhex-custom-theme-style"
 export const DEFAULT_THEME_FONT_FAMILY = "\"Microsoft YaHei\", \"PingFang SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
 export const DEFAULT_THEME_FONT_SIZE = "16px"
+const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 export type ThemeMode = "light" | "dark"
 export type ThemePreference = ThemeMode | "system"
@@ -310,6 +311,30 @@ function isBrowser() {
   return typeof window !== "undefined"
 }
 
+function readCookieValue(cookieString: string, cookieName: string) {
+  if (!cookieString.trim()) {
+    return null
+  }
+
+  const cookiePrefix = `${cookieName}=`
+  const entry = cookieString
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .find((chunk) => chunk.startsWith(cookiePrefix))
+
+  if (!entry) {
+    return null
+  }
+
+  const rawValue = entry.slice(cookiePrefix.length)
+
+  try {
+    return decodeURIComponent(rawValue)
+  } catch {
+    return rawValue
+  }
+}
+
 function normalizeHexColor(value: unknown, fallback: string) {
   const normalized = String(value ?? "").trim()
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : fallback
@@ -588,12 +613,51 @@ function notifyThemeSettingsChanged() {
   window.dispatchEvent(new Event(THEME_SETTINGS_CHANGE_EVENT))
 }
 
+function writeThemeCookie(cookieName: string, value: string) {
+  if (!isBrowser()) {
+    return
+  }
+
+  try {
+    document.cookie = `${cookieName}=${encodeURIComponent(value)}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`
+  } catch {
+    // Ignore cookie write failures and still keep the local snapshot available.
+  }
+}
+
+function readThemeCookieValue(cookieName: string) {
+  if (!isBrowser()) {
+    return null
+  }
+
+  try {
+    return readCookieValue(document.cookie, cookieName)
+  } catch {
+    return null
+  }
+}
+
+function syncThemeSettingFromCookie(storageKey: string, cookieValue: string | null) {
+  if (!isBrowser() || !cookieValue) {
+    return
+  }
+
+  try {
+    if (window.localStorage.getItem(storageKey) == null) {
+      window.localStorage.setItem(storageKey, cookieValue)
+    }
+  } catch {
+    // Ignore storage sync failures.
+  }
+}
+
 function writeThemeSetting(storageKey: string, value: string) {
   if (!isBrowser()) {
     return
   }
 
   window.localStorage.setItem(storageKey, value)
+  writeThemeCookie(storageKey, value)
   updateThemeLocalSettingsSnapshot(readThemeLocalSettingsSnapshotFromStorage())
   notifyThemeSettingsChanged()
 }
@@ -640,6 +704,14 @@ export function getThemeInitScript() {
         var presetValuesMap = ${JSON.stringify(THEME_PRESET_SCRIPT_VALUES)};
         var fontSizeValuesMap = ${JSON.stringify(FONT_SIZE_PRESET_SCRIPT_VALUES)};
         var variableNames = ${JSON.stringify(THEME_VARIABLE_NAMES)};
+        var cookieMaxAge = ${THEME_COOKIE_MAX_AGE};
+        var syncCookie = function (name, value) {
+          if (!value) {
+            return;
+          }
+
+          document.cookie = name + "=" + encodeURIComponent(value) + "; path=/; max-age=" + cookieMaxAge + "; samesite=lax";
+        };
         var resolvedPreference = preference === "dark" || preference === "light" || preference === "system" ? preference : "light";
         var resolvedMode = resolvedPreference === "system"
           ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
@@ -651,6 +723,9 @@ export function getThemeInitScript() {
             : preset === "rose"
               ? "sea"
               : (preset && presetValuesMap[preset] ? preset : "default");
+
+        syncCookie(${JSON.stringify(THEME_STORAGE_KEY)}, resolvedPreference);
+        syncCookie(${JSON.stringify(THEME_PRESET_STORAGE_KEY)}, resolvedPreset);
 
         root.classList.toggle("dark", resolvedMode === "dark");
         root.style.colorScheme = resolvedMode;
@@ -728,6 +803,7 @@ export function getThemeInitScript() {
             : "normal";
 
           applyVariableMap(presetValues);
+          syncCookie(${JSON.stringify(FONT_SIZE_PRESET_STORAGE_KEY)}, resolvedFontSizePreset);
           root.style.removeProperty("--theme-font-family");
           root.dataset.fontSizePreset = resolvedFontSizePreset;
           root.style.fontSize = fontSizeValuesMap[resolvedFontSizePreset];
@@ -766,10 +842,40 @@ function readThemeLocalSettingsSnapshotFromStorage(): ThemeLocalSettingsSnapshot
     return DEFAULT_THEME_LOCAL_SETTINGS_SNAPSHOT
   }
 
+  const preferenceFromCookie = readThemeCookieValue(THEME_STORAGE_KEY)
+  const presetFromCookie = readThemeCookieValue(THEME_PRESET_STORAGE_KEY)
+  const fontSizePresetFromCookie = readThemeCookieValue(FONT_SIZE_PRESET_STORAGE_KEY)
+
+  syncThemeSettingFromCookie(THEME_STORAGE_KEY, preferenceFromCookie)
+  syncThemeSettingFromCookie(THEME_PRESET_STORAGE_KEY, presetFromCookie)
+  syncThemeSettingFromCookie(FONT_SIZE_PRESET_STORAGE_KEY, fontSizePresetFromCookie)
+
+  const preference = (() => {
+    try {
+      return window.localStorage.getItem(THEME_STORAGE_KEY) ?? preferenceFromCookie
+    } catch {
+      return preferenceFromCookie
+    }
+  })()
+  const preset = (() => {
+    try {
+      return window.localStorage.getItem(THEME_PRESET_STORAGE_KEY) ?? presetFromCookie
+    } catch {
+      return presetFromCookie
+    }
+  })()
+  const fontSizePreset = (() => {
+    try {
+      return window.localStorage.getItem(FONT_SIZE_PRESET_STORAGE_KEY) ?? fontSizePresetFromCookie
+    } catch {
+      return fontSizePresetFromCookie
+    }
+  })()
+
   return {
-    preference: resolveStoredThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY)),
-    preset: resolveStoredThemePreset(window.localStorage.getItem(THEME_PRESET_STORAGE_KEY)),
-    fontSizePreset: resolveStoredFontSizePreset(window.localStorage.getItem(FONT_SIZE_PRESET_STORAGE_KEY)),
+    preference: resolveStoredThemePreference(preference),
+    preset: resolveStoredThemePreset(preset),
+    fontSizePreset: resolveStoredFontSizePreset(fontSizePreset),
     customThemeConfig: readStoredCustomThemeConfig(),
   }
 }
@@ -881,6 +987,56 @@ export function resolveStoredFontSizePreset(value: string | null | undefined): F
   }
 
   return "normal"
+}
+
+export interface ThemeDocumentProps {
+  dataFontSizePreset: FontSizePreset
+  dataThemePreset: ThemePreset
+  requiresBootGuard: boolean
+  rootClassName: "" | "dark"
+  rootStyle: Record<string, string>
+}
+
+export function resolveThemeDocumentPropsFromCookieString(cookieString: string | null | undefined): ThemeDocumentProps {
+  const resolvedPreference = resolveStoredThemePreference(readCookieValue(cookieString ?? "", THEME_STORAGE_KEY))
+  const resolvedPreset = resolveStoredThemePreset(readCookieValue(cookieString ?? "", THEME_PRESET_STORAGE_KEY))
+  const resolvedFontSizePreset = resolveStoredFontSizePreset(readCookieValue(cookieString ?? "", FONT_SIZE_PRESET_STORAGE_KEY))
+  const requiresBootGuard = resolvedPreference === "system"
+    || resolvedPreset === "custom"
+    || !readCookieValue(cookieString ?? "", THEME_STORAGE_KEY)
+    || !readCookieValue(cookieString ?? "", THEME_PRESET_STORAGE_KEY)
+    || !readCookieValue(cookieString ?? "", FONT_SIZE_PRESET_STORAGE_KEY)
+
+  if (requiresBootGuard || (resolvedPreference !== "light" && resolvedPreference !== "dark")) {
+    return {
+      dataFontSizePreset: resolvedFontSizePreset,
+      dataThemePreset: resolvedPreset,
+      requiresBootGuard: true,
+      rootClassName: "",
+      rootStyle: {},
+    }
+  }
+
+  const rootStyle: Record<string, string> = {
+    colorScheme: resolvedPreference,
+    fontSize: FONT_SIZE_PRESETS[resolvedFontSizePreset].size,
+  }
+  const presetValues = (THEME_PRESETS[resolvedPreset as keyof typeof THEME_PRESETS]?.values[resolvedPreference] ?? {}) as ThemeVariableMap
+
+  for (const variableName of THEME_VARIABLE_NAMES) {
+    const variableValue = presetValues[variableName]
+    if (typeof variableValue === "string" && variableValue.length > 0) {
+      rootStyle[`--${variableName}`] = variableValue
+    }
+  }
+
+  return {
+    dataFontSizePreset: resolvedFontSizePreset,
+    dataThemePreset: resolvedPreset,
+    requiresBootGuard: false,
+    rootClassName: resolvedPreference === "dark" ? "dark" : "",
+    rootStyle,
+  }
 }
 
 function applyThemePreset(preset: ThemePreset, mode: ThemeMode) {

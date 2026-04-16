@@ -4,20 +4,24 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type * as React from "react"
 
 import { EDITOR_FALLBACK_LINE_HEIGHT_PX } from "@/components/refined-rich-post-editor/constants"
-import type { EditorSelectionRange, EditorTab, EditorWriteViewState } from "@/components/refined-rich-post-editor/types"
+import type {
+  EditorSelectionRange,
+  EditorTab,
+  EditorWriteViewState,
+} from "@/components/refined-rich-post-editor/types"
 
 type UseEditorViewStateOptions = {
   value: string
   minHeight: number
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
-  selectionRef: React.MutableRefObject<EditorSelectionRange>
+  updateSelection: (selection: EditorSelectionRange) => void
 }
 
 export function useEditorViewState({
   value,
   minHeight,
   textareaRef,
-  selectionRef,
+  updateSelection,
 }: UseEditorViewStateOptions) {
   const lineMeasureContainerRef = useRef<HTMLDivElement | null>(null)
   const lineMeasureRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -155,16 +159,16 @@ export function useEditorViewState({
           selectionStart: element.selectionStart,
           selectionEnd: element.selectionEnd,
         }
-        selectionRef.current = {
+        updateSelection({
           start: element.selectionStart,
           end: element.selectionEnd,
-        }
+        })
         setEditorScrollTop(element.scrollTop)
       }
     }
 
     setActiveTab(nextTab)
-  }, [activeTab, hasEditorSurface, selectionRef, textareaRef])
+  }, [activeTab, hasEditorSurface, textareaRef, updateSelection])
 
   useEffect(() => {
     if (!hasEditorSurface(activeTab)) {
@@ -180,10 +184,10 @@ export function useEditorViewState({
 
       element.scrollTop = viewState.scrollTop
       element.scrollLeft = viewState.scrollLeft
-      selectionRef.current = {
+      updateSelection({
         start: viewState.selectionStart,
         end: viewState.selectionEnd,
-      }
+      })
 
       try {
         element.focus({ preventScroll: true })
@@ -199,7 +203,7 @@ export function useEditorViewState({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeTab, hasEditorSurface, selectionRef, textareaRef])
+  }, [activeTab, hasEditorSurface, textareaRef, updateSelection])
 
   const handleTextareaScroll = useCallback((event: React.UIEvent<HTMLTextAreaElement>) => {
     setEditorScrollTop(event.currentTarget.scrollTop)
@@ -207,8 +211,12 @@ export function useEditorViewState({
   }, [updateActiveLineNumber])
 
   const handleTextareaSelect = useCallback((event: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    updateSelection({
+      start: event.currentTarget.selectionStart,
+      end: event.currentTarget.selectionEnd,
+    })
     updateActiveLineNumber(event.currentTarget)
-  }, [updateActiveLineNumber])
+  }, [updateActiveLineNumber, updateSelection])
 
   return {
     activeTab,

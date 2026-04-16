@@ -1,4 +1,5 @@
 import { NotificationType,  type RelatedType } from "@/db/types"
+import { countUnreadNotificationsByUserIds } from "@/db/notification-read-queries"
 import {
   createNotification as createNotificationEntry,
   createNotifications as createNotificationsEntry,
@@ -8,6 +9,7 @@ import {
 } from "@/db/notification-write-queries"
 import { enqueueBackgroundJob, registerBackgroundJobHandler } from "@/lib/background-jobs"
 import { logError, logInfo } from "@/lib/logger"
+import { notificationEventBus } from "@/lib/notification-event-bus"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
 
@@ -203,9 +205,27 @@ export async function sendSystemNotificationWebhookTest(params: {
 
 export type { NotificationDraft, NotificationWriteClient }
 
+async function publishNotificationCountEvents(userIds: number[], reason: "created" | "created-batch" | "read" | "read-all", notificationIdByUserId?: Map<number, string>) {
+  const unreadCountByUserId = await countUnreadNotificationsByUserIds(userIds)
+
+  await Promise.allSettled(
+    [...new Set(userIds)].map((userId) => notificationEventBus.publish({
+      type: "notification.count",
+      userId,
+      unreadNotificationCount: unreadCountByUserId.get(userId) ?? 0,
+      reason,
+      notificationId: notificationIdByUserId?.get(userId),
+      occurredAt: new Date().toISOString(),
+    })),
+  )
+}
+
 export async function createNotification(params: NotificationDraft & { client?: NotificationWriteClient }) {
   const notification = await createNotificationEntry(params)
   revalidateUserSurfaceCache(notification.userId)
+  if (!params.client) {
+    await publishNotificationCountEvents([notification.userId], "created", new Map([[notification.userId, notification.id]]))
+  }
   return notification
 }
 
@@ -218,6 +238,10 @@ export async function createNotifications(params: {
   const userIds = [...new Set(params.notifications.map((item) => item.userId))]
   for (const userId of userIds) {
     revalidateUserSurfaceCache(userId)
+  }
+
+  if (!params.client) {
+    await publishNotificationCountEvents(userIds, "created-batch")
   }
 
   return result

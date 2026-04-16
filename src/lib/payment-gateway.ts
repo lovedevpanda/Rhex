@@ -15,7 +15,19 @@ import {
 } from "@/lib/payment-gateway-alipay"
 import { getPaymentGatewayConfig, getServerPaymentGatewayConfig } from "@/lib/payment-gateway-config"
 import { maybeEnqueuePaymentGatewayOrderSuccessEmail, type PaymentGatewayOrderSuccessEmailSnapshot } from "@/lib/payment-gateway-email-notifications"
-import { findPaymentGatewayChannelDefinition, listPaymentGatewayChannelDefinitions } from "@/lib/payment-gateway-registry"
+import {
+  createAddonPaymentCheckout,
+  getAddonPaymentProviderDefaultPaths,
+  handleAddonPaymentNotification,
+  isAddonPaymentProviderRunnable,
+  queryAddonPaymentOrder,
+} from "@/lib/payment-gateway-provider-adapters"
+import {
+  findPaymentGatewayChannelDefinition,
+  listPaymentGatewayChannelDefinitions,
+  listPaymentGatewayProviderAdminEntries,
+} from "@/lib/payment-gateway-registry"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { POINT_LOG_EVENT_TYPES } from "@/lib/point-log-events"
 import { applyPointDelta } from "@/lib/point-center"
 import type {
@@ -73,29 +85,46 @@ function buildRouteSceneWeight(route: PaymentGatewayRouteRule, scene: string) {
   return -1
 }
 
-function isProviderRunnable(config: ServerPaymentGatewayConfigData, providerCode: string) {
+async function isProviderRunnable(config: ServerPaymentGatewayConfigData, providerCode: string) {
   if (providerCode === "alipay") {
     return isAlipayConfigRunnable(config.alipay)
   }
 
-  return false
+  try {
+    return await isAddonPaymentProviderRunnable(providerCode)
+  } catch {
+    return false
+  }
 }
 
-function listCheckoutMethodOptionsForScene(config: ServerPaymentGatewayConfigData, scene: string): PaymentGatewayCheckoutMethodOption[] {
+async function listCheckoutMethodOptionsForScene(config: ServerPaymentGatewayConfigData, scene: string): Promise<PaymentGatewayCheckoutMethodOption[]> {
   const enabledChannels = new Set(
     config.channels
       .filter((item) => item.enabled)
       .map((item) => item.channelCode),
   )
+  const [channelDefinitions, runnableProviderMap] = await Promise.all([
+    listPaymentGatewayChannelDefinitions(),
+    (async () => {
+      const uniqueProviderCodes = [...new Set(config.routes.map((item) => item.providerCode))]
+      const entries = await Promise.all(uniqueProviderCodes.map(async (providerCode) => ([
+        providerCode,
+        await isProviderRunnable(config, providerCode),
+      ] as const)))
+
+      return new Map(entries)
+    })(),
+  ])
+  const definitionMap = new Map(channelDefinitions.map((item) => [item.channelCode, item]))
   const methodMap = new Map<string, PaymentGatewayCheckoutMethodOption & { sceneWeight: number; priority: number }>()
 
   for (const route of config.routes) {
     const sceneWeight = buildRouteSceneWeight(route, scene)
-    if (!route.enabled || sceneWeight < 0 || !enabledChannels.has(route.channelCode) || !isProviderRunnable(config, route.providerCode)) {
+    if (!route.enabled || sceneWeight < 0 || !enabledChannels.has(route.channelCode) || !runnableProviderMap.get(route.providerCode)) {
       continue
     }
 
-    const definition = findPaymentGatewayChannelDefinition(route.channelCode)
+    const definition = definitionMap.get(route.channelCode)
     if (!definition) {
       continue
     }
@@ -144,6 +173,17 @@ function listCheckoutMethodOptionsForScene(config: ServerPaymentGatewayConfigDat
       presentationType: item.presentationType,
       checkoutClientType: item.checkoutClientType,
     }))
+}
+
+async function resolveProviderDefaultPaths(config: ServerPaymentGatewayConfigData, providerCode: string) {
+  if (providerCode === "alipay") {
+    return {
+      notifyPath: config.alipay.notifyPath,
+      returnPath: config.alipay.returnPath,
+    }
+  }
+
+  return getAddonPaymentProviderDefaultPaths(providerCode)
 }
 
 function resolvePaymentRoute(
@@ -298,9 +338,69 @@ function normalizePaymentGatewayAdminOrdersPage(value: number | null | undefined
   return Number.isInteger(value) && Number(value) > 0 ? Number(value) : 1
 }
 
+async function emitAddonPaymentPaidEvent(input: {
+  orderId: string
+  merchantOrderNo: string
+  bizScene: string
+  providerCode: string
+  channelCode: string
+  userId: number | null
+  amountFen: number
+  currency: string
+  request?: Request
+}) {
+  if (input.request) {
+    const requestUrl = new URL(input.request.url)
+    await executeAddonActionHook("payment.paid.before", {
+      orderId: input.orderId,
+      merchantOrderNo: input.merchantOrderNo,
+      bizScene: input.bizScene,
+      providerCode: input.providerCode,
+      channelCode: input.channelCode,
+      userId: input.userId,
+      amountFen: input.amountFen,
+      currency: input.currency,
+    }, {
+      request: input.request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+    })
+  } else {
+    await executeAddonActionHook("payment.paid.before", {
+      orderId: input.orderId,
+      merchantOrderNo: input.merchantOrderNo,
+      bizScene: input.bizScene,
+      providerCode: input.providerCode,
+      channelCode: input.channelCode,
+      userId: input.userId,
+      amountFen: input.amountFen,
+      currency: input.currency,
+    })
+  }
+
+  await executeAddonActionHook("payment.paid.after", {
+    orderId: input.orderId,
+    merchantOrderNo: input.merchantOrderNo,
+    bizScene: input.bizScene,
+    providerCode: input.providerCode,
+    channelCode: input.channelCode,
+    userId: input.userId,
+    amountFen: input.amountFen,
+    currency: input.currency,
+  }, input.request
+    ? {
+        request: input.request,
+        pathname: new URL(input.request.url).pathname,
+        searchParams: new URL(input.request.url).searchParams,
+      }
+    : undefined)
+}
+
 export async function getPaymentGatewayAdminData(options?: { page?: number | null }): Promise<PaymentGatewayAdminData> {
-  const [config, totalRecentOrders, clearableRecentOrderCount] = await Promise.all([
+  const [config, channelDefinitions, providerEntries, totalRecentOrders, clearableRecentOrderCount] = await Promise.all([
     getPaymentGatewayConfig(),
+    listPaymentGatewayChannelDefinitions(),
+    listPaymentGatewayProviderAdminEntries(),
     prisma.paymentOrder.count(),
     prisma.paymentOrder.count({
       where: {
@@ -357,7 +457,8 @@ export async function getPaymentGatewayAdminData(options?: { page?: number | nul
 
   return {
     config,
-    channelDefinitions: listPaymentGatewayChannelDefinitions(),
+    channelDefinitions,
+    providerEntries,
     recentOrdersPagination: {
       page,
       pageSize,
@@ -440,7 +541,7 @@ export async function clearPaymentGatewayAdminLogs() {
 export async function getEnabledPointTopupPackages() {
   const config = await getServerPaymentGatewayConfig()
   const paymentMethods = config.enabled && config.topupEnabled
-    ? listCheckoutMethodOptionsForScene(config, "points.topup")
+    ? await listCheckoutMethodOptionsForScene(config, "points.topup")
     : []
 
   return {
@@ -500,7 +601,7 @@ export async function createPaymentCheckout(input: {
   }
 
   const preferredChannelCode = input.preferredChannelCode?.trim() || null
-  if (preferredChannelCode && !findPaymentGatewayChannelDefinition(preferredChannelCode)) {
+  if (preferredChannelCode && !(await findPaymentGatewayChannelDefinition(preferredChannelCode))) {
     apiError(400, "所选支付方式不存在")
   }
 
@@ -509,8 +610,11 @@ export async function createPaymentCheckout(input: {
     apiError(400, preferredChannelCode ? "当前所选支付方式暂不可用，请重新选择" : "当前支付场景未配置可用路由，请联系管理员")
   }
 
-  if (route.providerCode === "alipay" && !isAlipayConfigRunnable(config.alipay)) {
-    apiError(400, "支付宝配置不完整，请联系管理员补全密钥或证书")
+  const providerRunnable = await isProviderRunnable(config, route.providerCode)
+  if (!providerRunnable) {
+    apiError(400, route.providerCode === "alipay"
+      ? "支付宝配置不完整，请联系管理员补全密钥或证书"
+      : `支付提供方 ${route.providerCode} 尚未完成配置，请联系管理员检查插件设置`)
   }
 
   if (input.bizOrderId) {
@@ -534,11 +638,12 @@ export async function createPaymentCheckout(input: {
 
   const merchantOrderNo = createMerchantOrderNo()
   const expiredAt = new Date(Date.now() + config.orderExpireMinutes * 60_000)
+  const providerPaths = await resolveProviderDefaultPaths(config, route.providerCode)
   const effectiveReturnTarget = input.returnPathTemplate?.trim()
     ? input.returnPathTemplate.trim().replaceAll("{merchantOrderNo}", encodeURIComponent(merchantOrderNo))
     : (input.returnPath?.trim()
         ? input.returnPath.trim()
-        : config.alipay.returnPath || config.defaultReturnPath)
+        : providerPaths.returnPath || config.defaultReturnPath)
 
   const order = await prisma.paymentOrder.create({
     data: {
@@ -568,24 +673,37 @@ export async function createPaymentCheckout(input: {
   })
 
   try {
-    if (route.providerCode !== "alipay") {
-      apiError(400, `当前尚未实现提供方 ${route.providerCode}`)
+    const notifyTarget = providerPaths.notifyPath?.trim()
+    if (!notifyTarget) {
+      apiError(400, `支付提供方 ${route.providerCode} 未提供异步通知地址`)
     }
 
-    const notifyUrl = await resolveAbsoluteUrl(config.alipay.notifyPath)
+    const notifyUrl = await resolveAbsoluteUrl(notifyTarget)
     const returnUrl = await resolveAbsoluteUrl(effectiveReturnTarget)
-    const presentation = await createAlipayCheckoutPresentation({
-      channelCode: route.channelCode as "alipay.page" | "alipay.wap" | "alipay.precreate",
-      merchantOrderNo,
-      amountFen: input.amountFen,
-      subject,
-      body: input.body?.trim() || null,
-      notifyUrl,
-      returnUrl,
-      requestIp: input.requestIp,
-      timeoutMinutes: config.orderExpireMinutes,
-      config: config.alipay,
-    })
+    const presentation = route.providerCode === "alipay"
+      ? await createAlipayCheckoutPresentation({
+          channelCode: route.channelCode as "alipay.page" | "alipay.wap" | "alipay.precreate",
+          merchantOrderNo,
+          amountFen: input.amountFen,
+          subject,
+          body: input.body?.trim() || null,
+          notifyUrl,
+          returnUrl,
+          requestIp: input.requestIp,
+          timeoutMinutes: config.orderExpireMinutes,
+          config: config.alipay,
+        })
+      : await createAddonPaymentCheckout(route.providerCode, {
+          merchantOrderNo,
+          channelCode: route.channelCode,
+          amountFen: input.amountFen,
+          subject,
+          body: input.body?.trim() || null,
+          notifyUrl,
+          returnUrl,
+          requestIp: input.requestIp,
+          timeoutMinutes: config.orderExpireMinutes,
+        })
 
     await prisma.$transaction([
       prisma.paymentOrder.update({
@@ -609,6 +727,7 @@ export async function createPaymentCheckout(input: {
           requestPayloadJson: toJsonValue(presentation.requestPayload),
           responsePayloadJson: toJsonValue(presentation.responsePayload),
           providerTraceId: presentation.providerTraceId,
+          redirectUrl: "redirectUrl" in presentation ? presentation.redirectUrl ?? null : null,
           formHtml: presentation.presentation.html ?? null,
           qrCode: presentation.presentation.qrCode ?? null,
           providerTradeNo: presentation.providerTradeNo,
@@ -842,6 +961,10 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
     select: {
       id: true,
       merchantOrderNo: true,
+      bizScene: true,
+      userId: true,
+      amountFen: true,
+      currency: true,
       status: true,
       fulfillmentStatus: true,
       fulfilledAt: true,
@@ -854,28 +977,102 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
     apiError(404, "支付订单不存在")
   }
 
-  if (order.providerCode !== "alipay") {
-    apiError(400, "当前仅支持同步支付宝订单状态")
-  }
-
-  const config = await getServerPaymentGatewayConfig()
-  if (!isAlipayConfigRunnable(config.alipay)) {
-    apiError(400, "支付宝配置不完整，无法查询订单")
-  }
-
-  const result = await queryAlipayTradeStatus({
-    config: config.alipay,
-    merchantOrderNo,
-  })
-
   const attemptNo = await prisma.paymentAttempt.count({
     where: {
       orderId: order.id,
     },
   }) + 1
 
-  if (result.code !== "10000") {
-    const errorMeta = toAlipayResultError(result)
+  if (order.providerCode === "alipay") {
+    const config = await getServerPaymentGatewayConfig()
+    if (!isAlipayConfigRunnable(config.alipay)) {
+      apiError(400, "支付宝配置不完整，无法查询订单")
+    }
+
+    const result = await queryAlipayTradeStatus({
+      config: config.alipay,
+      merchantOrderNo,
+    })
+
+    if (result.code !== "10000") {
+      const errorMeta = toAlipayResultError(result)
+      await createCheckoutAttempt({
+        orderId: order.id,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        attemptNo,
+        action: "query",
+        status: PaymentAttemptStatus.FAILED,
+        responsePayloadJson: toJsonValue(result),
+        providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
+        errorCode: errorMeta.code,
+        errorMessage: errorMeta.message,
+      })
+      return result
+    }
+
+    const tradeStatus = typeof result.tradeStatus === "string" ? result.tradeStatus : ""
+    const nextStatus = mapTradeStatusToOrderStatus(order.status, tradeStatus)
+    const paidAt = typeof result.sendPayDate === "string"
+      ? new Date(result.sendPayDate.replace(" ", "T"))
+      : null
+
+    await prisma.$transaction([
+      prisma.paymentOrder.update({
+        where: { id: order.id },
+        data: {
+          status: nextStatus,
+          providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
+          providerBuyerId: typeof result.buyerUserId === "string"
+            ? result.buyerUserId
+            : (typeof result.buyerOpenId === "string" ? result.buyerOpenId : null),
+          paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined,
+          closedAt: tradeStatus === "TRADE_CLOSED" ? new Date() : undefined,
+          rawSuccessPayloadJson: toJsonValue(result),
+          lastErrorCode: null,
+          lastErrorMessage: null,
+        },
+      }),
+      prisma.paymentAttempt.create({
+        data: {
+          orderId: order.id,
+          attemptNo,
+          action: "query",
+          providerCode: order.providerCode,
+          channelCode: order.channelCode,
+          status: PaymentAttemptStatus.SUCCEEDED,
+          responsePayloadJson: toJsonValue(result),
+          providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
+          providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
+        },
+      }),
+    ])
+
+    if (nextStatus === PaymentOrderStatus.PAID) {
+      await fulfillPaymentOrderIfNeeded(order.id)
+      if (order.status !== PaymentOrderStatus.PAID) {
+        await emitAddonPaymentPaidEvent({
+          orderId: order.id,
+          merchantOrderNo: order.merchantOrderNo,
+          bizScene: order.bizScene,
+          providerCode: order.providerCode,
+          channelCode: order.channelCode,
+          userId: order.userId,
+          amountFen: order.amountFen,
+          currency: order.currency,
+        })
+      }
+    }
+
+    return result
+  }
+
+  const result = await queryAddonPaymentOrder(order.providerCode, {
+    merchantOrderNo,
+    currentStatus: order.status,
+  })
+
+  if (!result.ok) {
     await createCheckoutAttempt({
       orderId: order.id,
       providerCode: order.providerCode,
@@ -883,32 +1080,27 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
       attemptNo,
       action: "query",
       status: PaymentAttemptStatus.FAILED,
-      responsePayloadJson: toJsonValue(result),
-      providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
-      errorCode: errorMeta.code,
-      errorMessage: errorMeta.message,
+      responsePayloadJson: toJsonValue(result.responsePayload ?? undefined),
+      providerTraceId: result.providerTraceId,
+      providerTradeNo: result.providerTradeNo,
+      errorCode: result.errorCode,
+      errorMessage: result.errorMessage ?? "查询支付订单失败",
     })
-    return result
+    return result.responsePayload ?? result
   }
 
-  const tradeStatus = typeof result.tradeStatus === "string" ? result.tradeStatus : ""
-  const nextStatus = mapTradeStatusToOrderStatus(order.status, tradeStatus)
-  const paidAt = typeof result.sendPayDate === "string"
-    ? new Date(result.sendPayDate.replace(" ", "T"))
-    : null
+  const nextStatus = result.orderStatus ?? order.status
 
   await prisma.$transaction([
     prisma.paymentOrder.update({
       where: { id: order.id },
       data: {
         status: nextStatus,
-        providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
-        providerBuyerId: typeof result.buyerUserId === "string"
-          ? result.buyerUserId
-          : (typeof result.buyerOpenId === "string" ? result.buyerOpenId : null),
-        paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined,
-        closedAt: tradeStatus === "TRADE_CLOSED" ? new Date() : undefined,
-        rawSuccessPayloadJson: toJsonValue(result),
+        providerTradeNo: result.providerTradeNo,
+        providerBuyerId: result.providerBuyerId,
+        paidAt: result.paidAt ?? undefined,
+        closedAt: result.closedAt ?? undefined,
+        rawSuccessPayloadJson: toJsonValue(result.responsePayload ?? undefined),
         lastErrorCode: null,
         lastErrorMessage: null,
       },
@@ -921,18 +1113,30 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
         providerCode: order.providerCode,
         channelCode: order.channelCode,
         status: PaymentAttemptStatus.SUCCEEDED,
-        responsePayloadJson: toJsonValue(result),
-        providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
-        providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
+        responsePayloadJson: toJsonValue(result.responsePayload ?? undefined),
+        providerTraceId: result.providerTraceId,
+        providerTradeNo: result.providerTradeNo,
       },
     }),
   ])
 
   if (nextStatus === PaymentOrderStatus.PAID) {
     await fulfillPaymentOrderIfNeeded(order.id)
+    if (order.status !== PaymentOrderStatus.PAID) {
+      await emitAddonPaymentPaidEvent({
+        orderId: order.id,
+        merchantOrderNo: order.merchantOrderNo,
+        bizScene: order.bizScene,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        userId: order.userId,
+        amountFen: order.amountFen,
+        currency: order.currency,
+      })
+    }
   }
 
-  return result
+  return result.responsePayload ?? result
 }
 
 export async function handleAlipayPaymentNotification(payload: Record<string, string>) {
@@ -945,7 +1149,11 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
         where: { merchantOrderNo },
         select: {
           id: true,
+          merchantOrderNo: true,
+          bizScene: true,
+          userId: true,
           amountFen: true,
+          currency: true,
           status: true,
           fulfillmentStatus: true,
           providerCode: true,
@@ -1061,6 +1269,168 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
 
   if (nextStatus === PaymentOrderStatus.PAID) {
     await fulfillPaymentOrderIfNeeded(order.id)
+    if (order.status !== PaymentOrderStatus.PAID) {
+      await emitAddonPaymentPaidEvent({
+        orderId: order.id,
+        merchantOrderNo: order.merchantOrderNo,
+        bizScene: order.bizScene,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        userId: order.userId,
+        amountFen: order.amountFen,
+        currency: order.currency,
+      })
+    }
+  }
+
+  return true
+}
+
+export async function handleAddonPaymentProviderNotification(providerCode: string, request: Request) {
+  const notificationResult = await handleAddonPaymentNotification(providerCode, request)
+  const merchantOrderNo = notificationResult.merchantOrderNo
+
+  const order = merchantOrderNo
+    ? await prisma.paymentOrder.findUnique({
+        where: { merchantOrderNo },
+        select: {
+          id: true,
+          merchantOrderNo: true,
+          bizScene: true,
+          userId: true,
+          amountFen: true,
+          currency: true,
+          status: true,
+          providerCode: true,
+          channelCode: true,
+        },
+      })
+    : null
+
+  const notification = await prisma.paymentNotification.create({
+    data: {
+      orderId: order?.id ?? null,
+      providerCode,
+      channelCode: notificationResult.channelCode ?? order?.channelCode ?? null,
+      notifyType: notificationResult.notifyType,
+      notifyId: notificationResult.notifyId,
+      merchantOrderNo,
+      providerTradeNo: notificationResult.providerTradeNo,
+      tradeStatus: notificationResult.tradeStatus,
+      verified: notificationResult.verified,
+      handled: false,
+      payloadJson: toJsonValue(notificationResult.payload) ?? Prisma.JsonNull,
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (!notificationResult.verified) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: notificationResult.errorMessage ?? `${providerCode} 异步通知验签失败`,
+      },
+    })
+    return false
+  }
+
+  if (!order) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: "未找到对应支付订单",
+      },
+    })
+    return false
+  }
+
+  if (order.providerCode !== providerCode) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: "异步通知的支付提供方与订单记录不匹配",
+      },
+    })
+    return false
+  }
+
+  if (notificationResult.channelCode && notificationResult.channelCode !== order.channelCode) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: "异步通知的支付通道与订单记录不匹配",
+      },
+    })
+    return false
+  }
+
+  if (notificationResult.amountFen !== null && notificationResult.amountFen > 0 && notificationResult.amountFen !== order.amountFen) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: "异步通知金额与订单金额不匹配",
+      },
+    })
+    return false
+  }
+
+  if (notificationResult.errorMessage) {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: notificationResult.errorMessage,
+      },
+    })
+    return false
+  }
+
+  const nextStatus = notificationResult.orderStatus ?? order.status
+
+  await prisma.$transaction([
+    prisma.paymentOrder.update({
+      where: { id: order.id },
+      data: {
+        status: nextStatus,
+        providerTradeNo: notificationResult.providerTradeNo,
+        providerBuyerId: notificationResult.providerBuyerId,
+        paidAt: nextStatus === PaymentOrderStatus.PAID
+          ? (notificationResult.paidAt ?? new Date())
+          : undefined,
+        closedAt: nextStatus === PaymentOrderStatus.CLOSED || nextStatus === PaymentOrderStatus.REFUNDED
+          ? (notificationResult.closedAt ?? new Date())
+          : undefined,
+        rawSuccessPayloadJson: toJsonValue(notificationResult.payload),
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      },
+    }),
+    prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        handled: true,
+        handledAt: new Date(),
+        errorMessage: null,
+      },
+    }),
+  ])
+
+  if (nextStatus === PaymentOrderStatus.PAID) {
+    await fulfillPaymentOrderIfNeeded(order.id)
+    if (order.status !== PaymentOrderStatus.PAID) {
+      await emitAddonPaymentPaidEvent({
+        orderId: order.id,
+        merchantOrderNo: order.merchantOrderNo,
+        bizScene: order.bizScene,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        userId: order.userId,
+        amountFen: order.amountFen,
+        currency: order.currency,
+        request,
+      })
+    }
   }
 
   return true
@@ -1164,7 +1534,7 @@ export async function getPaymentOrderStatusForUser(userId: number, merchantOrder
     apiError(404, "支付订单不存在")
   }
 
-  if (order.providerCode === "alipay" && (order.status === PaymentOrderStatus.PENDING || order.status === PaymentOrderStatus.WAIT_BUYER_PAY)) {
+  if (order.status === PaymentOrderStatus.PENDING || order.status === PaymentOrderStatus.WAIT_BUYER_PAY) {
     try {
       await syncPaymentOrderStatusByQuery(order.merchantOrderNo)
     } catch {

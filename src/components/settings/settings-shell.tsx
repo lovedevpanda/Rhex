@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, Settings2 } from "lucide-react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
 import { SettingsSidebarNav, type SettingsNavItem } from "@/components/settings/settings-sidebar-nav"
 import { Button } from "@/components/ui/rbutton"
 
@@ -19,10 +20,22 @@ interface SettingsShellProps {
   }
   pointName: string
   boardApplicationEnabled: boolean
+  sidebarTop?: ReactNode
+  sidebarBottom?: ReactNode
+  contentBefore?: ReactNode
+  contentAfter?: ReactNode
   children: ReactNode
 }
 
-export function SettingsShell({ children, pointName, boardApplicationEnabled }: SettingsShellProps) {
+export function SettingsShell({
+  children,
+  pointName,
+  boardApplicationEnabled,
+  sidebarTop,
+  sidebarBottom,
+  contentBefore,
+  contentAfter,
+}: SettingsShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") ?? "profile"
@@ -41,7 +54,25 @@ export function SettingsShell({ children, pointName, boardApplicationEnabled }: 
   ] satisfies SettingsNavItem[]
   const currentItem = navItems.find((item) => item.key === currentTab) ?? navItems[0]
 
-  return (
+  const contentSection = (className?: string) => (
+    <section className={className}>
+      {contentBefore}
+      <AddonSurfaceClientRenderer
+        surface="settings.content"
+        surfaceProps={{
+          boardApplicationEnabled,
+          currentItem,
+          currentTab,
+          pointName,
+          showMobileDetail,
+        }}
+        fallback={children}
+      />
+      {contentAfter}
+    </section>
+  )
+
+  const fallback = (
     <div className="space-y-6">
       <div className="lg:hidden">
         {showMobileDetail ? (
@@ -64,10 +95,11 @@ export function SettingsShell({ children, pointName, boardApplicationEnabled }: 
               </div>
             </div>
 
-            <section className="min-w-0">{children}</section>
+            {contentSection("min-w-0")}
           </div>
         ) : (
           <div className="space-y-4">
+            {sidebarTop}
             <div className="rounded-[28px] border border-border bg-[linear-gradient(160deg,rgba(15,23,42,0.06),rgba(15,23,42,0.02),transparent)] p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background">
@@ -86,17 +118,37 @@ export function SettingsShell({ children, pointName, boardApplicationEnabled }: 
               buildHref={(item) => `/settings?tab=${item.key}&mobile=detail`}
               className="p-3"
             />
+            {sidebarBottom}
           </div>
         )}
       </div>
 
       <div className="hidden gap-5 lg:grid lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[236px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:self-start">
+          {sidebarTop}
           <SettingsSidebarNav items={navItems} />
+          {sidebarBottom}
         </aside>
 
-        <section className="min-w-0 lg:min-h-[720px]">{children}</section>
+        {contentSection("min-w-0 lg:min-h-[720px]")}
       </div>
     </div>
+  )
+
+  return (
+    <AddonSurfaceClientRenderer
+      surface="settings.page"
+      surfaceProps={{
+        boardApplicationEnabled,
+        currentItem,
+        currentTab,
+        navItems,
+        pointName,
+        showMobileDetail,
+        sidebarBottom,
+        sidebarTop,
+      }}
+      fallback={fallback}
+    />
   )
 }

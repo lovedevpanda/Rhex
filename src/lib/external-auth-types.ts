@@ -1,4 +1,7 @@
-export type ExternalAuthProvider = "github" | "google"
+export type BuiltinExternalAuthProvider = "github" | "google"
+export type ExternalAuthProvider =
+  | BuiltinExternalAuthProvider
+  | (string & {})
 export type ExternalAuthFlowMethod = "oauth" | "passkey"
 export type ExternalAuthEntryMode = "login" | "register"
 export type ExternalAuthOAuthMode = ExternalAuthEntryMode | "connect"

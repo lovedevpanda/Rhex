@@ -8,6 +8,7 @@ import { SettingsTabs } from "@/components/settings/settings-tabs"
 import { UserAvatar } from "@/components/user/user-avatar"
 import { UserBlockToggleButton } from "@/components/user/user-block-toggle-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { buildSettingsHref } from "@/app/settings/settings-page-loader"
 import { followTabs } from "@/app/settings/settings-page-loader"
 import type { SettingsPageData } from "@/app/settings/settings-page-loader"
 
@@ -27,8 +28,18 @@ type SocialUserListResult = {
   nextCursor: string | null
 }
 
-function buildCursorHref(basePath: string, queryKey: string, cursor: string | null) {
-  return cursor ? `${basePath}&${queryKey}=${encodeURIComponent(cursor)}` : "#"
+function buildCursorHref(route: SettingsPageData["route"], basePath: string, queryKey: string, cursor: string | null) {
+  if (!cursor) {
+    return "#"
+  }
+
+  const [, queryPart = ""] = basePath.split("?", 2)
+  const baseSearchParams = Object.fromEntries(new URLSearchParams(queryPart).entries())
+
+  return buildSettingsHref(route, {
+    ...baseSearchParams,
+    [queryKey]: cursor,
+  })
 }
 
 export function FollowsSettingsSection({ data }: { data: SettingsPageData }) {
@@ -46,13 +57,13 @@ export function FollowsSettingsSection({ data }: { data: SettingsPageData }) {
         </CardHeader>
       </Card>
 
-      {route.currentFollowTab === "boards" ? <FollowBoardsPanel followedBoards={followedBoards} /> : null}
-      {route.currentFollowTab === "users" ? <FollowUsersPanel followedUsers={followedUsers} /> : null}
-      {route.currentFollowTab === "followers" ? <FollowersPanel followers={followers} /> : null}
-      {route.currentFollowTab === "tags" ? <FollowTagsPanel followedTags={followedTags} /> : null}
-      {route.currentFollowTab === "posts" ? <FollowPostsPanel followedPosts={followedPosts} listDisplayMode={settings.homeFeedPostListDisplayMode} /> : null}
+      {route.currentFollowTab === "boards" ? <FollowBoardsPanel route={route} followedBoards={followedBoards} /> : null}
+      {route.currentFollowTab === "users" ? <FollowUsersPanel route={route} followedUsers={followedUsers} /> : null}
+      {route.currentFollowTab === "followers" ? <FollowersPanel route={route} followers={followers} /> : null}
+      {route.currentFollowTab === "tags" ? <FollowTagsPanel route={route} followedTags={followedTags} /> : null}
+      {route.currentFollowTab === "posts" ? <FollowPostsPanel route={route} followedPosts={followedPosts} listDisplayMode={settings.homeFeedPostListDisplayMode} /> : null}
       {route.currentFollowTab === "history" ? <ReadingHistoryTabPanel /> : null}
-      {route.currentFollowTab === "blocks" ? <BlockedUsersPanel blockedUsers={blockedUsers} /> : null}
+      {route.currentFollowTab === "blocks" ? <BlockedUsersPanel route={route} blockedUsers={blockedUsers} /> : null}
     </div>
   )
 }
@@ -68,7 +79,7 @@ function ReadingHistoryTabPanel() {
   )
 }
 
-function FollowBoardsPanel({ followedBoards }: { followedBoards: SettingsPageData["followedBoards"] }) {
+function FollowBoardsPanel({ route, followedBoards }: { route: SettingsPageData["route"]; followedBoards: SettingsPageData["followedBoards"] }) {
   if (!followedBoards) {
     return (
       <Card>
@@ -115,8 +126,8 @@ function FollowBoardsPanel({ followedBoards }: { followedBoards: SettingsPageDat
           <CursorPaginationBar
             hasPrevPage={followedBoards.hasPrevPage}
             hasNextPage={followedBoards.hasNextPage}
-            prevHref={buildCursorHref("/settings?tab=follows&followTab=boards", "listBefore", followedBoards.prevCursor)}
-            nextHref={buildCursorHref("/settings?tab=follows&followTab=boards", "listAfter", followedBoards.nextCursor)}
+            prevHref={buildCursorHref(route, "/settings?tab=follows&followTab=boards", "listBefore", followedBoards.prevCursor)}
+            nextHref={buildCursorHref(route, "/settings?tab=follows&followTab=boards", "listAfter", followedBoards.nextCursor)}
           />
         ) : null}
       </CardContent>
@@ -124,9 +135,10 @@ function FollowBoardsPanel({ followedBoards }: { followedBoards: SettingsPageDat
   )
 }
 
-function FollowUsersPanel({ followedUsers }: { followedUsers: SettingsPageData["followedUsers"] }) {
+function FollowUsersPanel({ route, followedUsers }: { route: SettingsPageData["route"]; followedUsers: SettingsPageData["followedUsers"] }) {
   return (
     <SocialUserListPanel
+      route={route}
       users={followedUsers}
       title="关注用户"
       emptyText="你还没有关注任何用户。"
@@ -136,9 +148,10 @@ function FollowUsersPanel({ followedUsers }: { followedUsers: SettingsPageData["
   )
 }
 
-function FollowersPanel({ followers }: { followers: SettingsPageData["followers"] }) {
+function FollowersPanel({ route, followers }: { route: SettingsPageData["route"]; followers: SettingsPageData["followers"] }) {
   return (
     <SocialUserListPanel
+      route={route}
       users={followers}
       title="我的粉丝"
       emptyText="当前还没有粉丝。"
@@ -148,7 +161,7 @@ function FollowersPanel({ followers }: { followers: SettingsPageData["followers"
   )
 }
 
-function FollowTagsPanel({ followedTags }: { followedTags: SettingsPageData["followedTags"] }) {
+function FollowTagsPanel({ route, followedTags }: { route: SettingsPageData["route"]; followedTags: SettingsPageData["followedTags"] }) {
   if (!followedTags) {
     return (
       <Card>
@@ -191,8 +204,8 @@ function FollowTagsPanel({ followedTags }: { followedTags: SettingsPageData["fol
           <CursorPaginationBar
             hasPrevPage={followedTags.hasPrevPage}
             hasNextPage={followedTags.hasNextPage}
-            prevHref={buildCursorHref("/settings?tab=follows&followTab=tags", "listBefore", followedTags.prevCursor)}
-            nextHref={buildCursorHref("/settings?tab=follows&followTab=tags", "listAfter", followedTags.nextCursor)}
+            prevHref={buildCursorHref(route, "/settings?tab=follows&followTab=tags", "listBefore", followedTags.prevCursor)}
+            nextHref={buildCursorHref(route, "/settings?tab=follows&followTab=tags", "listAfter", followedTags.nextCursor)}
           />
         ) : null}
       </CardContent>
@@ -201,9 +214,11 @@ function FollowTagsPanel({ followedTags }: { followedTags: SettingsPageData["fol
 }
 
 function FollowPostsPanel({
+  route,
   followedPosts,
   listDisplayMode,
 }: {
+  route: SettingsPageData["route"]
   followedPosts: SettingsPageData["followedPosts"]
   listDisplayMode: SettingsPageData["settings"]["homeFeedPostListDisplayMode"]
 }) {
@@ -215,12 +230,13 @@ function FollowPostsPanel({
     )
   }
 
-  return <PostListPanel title="关注帖子" emptyText="当前还没有关注任何帖子。" posts={followedPosts} listDisplayMode={listDisplayMode} paginationBase="/settings?tab=follows&followTab=posts" />
+  return <PostListPanel route={route} title="关注帖子" emptyText="当前还没有关注任何帖子。" posts={followedPosts} listDisplayMode={listDisplayMode} paginationBase="/settings?tab=follows&followTab=posts" />
 }
 
-function BlockedUsersPanel({ blockedUsers }: { blockedUsers: SettingsPageData["blockedUsers"] }) {
+function BlockedUsersPanel({ route, blockedUsers }: { route: SettingsPageData["route"]; blockedUsers: SettingsPageData["blockedUsers"] }) {
   return (
     <SocialUserListPanel
+      route={route}
       users={blockedUsers}
       title="拉黑用户"
       emptyText="当前还没有拉黑任何用户。"
@@ -242,6 +258,7 @@ function BlockedUsersPanel({ blockedUsers }: { blockedUsers: SettingsPageData["b
 }
 
 function SocialUserListPanel({
+  route,
   users,
   title,
   emptyText,
@@ -249,6 +266,7 @@ function SocialUserListPanel({
   paginationBase,
   renderAction,
 }: {
+  route: SettingsPageData["route"]
   users: SocialUserListResult | null
   title: string
   emptyText: string
@@ -288,8 +306,8 @@ function SocialUserListPanel({
           <CursorPaginationBar
             hasPrevPage={users.hasPrevPage}
             hasNextPage={users.hasNextPage}
-            prevHref={buildCursorHref(paginationBase, "listBefore", users.prevCursor)}
-            nextHref={buildCursorHref(paginationBase, "listAfter", users.nextCursor)}
+            prevHref={buildCursorHref(route, paginationBase, "listBefore", users.prevCursor)}
+            nextHref={buildCursorHref(route, paginationBase, "listAfter", users.nextCursor)}
           />
         ) : null}
       </CardContent>
@@ -315,12 +333,14 @@ function SocialUserRow({ user, action }: { user: SocialUserListItem; action?: Re
 }
 
 function PostListPanel({
+  route,
   title,
   emptyText,
   posts,
   listDisplayMode,
   paginationBase,
 }: {
+  route: SettingsPageData["route"]
   title: string
   emptyText: string
   posts: NonNullable<SettingsPageData["userPosts"]>
@@ -344,8 +364,8 @@ function PostListPanel({
           <CursorPaginationBar
             hasPrevPage={posts.hasPrevPage}
             hasNextPage={posts.hasNextPage}
-            prevHref={buildCursorHref(paginationBase, "listBefore", posts.prevCursor)}
-            nextHref={buildCursorHref(paginationBase, "listAfter", posts.nextCursor)}
+            prevHref={buildCursorHref(route, paginationBase, "listBefore", posts.prevCursor)}
+            nextHref={buildCursorHref(route, paginationBase, "listAfter", posts.nextCursor)}
           />
         ) : null}
       </CardContent>

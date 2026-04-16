@@ -3,10 +3,19 @@
 import React from "react"
 import { Bold, CircleHelp, Highlighter, ImageIcon, Link2, Maximize2, Minimize2, Quote, SeparatorHorizontal, Smile, Strikethrough, Table2, Underline, Video } from "lucide-react"
 
+import { AddonEditorToolbarItemHost } from "@/components/addon-editor-toolbar-item"
 import { EDITOR_LINE_HEIGHT_REM, EDITOR_LINE_NUMBER_GUTTER_WIDTH_CLASS, TOOLBAR_TIPS } from "@/components/refined-rich-post-editor/constants"
 import { AlignmentSelect, CodeFormatSelect, HeadingSelect, ListSelect, ToolButton } from "@/components/refined-rich-post-editor/toolbar-controls"
-import type { ToolbarTipDefinition } from "@/components/refined-rich-post-editor/types"
+import type {
+  EditorSelectionStore,
+  ToolbarTipDefinition,
+} from "@/components/refined-rich-post-editor/types"
 import { MarkdownContent } from "@/components/markdown-content"
+import type {
+  AddonEditorTarget,
+  AddonEditorToolbarApi,
+  AddonEditorToolbarItemDescriptor,
+} from "@/addons-host/editor-types"
 import type { ClientPlatform } from "@/lib/client-platform"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
@@ -324,8 +333,13 @@ export function EditorBody({
 }
 
 type EditorToolbarProps = {
+  context: AddonEditorTarget
   visible: boolean
   disabled: boolean
+  toolbarItems: AddonEditorToolbarItemDescriptor[]
+  toolbarApi: AddonEditorToolbarApi
+  selectionStore: EditorSelectionStore
+  value: string
   isFullscreen: boolean
   platform: ClientPlatform
   imageToolbarTip: ToolbarTipDefinition
@@ -343,7 +357,7 @@ type EditorToolbarProps = {
   tableButtonRef: React.RefObject<HTMLDivElement | null>
   linkButtonRef: React.RefObject<HTMLDivElement | null>
   imageButtonRef: React.RefObject<HTMLDivElement | null>
-  onToolbarMouseDown: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onToolbarMouseDown: (event: React.MouseEvent<HTMLElement>) => void
   onToolbarSelectMouseDown: () => void
   onToolbarSelectOpenChange: (open: boolean) => void
   onSetHeadingLevel: (level: 1 | 2 | 3) => void
@@ -367,8 +381,13 @@ type EditorToolbarProps = {
 }
 
 export function EditorToolbar({
+  context,
   visible,
   disabled,
+  toolbarItems,
+  toolbarApi,
+  selectionStore,
+  value,
   isFullscreen,
   platform,
   imageToolbarTip,
@@ -408,6 +427,12 @@ export function EditorToolbar({
   onOpenHelpDialog,
   onUpload,
 }: EditorToolbarProps) {
+  const selection = React.useSyncExternalStore(
+    selectionStore.subscribe,
+    selectionStore.getSnapshot,
+    selectionStore.getSnapshot,
+  )
+
   if (!visible) {
     return null
   }
@@ -503,6 +528,18 @@ export function EditorToolbar({
         <ToolButton tip={TOOLBAR_TIPS.help} platform={platform} onMouseDown={onToolbarMouseDown} onClick={onOpenHelpDialog} disabled={disabled}>
           <CircleHelp className="h-4 w-4" />
         </ToolButton>
+        {toolbarItems.map((item) => (
+          <AddonEditorToolbarItemHost
+            key={`${item.addonId}:${item.providerCode}:${item.key}`}
+            context={context}
+            disabled={disabled}
+            editor={toolbarApi}
+            item={item}
+            onMouseDown={onToolbarMouseDown}
+            selection={selection}
+            value={value}
+          />
+        ))}
       </div>
     </div>
   )

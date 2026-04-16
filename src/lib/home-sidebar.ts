@@ -1,3 +1,4 @@
+import { executeAddonAsyncWaterfallHook } from "@/addons-host/runtime/hooks"
 import type { SidebarUserCardData } from "@/components/user/sidebar-user-card"
 import { findHomeSidebarHotTopics } from "@/db/home-sidebar-queries"
 import type { getCurrentUser } from "@/lib/auth"
@@ -15,7 +16,7 @@ export async function getHomeSidebarHotTopics(limit = 5) {
     getAnonymousMaskDisplayIdentity(),
   ])
 
-  return posts.map((post) => ({
+  const items = posts.map((post) => ({
     ...(function () {
       const maskedAuthor = applyAnonymousIdentityToPost({
         isAnonymous: Boolean(post.isAnonymous),
@@ -38,6 +39,9 @@ export async function getHomeSidebarHotTopics(limit = 5) {
     title: post.title,
     lastRepliedAt: formatMonthDayTime(post.lastCommentedAt ?? post.createdAt),
   }))
+  const hooked = await executeAddonAsyncWaterfallHook("home.sidebar.hot-topics.items", items)
+
+  return Array.isArray(hooked.value) ? hooked.value : items
 }
 
 type SidebarUserSource = Awaited<ReturnType<typeof getCurrentUser>> | null
@@ -78,12 +82,14 @@ export async function buildSidebarUser(user: SidebarUserSource, snapshot: UserSu
     pointName: settings.pointName,
     checkInEnabled: settings.checkInEnabled,
     checkInReward,
+    checkInMakeUpEnabled: settings.checkInMakeUpEnabled,
     checkInMakeUpCardPrice: settings.checkInMakeUpCardPrice,
     checkInVipMakeUpCardPrice: settings.checkInVipMakeUpCardPrice,
     checkInVip1MakeUpCardPrice: settings.checkInVip1MakeUpCardPrice,
     checkInVip2MakeUpCardPrice: settings.checkInVip2MakeUpCardPrice,
     checkInVip3MakeUpCardPrice: settings.checkInVip3MakeUpCardPrice,
     checkInMakeUpCountsTowardStreak: settings.checkInMakeUpCountsTowardStreak,
+    checkInMakeUpOldestDayLimit: settings.checkInMakeUpOldestDayLimit,
     checkedInToday: snapshot?.checkedInToday ?? false,
     currentCheckInStreak: snapshot?.currentCheckInStreak ?? 0,
     maxCheckInStreak: snapshot?.maxCheckInStreak ?? 0,

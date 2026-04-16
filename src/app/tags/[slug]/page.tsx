@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPostStream } from "@/components/forum/forum-post-stream"
 import { FollowToggleButton } from "@/components/follow-toggle-button"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
@@ -78,7 +79,12 @@ export default async function TagPage(props: PageProps<"/tags/[slug]">) {
           main={(
             <main className="pb-12 py-1 mt-5">
             <div className="space-y-6">
-              <Card className="overflow-hidden border-none bg-linear-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
+              <AddonSlotRenderer slot="tag.page.before" />
+              <AddonSurfaceRenderer surface="tag.page" props={{ posts, settings, tag }}>
+                <>
+              <AddonSlotRenderer slot="tag.hero.before" />
+              <AddonSurfaceRenderer surface="tag.hero" props={{ isFollowingTag, settings, tag }}>
+                <Card className="overflow-hidden border-none bg-linear-to-r from-[#1f1b16] via-[#2e261f] to-[#382c22] text-white shadow-soft">
                 <CardContent className="p-8">
                   <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                     <div>
@@ -104,15 +110,30 @@ export default async function TagPage(props: PageProps<"/tags/[slug]">) {
                   </div>
                 </CardContent>
               </Card>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tag.hero.after" />
 
-              <ForumPostStream posts={posts} compactFirstItem={false} />
-              {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前标签下还没有内容。</div> : null}
+              <AddonSlotRenderer slot="tag.content.before" />
+              <AddonSurfaceRenderer surface="tag.content" props={{ posts, tag }}>
+                <>
+                  <ForumPostStream posts={posts} compactFirstItem={false} />
+                  {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前标签下还没有内容。</div> : null}
+                </>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tag.content.after" />
+                </>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tag.page.after" />
             </div>
             </main>
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              <AddonSlotRenderer slot="tag.sidebar.before" />
+              <AddonSurfaceRenderer surface="tag.sidebar" props={{ hotTopics, settings, tag }}>
+                <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="tag.sidebar.after" />
             </aside>
           )}
         />

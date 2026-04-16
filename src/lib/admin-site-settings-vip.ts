@@ -1,5 +1,6 @@
 import { updateSiteSettingsRecord } from "@/db/site-settings-write-queries"
 import { apiError, readOptionalNumberField, readOptionalStringField, type JsonObject } from "@/lib/api-route"
+import { normalizeCheckInMakeUpOldestDayLimit } from "@/lib/check-in-policy"
 import { finalizeSiteSettingsUpdate, type SiteSettingsRecord } from "@/lib/admin-site-settings-shared"
 import { enqueueRefreshAllUserCheckInStreakSummaries } from "@/lib/check-in-streak-service"
 import {
@@ -110,11 +111,19 @@ export async function updateVipSiteSettingsSection(existing: SiteSettingsRecord,
   const checkInVipMakeUpCardPrice = Math.max(0, readOptionalNumberField(body, "checkInVipMakeUpCardPrice") ?? checkInVip1MakeUpCardPrice)
   const existingCheckInStreakSettings = resolveCheckInStreakSettings({
     appStateJson: existing.appStateJson,
+    enabledFallback: true,
     makeUpCountsTowardStreakFallback: true,
+    oldestDayLimitFallback: 0,
   })
+  const checkInMakeUpEnabled = body.checkInMakeUpEnabled === undefined
+    ? existingCheckInStreakSettings.enabled
+    : Boolean(body.checkInMakeUpEnabled)
   const checkInMakeUpCountsTowardStreak = body.checkInMakeUpCountsTowardStreak === undefined
     ? existingCheckInStreakSettings.makeUpCountsTowardStreak
     : Boolean(body.checkInMakeUpCountsTowardStreak)
+  const checkInMakeUpOldestDayLimit = normalizeCheckInMakeUpOldestDayLimit(
+    readOptionalNumberField(body, "checkInMakeUpOldestDayLimit") ?? existingCheckInStreakSettings.oldestDayLimit,
+  )
   const nicknameChangePointCost = Math.max(0, readOptionalNumberField(body, "nicknameChangePointCost") ?? existing.nicknameChangePointCost ?? 0)
   const nicknameChangeVip1PointCost = Math.max(0, readOptionalNumberField(body, "nicknameChangeVip1PointCost") ?? nicknameChangePointCost)
   const nicknameChangeVip2PointCost = Math.max(0, readOptionalNumberField(body, "nicknameChangeVip2PointCost") ?? nicknameChangePointCost)
@@ -193,7 +202,9 @@ export async function updateVipSiteSettingsSection(existing: SiteSettingsRecord,
     vip3: inviteCodeVip3Price,
   })
   const appStateWithCheckInStreak = mergeCheckInStreakSettings(appStateJson, {
+    enabled: checkInMakeUpEnabled,
     makeUpCountsTowardStreak: checkInMakeUpCountsTowardStreak,
+    oldestDayLimit: checkInMakeUpOldestDayLimit,
   })
   const appStateWithVipLevelIcons = mergeVipLevelIconSettings(appStateWithCheckInStreak, vipLevelIcons)
   const appStateWithVipNameColors = mergeVipNameColorSettings(appStateWithVipLevelIcons, vipNameColors)

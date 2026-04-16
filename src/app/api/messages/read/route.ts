@@ -1,5 +1,6 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
-import { markConversationAsRead } from "@/lib/messages"
+import { getUnreadMessageConversationCount, markConversationAsRead } from "@/lib/messages"
+import { messageEventBus } from "@/lib/message-event-bus"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
@@ -17,6 +18,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     },
   }), async () => {
     await markConversationAsRead(conversationId, currentUser.id)
+    const unreadMessageCount = await getUnreadMessageConversationCount(currentUser.id)
 
     logRouteWriteSuccess({
       scope: "messages-read",
@@ -27,6 +29,13 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     })
 
     revalidateUserSurfaceCache(currentUser.id)
+    await messageEventBus.publish({
+      type: "conversation.read",
+      conversationId,
+      userId: currentUser.id,
+      unreadMessageCount,
+      occurredAt: new Date().toISOString(),
+    })
 
     return apiSuccess(undefined, "已读状态已更新")
   })

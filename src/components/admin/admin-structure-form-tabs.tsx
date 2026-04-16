@@ -1,8 +1,8 @@
 "use client"
 
+import { AddonEditor } from "@/components/addon-editor"
 import { Button } from "@/components/ui/button"
 import { IconPicker } from "@/components/ui/icon-picker"
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import type {
   BoardSidebarLinkDraft,
   ModalMode,
@@ -136,7 +136,7 @@ export function StructureContentTab({
         <h4 className="text-sm font-semibold">节点规则</h4>
         <div className="mt-4 space-y-2">
           <p className="text-sm font-medium">节点规则 Markdown</p>
-          <RefinedRichPostEditor value={form.rulesMarkdown} onChange={(value) => updateField("rulesMarkdown", value)} placeholder="留空时前台显示系统默认节点规则" minHeight={220} uploadFolder="posts" />
+          <AddonEditor context="admin" value={form.rulesMarkdown} onChange={(value) => updateField("rulesMarkdown", value)} placeholder="留空时前台显示系统默认节点规则" minHeight={220} uploadFolder="posts" />
         </div>
       </div>
     </div>

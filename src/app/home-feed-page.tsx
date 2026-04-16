@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumFeedList } from "@/components/forum/forum-feed-list"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
@@ -136,6 +137,25 @@ export async function HomeFeedPage({
     redirect(buildHomeFeedHref("latest"))
   }
 
+  const sortBeforeSlot = sort === "new"
+    ? "feed.new.before"
+    : sort === "hot"
+      ? "feed.hot.before"
+      : sort === "following"
+        ? "feed.following.before"
+        : sort === "universe"
+          ? "feed.universe.before"
+          : "feed.latest.before"
+  const sortAfterSlot = sort === "new"
+    ? "feed.new.after"
+    : sort === "hot"
+      ? "feed.hot.after"
+      : sort === "following"
+        ? "feed.following.after"
+        : sort === "universe"
+          ? "feed.universe.after"
+          : "feed.latest.after"
+
   return (
     <div className="min-h-screen bg-background">
       {currentUser?.id && shouldAutoCheckIn ? (
@@ -144,105 +164,123 @@ export async function HomeFeedPage({
       <SiteHeader />
 
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="feed.page.before" />
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <div className="pb-12 py-1">
-              {mainTopSlot ? <div className="mt-6 mb-4">{mainTopSlot}</div> : null}
-              {sort === "universe" ? (
+              <AddonSlotRenderer slot={sortBeforeSlot} />
+              <AddonSurfaceRenderer surface={sortBeforeSlot.replace(".before", "")} props={{ currentPage, sort, settings }}>
                 <>
-                  {enableUniverseSourceFilter ? (
-                    <RssUniversePageClient initialPage={currentPage} showUniverse={showUniverse} />
-                  ) : universeFeedPage ? (
+                  {mainTopSlot ? <div className="mt-6 mb-4">{mainTopSlot}</div> : null}
+                  <AddonSlotRenderer slot="feed.main.before" />
+                  <AddonSurfaceRenderer surface="feed.main" props={{ currentPage, sort, settings }}>
+                  <>
+                  {sort === "universe" ? (
                     <>
-                      <RssUniverseFeedView items={universeFeedPage.items} showUniverse={showUniverse} />
-                      {universeFeedPage.items.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">宇宙栏目还没有可展示的采集内容。</div> : null}
-                      {universeFeedPage.pagination.totalPages > 1 ? (
-                        <PageNumberPagination
-                          page={universeFeedPage.pagination.page}
-                          totalPages={universeFeedPage.pagination.totalPages}
-                          hasPrevPage={universeFeedPage.pagination.hasPrevPage}
-                          hasNextPage={universeFeedPage.pagination.hasNextPage}
-                          buildHref={(targetPage) => buildHomeFeedHref(sort, targetPage)}
-                        />
+                      {enableUniverseSourceFilter ? (
+                        <RssUniversePageClient initialPage={currentPage} showUniverse={showUniverse} />
+                      ) : universeFeedPage ? (
+                        <>
+                          <RssUniverseFeedView items={universeFeedPage.items} showUniverse={showUniverse} />
+                          {universeFeedPage.items.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">宇宙栏目还没有可展示的采集内容。</div> : null}
+                          {universeFeedPage.pagination.totalPages > 1 ? (
+                            <PageNumberPagination
+                              page={universeFeedPage.pagination.page}
+                              totalPages={universeFeedPage.pagination.totalPages}
+                              hasPrevPage={universeFeedPage.pagination.hasPrevPage}
+                              hasNextPage={universeFeedPage.pagination.hasNextPage}
+                              buildHref={(targetPage) => buildHomeFeedHref(sort, targetPage)}
+                            />
+                          ) : null}
+                        </>
                       ) : null}
                     </>
                   ) : null}
-                </>
-              ) : null}
-              {sort !== "universe" && postFeedPage ? (() => {
-                const { items: feed, page, totalPages, hasPrevPage, hasNextPage } = postFeedPage
+                  {sort !== "universe" && postFeedPage ? (() => {
+                    const { items: feed, page, totalPages, hasPrevPage, hasNextPage } = postFeedPage
 
-                if (currentPage !== page) {
-                  redirect(buildHomeFeedHref(sort, page))
-                }
+                    if (currentPage !== page) {
+                      redirect(buildHomeFeedHref(sort, page))
+                    }
 
-                const currentSort = postSort ?? "latest"
-                const feedDisplayItems = mapForumFeedItemsToDisplayItems(feed, currentSort, settings)
-                const useInfiniteFeed = settings.homeFeedPostListLoadMode === POST_LIST_LOAD_MODE_INFINITE
-                const isFollowingFeed = currentSort === "following"
-                const showPagination = isFollowingFeed ? page > 1 || feed.length > 0 : true
-                const emptyStateText = isFollowingFeed
-                  ? currentUser
-                    ? "你关注的节点和用户还没有可展示的帖子，或者你还没开始关注。"
-                    : "登录后即可查看你关注的节点和用户最近发帖。"
-                  : "当前排序下还没有可展示的帖子内容。"
+                    const currentSort = postSort ?? "latest"
+                    const feedDisplayItems = mapForumFeedItemsToDisplayItems(feed, currentSort, settings)
+                    const useInfiniteFeed = settings.homeFeedPostListLoadMode === POST_LIST_LOAD_MODE_INFINITE
+                    const isFollowingFeed = currentSort === "following"
+                    const showPagination = isFollowingFeed ? page > 1 || feed.length > 0 : true
+                    const emptyStateText = isFollowingFeed
+                      ? currentUser
+                        ? "你关注的节点和用户还没有可展示的帖子，或者你还没开始关注。"
+                        : "登录后即可查看你关注的节点和用户最近发帖。"
+                      : "当前排序下还没有可展示的帖子内容。"
 
-                return (
-                  <>
-                    {useInfiniteFeed ? (
-                      <InfiniteForumFeed
-                        initialItems={feedDisplayItems}
-                        initialPage={page}
-                        initialHasNextPage={hasNextPage}
-                        currentSort={currentSort}
-                        showUniverse={showUniverse}
-                        listDisplayMode={settings.homeFeedPostListDisplayMode}
-                        postLinkDisplayMode={settings.postLinkDisplayMode}
-                      />
-                    ) : (
-                      <ForumFeedList items={feed} currentSort={currentSort} showUniverse={showUniverse} listDisplayMode={settings.homeFeedPostListDisplayMode} postLinkDisplayMode={settings.postLinkDisplayMode} />
-                    )}
+                    return (
+                      <>
+                        {useInfiniteFeed ? (
+                          <InfiniteForumFeed
+                            initialItems={feedDisplayItems}
+                            initialPage={page}
+                            initialHasNextPage={hasNextPage}
+                            currentSort={currentSort}
+                            showUniverse={showUniverse}
+                            listDisplayMode={settings.homeFeedPostListDisplayMode}
+                            postLinkDisplayMode={settings.postLinkDisplayMode}
+                          />
+                        ) : (
+                          <ForumFeedList items={feed} currentSort={currentSort} showUniverse={showUniverse} listDisplayMode={settings.homeFeedPostListDisplayMode} postLinkDisplayMode={settings.postLinkDisplayMode} />
+                        )}
 
-                    {feed.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">{emptyStateText}</div> : null}
+                        {feed.length === 0 ? <div className="mt-4 rounded-md border bg-background p-8 text-sm text-muted-foreground">{emptyStateText}</div> : null}
 
-                    {showPagination && !useInfiniteFeed ? (
-                      <PageNumberPagination
-                        page={page}
-                        totalPages={totalPages}
-                        hasPrevPage={hasPrevPage}
-                        hasNextPage={hasNextPage}
-                        buildHref={(targetPage) => buildHomeFeedHref(sort, targetPage)}
-                      />
-                    ) : null}
+                        {showPagination && !useInfiniteFeed ? (
+                          <PageNumberPagination
+                            page={page}
+                            totalPages={totalPages}
+                            hasPrevPage={hasPrevPage}
+                            hasNextPage={hasNextPage}
+                            buildHref={(targetPage) => buildHomeFeedHref(sort, targetPage)}
+                          />
+                        ) : null}
+                      </>
+                    )
+                  })() : null}
                   </>
-                )
-              })() : null}
+                  </AddonSurfaceRenderer>
+                  <AddonSlotRenderer slot="feed.main.after" />
+                </>
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot={sortAfterSlot} />
             </div>
           )}
           rightSidebar={(
             <div className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels
-                user={sidebarUser}
-                hotTopics={hotTopics}
-                postLinkDisplayMode={settings.postLinkDisplayMode}
-                announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
-                friendLinks={friendLinks.compact}
-                friendLinksEnabled={settings.friendLinksEnabled}
-                topPanels={sidebarPanels.top}
-                middlePanels={sidebarPanels.middle}
-                bottomPanels={sidebarPanels.bottom}
-                stats={sidebarStats}
-                siteName={settings.siteName}
-                siteDescription={settings.siteDescription}
-                siteLogoPath={settings.siteLogoPath}
-                siteIconPath={settings.siteIconPath}
-              />
+              <AddonSlotRenderer slot="feed.sidebar.before" />
+              <AddonSurfaceRenderer surface="feed.sidebar" props={{ announcements, friendLinks, hotTopics, settings, sidebarPanels, sidebarStats }}>
+                <HomeSidebarPanels
+                  user={sidebarUser}
+                  hotTopics={hotTopics}
+                  postLinkDisplayMode={settings.postLinkDisplayMode}
+                  announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                  friendLinks={friendLinks.compact}
+                  friendLinksEnabled={settings.friendLinksEnabled}
+                  topPanels={sidebarPanels.top}
+                  middlePanels={sidebarPanels.middle}
+                  bottomPanels={sidebarPanels.bottom}
+                  stats={sidebarStats}
+                  siteName={settings.siteName}
+                  siteDescription={settings.siteDescription}
+                  siteLogoPath={settings.siteLogoPath}
+                  siteIconPath={settings.siteIconPath}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="feed.sidebar.after" />
             </div>
           )}
         />
+        <AddonSlotRenderer slot="feed.page.after" />
       </div>
     </div>
   )

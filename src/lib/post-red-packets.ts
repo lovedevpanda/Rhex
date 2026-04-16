@@ -24,6 +24,11 @@ import { apiError } from "@/lib/api-route"
 import { getBusinessDayRange, formatRelativeTime } from "@/lib/formatters"
 import { buildJackpotEffectFeedback } from "@/lib/post-reward-effect-feedback-builders"
 import {
+  getPostRedPacketClaimOrderModeLabel,
+  getPostRedPacketGrantModeLabel,
+  getPostRedPacketTriggerLabel,
+} from "@/lib/post-reward-pool-labels"
+import {
   allocateJackpotAmount,
   allocateRedPacketAmount,
   buildJackpotClaimReason,
@@ -31,9 +36,6 @@ import {
   buildRedPacketClaimReason,
   buildRedPacketSendReason,
   buildRewardPoolStoredState,
-  getPostRedPacketClaimOrderModeLabel,
-  getPostRedPacketGrantModeLabel,
-  getPostRedPacketTriggerLabel,
   normalizePostRedPacketConfig,
   parsePostRewardPoolConfigFromContent,
   resolveJackpotReplyOutcome,

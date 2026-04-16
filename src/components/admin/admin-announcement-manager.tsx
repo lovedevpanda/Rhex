@@ -5,10 +5,10 @@ import { ArrowUpRight, BookOpen, ExternalLink, Files, Loader2, Pin, Plus, Save, 
 import { useMemo, useState } from "react"
 
 import { AdminSummaryStrip } from "@/components/admin/admin-summary-strip"
+import { AddonEditor } from "@/components/addon-editor"
 import { useAdminMutation } from "@/hooks/use-admin-mutation"
 import { FormModal } from "@/components/ui/modal"
 import { ColorPicker } from "@/components/ui/color-picker"
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -495,7 +495,8 @@ function EditorFields({
           </Field>
           <PreviewPath draft={draft} />
           <Field label="文档内容">
-            <RefinedRichPostEditor
+            <AddonEditor
+              context="admin"
               value={draft.content}
               onChange={(value) => onChange("content", value)}
               placeholder="支持 Markdown，帮助文档与公告正文都从这里渲染。"

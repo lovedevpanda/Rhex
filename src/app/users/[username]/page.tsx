@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import { AddonSlotRenderer } from "@/addons-host"
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { AiAgentIndicator } from "@/components/user/ai-agent-indicator"
 import { AnonymousUserIndicator } from "@/components/user/anonymous-user-indicator"
@@ -78,12 +79,14 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
       <div className="min-h-screen bg-background">
         <SiteHeader />
         <main className="mx-auto max-w-[960px] px-4 py-8">
+          <AddonSlotRenderer slot="user.page.before" />
           <AccessDeniedCard
             title="当前主页暂不可访问"
             description="该用户已对你的访问做出限制，因此你无法查看其主页内容、动态与互动信息。"
             reason={profileAccess.reason}
             isLoggedIn={Boolean(currentUser)}
           />
+          <AddonSlotRenderer slot="user.page.after" />
         </main>
       </div>
     )
@@ -146,8 +149,10 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
     <div className="min-h-screen  text-foreground dark:bg-[#0f1115]">
       <SiteHeader />
       <main className={cn("mx-auto max-w-[1200px] px-1 py-6 lg:px-6", isRestrictedUser && "grayscale") }>
+        <AddonSlotRenderer slot="user.page.before" />
         <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)] xl:items-start">
           <aside className="space-y-4 xl:sticky  xl:self-start">
+            <AddonSlotRenderer slot="user.sidebar.before" />
             <Card className={cn("relative", profileCardClassName)}>
               <CardContent className="p-5">
                 <div className="flex flex-col text-left">
@@ -224,9 +229,11 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 </div>
               </CardContent>
             </Card>
+            <AddonSlotRenderer slot="user.sidebar.after" />
           </aside>
 
           <section className="space-y-4 xl:self-start">
+            <AddonSlotRenderer slot="user.profile.before" />
             <UserProfileOverviewCard
               title={(
                 <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -262,7 +269,9 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 inactiveLabel: "拉黑用户",
               } : null}
             />
+            <AddonSlotRenderer slot="user.profile.after" />
 
+            <AddonSlotRenderer slot="user.activity.before" />
             <UserRecentActivityPanel
               description={canViewRecentActivity ? "" : ""}
               defaultTabKey="introduction"
@@ -324,8 +333,10 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                 },
               ]}
             />
+            <AddonSlotRenderer slot="user.activity.after" />
           </section>
         </div>
+        <AddonSlotRenderer slot="user.page.after" />
       </main>
     </div>
   )

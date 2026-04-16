@@ -11,13 +11,18 @@ import { clearAccountBindingFlashOnClient, readAccountBindingFlashOnClient } fro
 import { formatDateTime } from "@/lib/formatters"
 
 interface ProviderBindingItem {
-  provider: "github" | "google"
+  provider: string
   label: string
   enabled: boolean
   accountId: string | null
   connected: boolean
+  connectMode: "url" | "connected-only"
+  loginUrl: string | null
+  registerUrl: string | null
+  connectUrl: string | null
   providerUsername: string | null
   providerEmail: string | null
+  providerLabel: string | null
   displayName: string | null
   avatarUrl: string | null
   connectedAt: string | null
@@ -57,12 +62,20 @@ function buildProviderMeta(binding: ProviderBindingItem) {
     || "已绑定"
 }
 
+function isBuiltinProvider(provider: ProviderBindingItem["provider"]): provider is "github" | "google" {
+  return provider === "github" || provider === "google"
+}
+
 function getProviderIcon(provider: ProviderBindingItem["provider"]) {
   if (provider === "github") {
     return <Github className="h-4 w-4" />
   }
 
-  return <Chrome className="h-4 w-4" />
+  if (provider === "google") {
+    return <Chrome className="h-4 w-4" />
+  }
+
+  return <Link2 className="h-4 w-4" />
 }
 
 export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAccountBindingSettingsProps) {
@@ -95,7 +108,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
     toast.error(nextFlash.message, "账号绑定")
   }, [])
 
-  async function unlinkProvider(provider: "github" | "google", label: string) {
+  async function unlinkProvider(provider: string, label: string) {
     setActiveProvider(provider)
 
     try {
@@ -121,9 +134,14 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
     }
   }
 
-  function connectProvider(provider: "github" | "google") {
-    setActiveProvider(provider)
-    window.location.href = `/api/auth/oauth/${provider}/start?mode=connect&redirectTo=${encodeURIComponent(ACCOUNT_BINDINGS_REDIRECT_PATH)}`
+  function connectProvider(binding: ProviderBindingItem) {
+    if (!binding.connectUrl) {
+      return
+    }
+
+    setActiveProvider(binding.provider)
+    const separator = binding.connectUrl.includes("?") ? "&" : "?"
+    window.location.href = `${binding.connectUrl}${separator}redirectTo=${encodeURIComponent(ACCOUNT_BINDINGS_REDIRECT_PATH)}`
   }
 
   async function bindPasskey() {
@@ -212,7 +230,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
           <div className="min-w-0">
             <p className="text-sm font-semibold">第三方账号</p>
             <p className="mt-2 text-xs leading-6 text-muted-foreground">
-              绑定后可以直接使用对应渠道登录当前站内账户。GitHub 和 Google 每种渠道仅保留一个绑定。
+              绑定后可以直接使用对应渠道登录当前站内账户。内置渠道支持在这里直接发起绑定；插件追加渠道会在绑定成功后显示，并支持在这里解绑。
             </p>
           </div>
         </div>
@@ -236,6 +254,7 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
                 <div className="mt-4 space-y-1 text-xs leading-6 text-muted-foreground">
                   {binding.providerUsername ? <p>用户名：{binding.providerUsername}</p> : null}
                   {binding.providerEmail ? <p>邮箱：{binding.providerEmail}</p> : null}
+                  {!isBuiltinProvider(binding.provider) ? <p>渠道标识：{binding.provider}</p> : null}
                   <p>绑定时间：{formatBindingDateTime(binding.connectedAt)}</p>
                 </div>
               ) : null}
@@ -252,15 +271,25 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
                     {getProviderIcon(binding.provider)}
                     {activeProvider === binding.provider ? "解绑中..." : `解绑 ${binding.label}`}
                   </Button>
-                ) : (
+                ) : binding.connectMode === "url" && binding.connectUrl ? (
                   <Button
                     type="button"
                     className="w-full gap-2"
                     disabled={!binding.enabled || activeProvider === binding.provider}
-                    onClick={() => connectProvider(binding.provider)}
+                    onClick={() => connectProvider(binding)}
                   >
                     {getProviderIcon(binding.provider)}
                     {activeProvider === binding.provider ? "跳转中..." : `绑定 ${binding.label}`}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    disabled
+                  >
+                    {getProviderIcon(binding.provider)}
+                    当前仅支持显示与解绑
                   </Button>
                 )}
               </div>

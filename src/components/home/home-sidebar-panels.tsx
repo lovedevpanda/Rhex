@@ -12,6 +12,7 @@ import type { FriendLinkItem } from "@/lib/friend-links"
 import type { HomeSidebarPanelItem } from "@/lib/home-sidebar-layout"
 import type { HomeSidebarStatsData } from "@/lib/home-sidebar-stats"
 import { getPostPath } from "@/lib/post-links"
+import { AddonSlotRenderer } from "@/addons-host"
 
 interface HotTopicItem {
   id: string
@@ -48,6 +49,7 @@ export function HomeSidebarPanels({ user, hotTopics, postLinkDisplayMode = "SLUG
       <SidebarUserCard user={user} createPostHref={createPostHref} siteName={siteName} siteDescription={siteDescription} siteLogoPath={siteLogoPath} siteIconPath={siteIconPath} />
 
 
+      <AddonSlotRenderer slot="home.right.top" />
       {topPanels.map((panel) => <div key={panel.id}>{panel.content}</div>)}
 
       {showAnnouncements ? <HomeAnnouncementPanel announcements={announcements} /> : null}
@@ -74,6 +76,7 @@ export function HomeSidebarPanels({ user, hotTopics, postLinkDisplayMode = "SLUG
       </div>
 
 
+      <AddonSlotRenderer slot="home.right.middle" />
       {middlePanels.map((panel) => <div key={panel.id}>{panel.content}</div>)}
 
       {friendLinksEnabled ? (
@@ -104,6 +107,7 @@ export function HomeSidebarPanels({ user, hotTopics, postLinkDisplayMode = "SLUG
         </section>
       ) : null}
 
+      <AddonSlotRenderer slot="home.right.bottom" />
       {bottomPanels.map((panel) => <div key={panel.id}>{panel.content}</div>)}
 
       {stats ? <HomeSiteStatsCard stats={stats} /> : null}

@@ -1,16 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { Chrome, Github, KeyRound } from "lucide-react"
+import { Chrome, Github, KeyRound, Link2 } from "lucide-react"
 
 import { buttonVariants } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import type { AddonExternalAuthEntry } from "@/lib/addon-external-auth-providers"
 import { cn } from "@/lib/utils"
 import type { SiteSettingsData } from "@/lib/site-settings"
 
 interface ExternalAuthEntryProps {
   settings: Pick<SiteSettingsData, "authGithubEnabled" | "authGoogleEnabled" | "authPasskeyEnabled">
   mode: "login" | "register"
+  addonEntries?: AddonExternalAuthEntry[]
   className?: string
 }
 
@@ -38,7 +40,7 @@ function EntryLink({ href, children, useDocumentNavigation = false }: { href: st
   )
 }
 
-export function ExternalAuthEntry({ settings, mode, className }: ExternalAuthEntryProps) {
+export function ExternalAuthEntry({ settings, mode, addonEntries = [], className }: ExternalAuthEntryProps) {
   const items = [
     settings.authGithubEnabled ? {
       key: "github",
@@ -61,6 +63,20 @@ export function ExternalAuthEntry({ settings, mode, className }: ExternalAuthEnt
       icon: <KeyRound data-icon="inline-start" />,
       useDocumentNavigation: false,
     } : null,
+    ...addonEntries.map((entry) => {
+      const href = mode === "login" ? entry.loginUrl : entry.registerUrl
+      if (!href) {
+        return null
+      }
+
+      return {
+        key: entry.provider,
+        label: entry.label,
+        href,
+        icon: <Link2 data-icon="inline-start" />,
+        useDocumentNavigation: true,
+      }
+    }),
   ].filter(Boolean) as Array<{ key: string; label: string; href: string; icon: React.ReactNode; useDocumentNavigation: boolean }>
 
   if (items.length === 0) {

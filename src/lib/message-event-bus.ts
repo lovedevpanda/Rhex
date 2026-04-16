@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import { logError } from "@/lib/logger"
-import type { MessageStreamEvent } from "@/lib/message-types"
+import type { InboxSnapshotStreamEvent, MessageStreamEvent } from "@/lib/message-types"
 import { connectRedisClient, createRedisConnection, createRedisKey, hasRedisUrl } from "@/lib/redis"
 
 export type { MessageStreamEvent } from "@/lib/message-types"
@@ -27,6 +27,24 @@ const globalMessageEventBus = globalThis as typeof globalThis & GlobalMessageEve
 
 function getMessageEventChannel() {
   return createRedisKey("message-events", "pubsub")
+}
+
+function getEventTargetUserIds(event: MessageStreamEvent) {
+  const userIds = new Set<number>()
+
+  if ("userId" in event && typeof event.userId === "number") {
+    userIds.add(event.userId)
+  }
+
+  if ("senderId" in event && typeof event.senderId === "number") {
+    userIds.add(event.senderId)
+  }
+
+  if ("recipientId" in event && typeof event.recipientId === "number") {
+    userIds.add(event.recipientId)
+  }
+
+  return userIds
 }
 
 class MessageEventBus {
@@ -61,8 +79,8 @@ class MessageEventBus {
         scope: "message-event-bus",
         action: "publish",
         metadata: {
-          conversationId: event.conversationId,
-          messageId: event.messageId,
+          conversationId: "conversationId" in event ? event.conversationId : undefined,
+          messageId: "messageId" in event ? event.messageId : undefined,
         },
       }, error)
       this.publishLocal(event)
@@ -70,8 +88,13 @@ class MessageEventBus {
   }
 
   publishLocal(event: MessageStreamEvent) {
+    const targetUserIds = getEventTargetUserIds(event)
+    if (targetUserIds.size === 0) {
+      return
+    }
+
     for (const subscriber of this.subscribers.values()) {
-      if (subscriber.userId !== event.senderId && subscriber.userId !== event.recipientId) {
+      if (!targetUserIds.has(subscriber.userId)) {
         continue
       }
 
@@ -189,6 +212,10 @@ export function buildHeartbeatPayload() {
   return `data: ${JSON.stringify({ type: "heartbeat", occurredAt: new Date().toISOString() })}\n\n`
 }
 
+export function buildInboxSnapshotPayload(snapshot: Omit<InboxSnapshotStreamEvent, "type">) {
+  return `data: ${JSON.stringify({ type: "inbox.snapshot", ...snapshot })}\n\n`
+}
+
 export function buildCursorPayload(cursor: MessageStreamCursor) {
   return `event: cursor\ndata: ${JSON.stringify({ cursor: formatMessageStreamCursor(cursor) })}\n\n`
 }
@@ -220,7 +247,7 @@ export function isMessageStreamCursorAfter(cursor: MessageStreamCursor, baseline
   return compareMessageStreamCursor(cursor, baseline) > 0
 }
 
-export function getMessageStreamCursorFromEvent(event: Pick<MessageStreamEvent, "messageId" | "occurredAt">) {
+export function getMessageStreamCursorFromEvent(event: { messageId?: string; occurredAt?: string }) {
   if (!event.messageId || !event.occurredAt) {
     return null
   }

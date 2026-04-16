@@ -11,9 +11,12 @@ export function normalizeIp(value: string | null) {
     return null
   }
 
-  const withoutPort = normalized.startsWith("[")
-    ? normalized.replace(/^\[([^\]]+)\](?::\d+)?$/, "$1")
-    : normalized.replace(/:\d+$/, "")
+  const bracketedMatch = normalized.match(/^\[([^\]]+)\](?::\d+)?$/)
+  const ipv4WithPortMatch = normalized.match(/^((?:\d{1,3}\.){3}\d{1,3}):\d+$/)
+
+  const withoutPort = bracketedMatch
+    ? bracketedMatch[1]
+    : (ipv4WithPortMatch ? ipv4WithPortMatch[1] : normalized)
 
   if (/^[0-9a-fA-F:.]+$/.test(withoutPort)) {
     return withoutPort.toLowerCase()

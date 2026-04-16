@@ -4,10 +4,11 @@ import { ArrowRight, CheckCircle2, Crown, Flame, Heart, MessageSquareText, Spark
 
 import { LevelBadge } from "@/components/level-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { buildSettingsHref } from "@/app/settings/settings-page-loader"
 import type { SettingsPageData } from "@/app/settings/settings-page-loader"
 
 export function LevelSettingsSection({ data }: { data: SettingsPageData }) {
-  const { levelView, settings } = data
+  const { levelView, route, settings } = data
 
   if (!levelView) {
     return (
@@ -101,8 +102,8 @@ export function LevelSettingsSection({ data }: { data: SettingsPageData }) {
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <QuickLink href="/write" title="去发帖" description="发布主题会推动成长进度。" />
-          <QuickLink href="/settings?tab=points" title={`查看${settings.pointName}明细`} description={`顺便查看当前 ${settings.pointName} 账户情况。`} />
-          <QuickLink href="/settings?tab=badges" title="前往勋章中心" description="查看哪些社区勋章已经达成。" />
+          <QuickLink href={buildSettingsHref(route, { tab: "points" })} title={`查看${settings.pointName}明细`} description={`顺便查看当前 ${settings.pointName} 账户情况。`} />
+          <QuickLink href={buildSettingsHref(route, { tab: "badges" })} title="前往勋章中心" description="查看哪些社区勋章已经达成。" />
         </CardContent>
       </Card>
     </div>

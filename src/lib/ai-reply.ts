@@ -777,8 +777,8 @@ async function dispatchAiReplyNotifications(params: {
       userId: params.task.post.authorId,
       type: NotificationType.REPLY_POST,
       senderId: params.task.agentUserId,
-      relatedType: "POST",
-      relatedId: params.task.postId,
+      relatedType: "COMMENT",
+      relatedId: params.generatedCommentId,
       title: "你的帖子有了新回复",
       content: `${buildDisplayName(params.task.agentUser)} 回复了你的帖子：${preview}`,
     })

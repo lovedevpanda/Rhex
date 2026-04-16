@@ -109,8 +109,14 @@ export const defaultSiteSettingsCreateInput = {
         domains: [],
       },
       siteSecurity: {
+        sessionIpMismatchLogoutEnabled: true,
         loginIpChangeEmailAlertEnabled: false,
         passwordChangeRequireEmailVerification: false,
+      },
+      checkInStreak: {
+        enabled: true,
+        makeUpCountsTowardStreak: true,
+        oldestDayLimit: 0,
       },
       postSlugGeneration: {
         mode: "TITLE_TIMESTAMP",

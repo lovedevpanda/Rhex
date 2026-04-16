@@ -3,6 +3,7 @@ import { hashSync } from "bcryptjs"
 import { VerificationChannel } from "@/lib/shared/verification-channel"
 
 import { findUserByEmail, updateUserPasswordById } from "@/db/password-reset-queries"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { apiError } from "@/lib/api-route"
 import { normalizeEmailAddress } from "@/lib/email"
 import { canSendEmail, sendResetPasswordVerificationEmail } from "@/lib/mailer"
@@ -83,6 +84,7 @@ export async function resetPasswordByEmailCode(input: {
   email: string
   code: string
   password: string
+  request?: Request
 }) {
   const email = normalizeEmailAddress(input.email)
   const password = ensurePassword(input.password)
@@ -118,5 +120,39 @@ export async function resetPasswordByEmailCode(input: {
     purpose: PASSWORD_RESET_PURPOSE,
   })
 
-  return updateUserPasswordById(user.id, hashSync(password, 10))
+  const hookInput = (() => {
+    if (!input.request) {
+      return { throwOnError: true }
+    }
+
+    const requestUrl = new URL(input.request.url)
+    return {
+      request: input.request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+      throwOnError: true,
+    }
+  })()
+
+  await executeAddonActionHook("auth.password.reset.before", {
+    userId: user.id,
+    username: user.username,
+    email: user.email,
+  }, hookInput)
+
+  const updatedUser = await updateUserPasswordById(user.id, hashSync(password, 10))
+
+  await executeAddonActionHook("auth.password.reset.after", {
+    userId: updatedUser.id,
+    username: updatedUser.username,
+    email: updatedUser.email,
+  }, input.request
+    ? {
+        request: input.request,
+        pathname: new URL(input.request.url).pathname,
+        searchParams: new URL(input.request.url).searchParams,
+      }
+    : undefined)
+
+  return updatedUser
 }

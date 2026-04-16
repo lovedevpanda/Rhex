@@ -7,10 +7,23 @@ import { createPostFlow } from "@/lib/post-create-service"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
-export const POST = createUserRouteHandler(async ({ request }) => {
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
-  const result = await createPostFlow(body)
+  const requestUrl = new URL(request.url)
+
+  await executeAddonActionHook("post.create.before", {
+    authorId: currentUser.id,
+    authorUsername: currentUser.username,
+    body,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
+  const result = await createPostFlow(body, { request })
 
   logRouteWriteSuccess({
     scope: "posts-create",
@@ -42,6 +55,18 @@ export const POST = createUserRouteHandler(async ({ request }) => {
       mentionedUserIds: result.mentionUserIds,
     })
   }
+
+  await executeAddonActionHook("post.create.after", {
+    postId: result.post.id,
+    boardId: result.post.boardId,
+    authorId: result.author.id,
+    postType: result.post.type,
+    status: result.post.status,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 
   return apiSuccess({
     id: result.post.id,

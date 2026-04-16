@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowUpRight, Search } from "lucide-react"
+import { useSyncExternalStore } from "react"
 
 import { buildExternalSearchUrl, type ExternalSearchEngine } from "@/lib/site-search-settings"
 
@@ -8,6 +9,7 @@ interface ExternalSearchOptionsProps {
   keyword: string
   engines: ExternalSearchEngine[]
   onSelect?: () => void
+  siteHost?: string | null
   variant?: "menu" | "panel"
 }
 
@@ -15,15 +17,22 @@ export function ExternalSearchOptions({
   keyword,
   engines,
   onSelect,
+  siteHost,
   variant = "menu",
 }: ExternalSearchOptionsProps) {
-  const siteHost = typeof window === "undefined" ? "site:" : `site:${window.location.host}`
-  const searchKeyword = siteHost === "site:" ? keyword : `${siteHost} ${keyword}`
+  const trimmedKeyword = keyword.trim()
+  const browserSiteHost = useSyncExternalStore(
+    () => () => undefined,
+    () => window.location.host || null,
+    () => null,
+  )
+  const resolvedSiteHost = siteHost !== undefined ? siteHost : browserSiteHost
 
-  if (!keyword.trim()) {
+  if (!trimmedKeyword) {
     return null
   }
 
+  const searchKeyword = resolvedSiteHost ? `site:${resolvedSiteHost} ${trimmedKeyword}` : trimmedKeyword
 
   return (
     <div className={variant === "menu" ? "grid gap-1" : "grid gap-3 sm:grid-cols-2"}>

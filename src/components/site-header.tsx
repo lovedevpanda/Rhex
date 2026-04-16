@@ -1,6 +1,5 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Bell } from "lucide-react"
 import { Suspense } from "react"
 
 import { HeaderUserActions } from "@/components/header-user-actions"
@@ -14,14 +13,7 @@ import { resolveSiteIconPath } from "@/lib/site-branding"
 import { getSiteSettings } from "@/lib/site-settings"
 import { resolveUserSurfaceSnapshot } from "@/lib/user-surface"
 import { getZones } from "@/lib/zones"
-
-function formatUnreadBadge(count: number) {
-  if (count <= 0) {
-    return null
-  }
-
-  return count > 9 ? "9+" : String(count)
-}
+import { AddonSlotRenderer } from "@/addons-host"
 
 function SiteLogoMark({ logoPath, iconPath }: { logoPath?: string | null; iconPath?: string | null }) {
   if (logoPath) {
@@ -42,8 +34,6 @@ function SiteLogoMark({ logoPath, iconPath }: { logoPath?: string | null; iconPa
 export async function SiteHeader() {
   const [user, settings, zones, boards] = await Promise.all([getCurrentUser(), getSiteSettings(), getZones(), getBoards()])
   const surfaceSnapshot = await resolveUserSurfaceSnapshot(user)
-  const unreadNotificationCount = surfaceSnapshot?.unreadNotificationCount ?? 0
-  const unreadMessageCount = surfaceSnapshot?.unreadMessageCount ?? 0
   const checkedInToday = surfaceSnapshot?.checkedInToday ?? false
   const headerUser = user
     ? {
@@ -60,6 +50,7 @@ export async function SiteHeader() {
       <div className="mx-auto max-w-[1200px] px-1">
         <div className="grid h-14 grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="-mr-6 hidden h-14 items-center lg:col-span-2 lg:flex">
+            <AddonSlotRenderer slot="layout.header.left" />
             <Link href="/" className="flex items-center gap-2 text-xl leading-none">
               <SiteLogoMark logoPath={settings.siteLogoPath} iconPath={settings.siteIconPath} />
               <div className="hidden font-bold tracking-tight sm:inline-block">{settings.siteLogoText}</div>
@@ -89,28 +80,19 @@ export async function SiteHeader() {
                   <SearchForm compact appLinks={settings.headerAppLinks} appIconName={settings.headerAppIconName} search={settings.search} />
                 </Suspense>
               </div>
+              <AddonSlotRenderer slot="layout.header.center" />
 
             </div>
 
             <div className="ml-auto flex h-14 items-center gap-1.5">
+              <AddonSlotRenderer slot="layout.header.right" />
               <ThemeToggle />
               {user && (user.role === "ADMIN" || user.role === "MODERATOR") ? (
                 <Link href="/admin" className="hidden sm:inline-flex">
                   <Button variant="ghost" className="h-8 rounded-md px-3">后台</Button>
                 </Link>
               ) : null}
-              <Link href="/notifications" className="relative hidden sm:inline-flex">
-                <Button variant="ghost" size="icon" className="size-8 rounded-md">
-                  <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
-                </Button>
-                {formatUnreadBadge(unreadNotificationCount) ? (
-                  <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full border border-background bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-background dark:bg-rose-300 dark:text-rose-950 dark:shadow-none">
-                    {formatUnreadBadge(unreadNotificationCount)}
-                  </span>
-                ) : null}
-              </Link>
-
-              <HeaderUserActions user={headerUser} unreadMessageCount={unreadMessageCount} unreadNotificationCount={unreadNotificationCount} />
+              <HeaderUserActions user={headerUser} />
 
             </div>
           </div>

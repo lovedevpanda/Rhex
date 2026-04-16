@@ -216,34 +216,38 @@ export function PostAttachmentList({ attachments, pointName }: { attachments: Po
 
             return (
               <div key={attachment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-background px-4 py-3">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="flex min-w-0 items-center gap-2 sm:min-w-0 sm:flex-1 sm:basis-0">
                     <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">
                       {attachment.sourceType === "UPLOAD" ? <FileArchive className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
                       {attachment.sourceType === "UPLOAD" ? "站内附件" : "网盘附件"}
                     </span>
-                  </div>
-                  <p className="min-w-0 truncate text-sm font-medium">{attachment.name}</p>
-                  <span className="text-xs text-muted-foreground">
-                    {attachment.fileExt ? attachment.fileExt.toUpperCase() : "FILE"}
-                    {attachment.fileSize ? ` · ${formatFileSize(attachment.fileSize)}` : ""}
-                    {` · 下载 ${attachment.downloadCount}`}
-                    {statusText ? ` · ${statusText}` : ""}
-                  </span>
-                  <span className="text-[11px] font-medium">
-                    {displayedRequirementLabels.map((label, index) => (
-                      <span key={`${attachment.id}-${label}`} className={getRequirementTextClassName(label)}>
-                        {index > 0 ? <span className="mx-1 text-muted-foreground/55">|</span> : null}
-                        {label}
-                      </span>
-                    ))}
-                  </span>
-                  {!attachment.canDownload && attachment.blockedReason ? (
-                    <div className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
-                      <Lock className="h-3.5 w-3.5" />
-                      <span>{attachment.blockedReason}</span>
+                    <p title={attachment.name} className="min-w-0 flex-1 truncate text-sm font-medium">{attachment.name}</p>
                     </div>
-                  ) : null}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      {attachment.fileExt ? attachment.fileExt.toUpperCase() : "FILE"}
+                      {attachment.fileSize ? ` · ${formatFileSize(attachment.fileSize)}` : ""}
+                      {` · 下载 ${attachment.downloadCount}`}
+                      {statusText ? ` · ${statusText}` : ""}
+                    </span>
+                    <span className="text-[11px] font-medium">
+                      {displayedRequirementLabels.map((label, index) => (
+                        <span key={`${attachment.id}-${label}`} className={getRequirementTextClassName(label)}>
+                          {index > 0 ? <span className="mx-1 text-muted-foreground/55">|</span> : null}
+                          {label}
+                        </span>
+                      ))}
+                    </span>
+                    </div>
+                    {!attachment.canDownload && attachment.blockedReason ? (
+                      <div className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                        <Lock className="h-3.5 w-3.5" />
+                        <span>{attachment.blockedReason}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
@@ -313,4 +317,3 @@ export function PostAttachmentList({ attachments, pointName }: { attachments: Po
     </>
   )
 }
-

@@ -2,8 +2,12 @@ import { compare } from "bcryptjs"
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/db/client"
+import { findUserLoginCandidate } from "@/db/external-auth-user-queries"
+import { readAddonAuthFieldsFromBody } from "@/lib/addon-auth-fields"
+import { validateLoginWithAddonProviders } from "@/lib/addon-auth-providers"
 import { apiError, createRouteHandler, apiSuccess, readJsonBody, readOptionalStringField } from "@/lib/api-route"
 import { maybeEnqueueLoginIpChangeAlert } from "@/lib/account-security"
+import { verifyLoginCaptchaWithAddonProviders } from "@/lib/addon-captcha-providers"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { verifyPowCaptchaSolution } from "@/lib/pow-captcha"
 import { getRequestIp } from "@/lib/request-ip"
@@ -11,22 +15,24 @@ import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { createSessionToken, getSessionCookieName, getSessionCookieOptions } from "@/lib/session"
 import { getServerSiteSettings } from "@/lib/site-settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
-import { validateAuthPayload } from "@/lib/validators"
+import { validateLoginPayload } from "@/lib/validators"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createRouteHandler(async ({ request }) => {
   const body = await readJsonBody(request)
-  const validated = validateAuthPayload(body)
+  const validated = validateLoginPayload(body)
 
   if (!validated.success || !validated.data) {
     apiError(400, validated.message ?? "参数错误")
   }
 
-  const { username, password } = validated.data
+  const { login, password } = validated.data
   const captchaToken = readOptionalStringField(body, "captchaToken")
   const builtinCaptchaCode = readOptionalStringField(body, "builtinCaptchaCode")
   const powNonce = readOptionalStringField(body, "powNonce")
+  const addonFields = readAddonAuthFieldsFromBody(body)
   const settings = await getServerSiteSettings()
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("auth-login", {
@@ -66,12 +72,16 @@ export const POST = createRouteHandler(async ({ request }) => {
       })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username },
+    await verifyLoginCaptchaWithAddonProviders({
+      request,
+      username: login,
+      addonFields,
     })
 
+    const user = await findUserLoginCandidate(login)
+
     if (!user) {
-      apiError(401, "用户名或密码错误")
+      apiError(401, "邮箱/用户名或密码错误")
     }
 
     if (user.status === "BANNED") {
@@ -85,10 +95,33 @@ export const POST = createRouteHandler(async ({ request }) => {
     const isValid = await compare(password, user.passwordHash)
 
     if (!isValid) {
-      apiError(401, "用户名或密码错误")
+      apiError(401, "邮箱/用户名或密码错误")
     }
 
+    await validateLoginWithAddonProviders({
+      request,
+      username: login,
+      user: {
+        id: user.id,
+        username: user.username,
+      },
+      addonFields,
+    })
+
     const loginIp = getRequestIp(request)
+    const requestUrl = new URL(request.url)
+
+    await executeAddonActionHook("auth.login.before", {
+      userId: user.id,
+      username: user.username,
+      loginIp,
+      method: "password",
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+      throwOnError: true,
+    })
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -118,6 +151,16 @@ export const POST = createRouteHandler(async ({ request }) => {
     const response = NextResponse.json(apiSuccess({ username: user.username }, "success"))
     const sessionToken = await createSessionToken(user.username, loginIp)
     response.cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions())
+    await executeAddonActionHook("auth.login.after", {
+      userId: user.id,
+      username: user.username,
+      loginIp,
+      method: "password",
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+    })
 
     logRouteWriteSuccess({
       scope: "auth-login",

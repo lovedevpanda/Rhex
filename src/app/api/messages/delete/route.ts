@@ -1,5 +1,6 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
-import { deleteConversationForUser } from "@/lib/messages"
+import { deleteConversationForUser, getUnreadMessageConversationCount } from "@/lib/messages"
+import { messageEventBus } from "@/lib/message-event-bus"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
@@ -17,8 +18,16 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     },
   }), async () => {
     await deleteConversationForUser(conversationId, currentUser.id)
+    const unreadMessageCount = await getUnreadMessageConversationCount(currentUser.id)
 
     revalidateUserSurfaceCache(currentUser.id)
+    await messageEventBus.publish({
+      type: "conversation.deleted",
+      conversationId,
+      userId: currentUser.id,
+      unreadMessageCount,
+      occurredAt: new Date().toISOString(),
+    })
 
     logRouteWriteSuccess({
       scope: "messages-delete",

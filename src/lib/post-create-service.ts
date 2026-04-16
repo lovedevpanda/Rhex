@@ -1,3 +1,4 @@
+import { executeAddonWaterfallHook } from "@/addons-host/runtime/hooks"
 import { getCurrentUserRecord } from "@/db/current-user"
 import {
   countAnonymousPostsByAuthorInRange,
@@ -13,6 +14,8 @@ import {
 import { incrementBoardTreasuryPoints } from "@/db/board-treasury-queries"
 import { type Prisma } from "@/db/types"
 
+import { verifyCreatePostCaptchaWithAddonProviders } from "@/lib/addon-captcha-providers"
+import { readAddonFormFieldsFromBody } from "@/lib/addon-form-fields"
 import { apiError } from "@/lib/api-route"
 import { checkBoardPermission, getBoardAccessContextBySlug } from "@/lib/board-access"
 import { extractSummaryFromContent } from "@/lib/content"
@@ -51,7 +54,9 @@ function isPostSlugUniqueConstraintError(error: unknown) {
     : true
 }
 
-export async function createPostFlow(body: unknown) {
+export async function createPostFlow(body: unknown, options: {
+  request: Request
+}) {
   const settings = await getSiteSettings()
   const validated = validatePostPayload(body, {
     titleMinLength: settings.postTitleMinLength,
@@ -65,6 +70,32 @@ export async function createPostFlow(body: unknown) {
   }
 
   const { title, content, isAnonymous, coverPath, boardSlug, postType, bountyPoints, auctionConfig, pollOptions, commentsVisibleToAuthorOnly, loginUnlockContent, replyUnlockContent, replyThreshold, purchaseUnlockContent, purchasePrice, minViewLevel, minViewVipLevel, lotteryConfig } = validated.data
+
+  const addonFields = readAddonFormFieldsFromBody(body)
+  await verifyCreatePostCaptchaWithAddonProviders({
+    request: options.request,
+    payload: {
+      title,
+      content,
+      isAnonymous,
+      coverPath,
+      boardSlug,
+      postType,
+      bountyPoints,
+      auctionConfig,
+      pollOptions,
+      commentsVisibleToAuthorOnly,
+      loginUnlockContent,
+      replyUnlockContent,
+      replyThreshold,
+      purchaseUnlockContent,
+      purchasePrice,
+      minViewLevel,
+      minViewVipLevel,
+      lotteryConfig,
+    },
+    addonFields,
+  })
 
   const rawBody = body as Record<string, unknown>
   const manualTags = normalizeManualTags(Array.isArray(rawBody?.manualTags)
@@ -124,6 +155,19 @@ export async function createPostFlow(body: unknown) {
 
   const serializedContent = serializePostContentDocument(contentDocument)
   const summary = extractSummaryFromContent(getAllPostContentText(serializedContent))
+  const requestUrl = new URL(options.request.url)
+  const resolvePostSlug = async () => {
+    const baseSlug = buildPostSlug(titleSafety.sanitizedText, settings.postSlugGenerationMode)
+    const hooked = await executeAddonWaterfallHook("post.slug.value", baseSlug, {
+      request: options.request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+    })
+
+    return typeof hooked.value === "string" && hooked.value.trim()
+      ? hooked.value.trim()
+      : baseSlug
+  }
 
   const [boardContext, author] = await Promise.all([
     getBoardAccessContextBySlug(boardSlug),
@@ -230,7 +274,7 @@ export async function createPostFlow(body: unknown) {
     || purchaseUnlockSafety?.wasReplaced
     || tagsSafety?.wasReplaced,
   )
-  let slug = buildPostSlug(titleSafety.sanitizedText, settings.postSlugGenerationMode)
+  let slug = await resolvePostSlug()
   let post = null as Awaited<ReturnType<typeof createPostRecord>> | null
   let createdAuction = null as Awaited<ReturnType<typeof createPostAuctionRecord>> | null
   let mentionUserIds = [] as number[]
@@ -395,7 +439,7 @@ export async function createPostFlow(body: unknown) {
         throw error
       }
 
-      slug = buildPostSlug(titleSafety.sanitizedText, settings.postSlugGenerationMode)
+      slug = await resolvePostSlug()
     }
   }
 

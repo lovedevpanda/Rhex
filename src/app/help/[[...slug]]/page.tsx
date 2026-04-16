@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HelpDocumentPageContent } from "@/components/help-document-page-content"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
@@ -67,22 +68,36 @@ export default async function HelpPage({ params }: HelpPageProps) {
           main={(
             <main className="py-1 pb-12 mt-6">
               <div className="space-y-6">
-                <HelpDocumentPageContent items={helpData.items} activeItem={helpData.activeItem} />
+                <AddonSlotRenderer slot="help.page.before" />
+                <AddonSurfaceRenderer surface="help.page" props={{ helpData }}>
+                  <>
+                    <AddonSlotRenderer slot="help.document.before" />
+                    <AddonSurfaceRenderer surface="help.document" props={{ helpData }}>
+                      <HelpDocumentPageContent items={helpData.items} activeItem={helpData.activeItem} />
+                    </AddonSurfaceRenderer>
+                    <AddonSlotRenderer slot="help.document.after" />
+                  </>
+                </AddonSurfaceRenderer>
+                <AddonSlotRenderer slot="help.page.after" />
               </div>
             </main>
           )}
           rightSidebar={(
             <div className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels
-                user={sidebarUser}
-                hotTopics={hotTopics}
-                announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
-                siteName={settings.siteName}
-                siteDescription={settings.siteDescription}
-                siteLogoPath={settings.siteLogoPath}
-                siteIconPath={settings.siteIconPath}
-              />
+              <AddonSlotRenderer slot="help.sidebar.before" />
+              <AddonSurfaceRenderer surface="help.sidebar" props={{ announcements, hotTopics, settings }}>
+                <HomeSidebarPanels
+                  user={sidebarUser}
+                  hotTopics={hotTopics}
+                  announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                  siteName={settings.siteName}
+                  siteDescription={settings.siteDescription}
+                  siteLogoPath={settings.siteLogoPath}
+                  siteIconPath={settings.siteIconPath}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="help.sidebar.after" />
             </div>
           )}
         />

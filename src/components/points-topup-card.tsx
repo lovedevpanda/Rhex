@@ -43,6 +43,7 @@ interface PendingTopupOrderState {
 }
 
 type WebRuntimeClientType = Extract<PaymentGatewayClientType, "WEB_DESKTOP" | "WEB_MOBILE">
+const TOPUP_PRIMARY_BUTTON_CLASS = "bg-foreground text-background hover:bg-foreground/90"
 
 function submitCheckoutForm(html: string) {
   const container = document.createElement("div")
@@ -89,10 +90,6 @@ function isVisiblePaymentMethod(method: PaymentGatewayCheckoutMethodOption, runt
   return method.checkoutClientType === runtimeClientType
 }
 
-function compactPaymentMethodTitle(method: PaymentGatewayCheckoutMethodOption) {
-  return method.label.split(/\s+/).filter(Boolean)[0] || method.label
-}
-
 function compactPaymentMethodHint(method: PaymentGatewayCheckoutMethodOption) {
   if (method.presentationType === "QR_CODE") {
     return "扫码"
@@ -110,6 +107,26 @@ function compactPaymentMethodHint(method: PaymentGatewayCheckoutMethodOption) {
     default:
       return "支付"
   }
+}
+
+function getPaymentMethodDisplayPriority(method: PaymentGatewayCheckoutMethodOption, runtimeClientType: WebRuntimeClientType) {
+  if (method.presentationType === "QR_CODE" && method.checkoutClientType === "QR_CODE") {
+    return 40
+  }
+
+  if (method.checkoutClientType === runtimeClientType) {
+    return 30
+  }
+
+  if (method.presentationType === "HTML_FORM") {
+    return 20
+  }
+
+  if (method.checkoutClientType === "QR_CODE") {
+    return 10
+  }
+
+  return 0
 }
 
 export function PointsTopupCard({
@@ -158,19 +175,37 @@ export function PointsTopupCard({
 
     return Math.max(1, Math.floor((customAmountFen / 100) * customPointsPerYuan))
   }, [customAmountEnabled, customAmountError, customAmountFen, customPointsPerYuan])
-  const visiblePaymentMethods = useMemo(() => {
+  const displayPaymentMethods = useMemo(() => {
     const filtered = paymentMethods.filter((item) => isVisiblePaymentMethod(item, runtimeClientType))
-    return filtered.length > 0 ? filtered : paymentMethods
+    const source = filtered.length > 0 ? filtered : paymentMethods
+    const deduped = new Map<string, PaymentGatewayCheckoutMethodOption>()
+
+    for (const method of source) {
+      const current = deduped.get(method.channelCode)
+      if (!current) {
+        deduped.set(method.channelCode, method)
+        continue
+      }
+
+      const currentPriority = getPaymentMethodDisplayPriority(current, runtimeClientType)
+      const nextPriority = getPaymentMethodDisplayPriority(method, runtimeClientType)
+
+      if (nextPriority > currentPriority) {
+        deduped.set(method.channelCode, method)
+      }
+    }
+
+    return [...deduped.values()]
   }, [paymentMethods, runtimeClientType])
-  const selectedPaymentMethod = visiblePaymentMethods.find((item) => item.id === selectedMethodId) ?? visiblePaymentMethods[0] ?? null
+  const selectedPaymentMethod = displayPaymentMethods.find((item) => item.id === selectedMethodId) ?? displayPaymentMethods[0] ?? null
 
   useEffect(() => {
-    if (visiblePaymentMethods.some((item) => item.id === selectedMethodId)) {
+    if (displayPaymentMethods.some((item) => item.id === selectedMethodId)) {
       return
     }
 
-    setSelectedMethodId(visiblePaymentMethods[0]?.id ?? "")
-  }, [selectedMethodId, visiblePaymentMethods])
+    setSelectedMethodId(displayPaymentMethods[0]?.id ?? "")
+  }, [selectedMethodId, displayPaymentMethods])
 
   useEffect(() => {
     const merchantOrderNo = pendingOrder?.merchantOrderNo
@@ -374,11 +409,11 @@ export function PointsTopupCard({
           ) : null}
         </div>
 
-        {paymentMethods.length > 0 ? (
+        {displayPaymentMethods.length > 0 ? (
           <div className="rounded-[18px] bg-card/70 p-3">
             <p className="text-sm font-semibold">支付方式</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {visiblePaymentMethods.map((method) => {
+              {displayPaymentMethods.map((method) => {
                 const active = method.id === (selectedPaymentMethod?.id ?? "")
 
                 return (
@@ -386,17 +421,20 @@ export function PointsTopupCard({
                     key={method.id}
                     type="button"
                     onClick={() => setSelectedMethodId(method.id)}
-                    className={`flex h-[58px] min-w-[68px] w-auto shrink-0 flex-col rounded-[14px] border px-3 py-2 text-left transition-colors ${active ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-accent hover:text-accent-foreground"}`}
+                    className={`flex min-h-[74px] min-w-[152px] w-auto shrink-0 flex-col rounded-[14px] border px-3 py-2 text-left transition-colors ${active ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-accent hover:text-accent-foreground"}`}
                     aria-pressed={active}
                     title={method.label}
                   >
                     <div className="flex h-full flex-col">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="whitespace-nowrap text-[13px] font-semibold leading-none">{compactPaymentMethodTitle(method)}</p>
+                        <p className="text-[13px] font-semibold leading-tight">{method.label}</p>
                         {active ? (
                           <span className="text-[10px] font-medium leading-none">选中</span>
                         ) : null}
                       </div>
+                      <p className={`mt-1 text-[10px] leading-none ${active ? "text-background/70" : "text-muted-foreground"}`}>
+                        {method.channelCode}
+                      </p>
                       <div className="mt-auto flex items-end justify-between gap-2">
                         <span className={`text-[11px] leading-none ${active ? "text-background/78" : "text-muted-foreground"}`}>
                           {compactPaymentMethodHint(method)}
@@ -429,7 +467,7 @@ export function PointsTopupCard({
                   <p className="mt-4 text-sm text-muted-foreground">支付金额 {formatAmountFen(item.amountFen)}</p>
                   <Button
                     type="button"
-                    className="mt-4 w-full"
+                    className={`mt-4 w-full ${TOPUP_PRIMARY_BUTTON_CLASS}`}
                     disabled={loadingId !== "" || !selectedPaymentMethod}
                     onClick={() => void handlePackageTopup(item)}
                   >
@@ -465,6 +503,7 @@ export function PointsTopupCard({
               />
               <Button
                 type="button"
+                className={TOPUP_PRIMARY_BUTTON_CLASS}
                 disabled={loadingId !== "" || customAmountFen === null || Boolean(customAmountError) || customPoints <= 0 || !selectedPaymentMethod}
                 onClick={() => void handleCustomTopup()}
               >

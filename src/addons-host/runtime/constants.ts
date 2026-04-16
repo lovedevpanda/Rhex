@@ -1,0 +1,10 @@
+export const ADDONS_DIRECTORY_NAME = "addons"
+export const ADDONS_STATE_DIRECTORY_NAME = ".runtime"
+export const ADDONS_STAGING_DIRECTORY_NAME = ".staging"
+export const ADDONS_TRASH_DIRECTORY_NAME = ".trash"
+
+export const ADDON_ASSET_PUBLIC_PREFIX = "/_addons"
+export const ADDON_PUBLIC_PAGE_PREFIX = "/addons"
+export const ADDON_ADMIN_PAGE_PREFIX = "/admin/addons"
+export const ADDON_PUBLIC_API_PREFIX = "/api/addons"
+export const ADDON_ADMIN_API_PREFIX = "/api/admin/addons"

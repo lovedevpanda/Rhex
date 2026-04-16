@@ -13,7 +13,10 @@ import {
   incrementUserInviteCount,
   markInviteCodeAsUsed,
 } from "@/db/external-auth-user-queries"
+import { readAddonAuthFieldsFromBody } from "@/lib/addon-auth-fields"
+import { validateRegisterWithAddonProviders } from "@/lib/addon-auth-providers"
 import { apiError } from "@/lib/api-route"
+import { verifyRegisterCaptchaWithAddonProviders } from "@/lib/addon-captcha-providers"
 import { verifyBuiltinCaptchaToken } from "@/lib/builtin-captcha"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { isEmailInWhitelist } from "@/lib/email"
@@ -25,6 +28,7 @@ import { isEquivalentNickname } from "@/lib/nickname"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { validateAuthPayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 interface RegisterFlowOptions {
   request: Request
@@ -56,7 +60,9 @@ interface RegisterPayload {
 }
 
 interface RegisterContext {
+  request: Request
   payload: RegisterPayload
+  addonFields: ReturnType<typeof readAddonAuthFieldsFromBody>
   body: Record<string, unknown>
   settings: Awaited<ReturnType<typeof getServerSiteSettings>>
   registerIp: string | null
@@ -112,6 +118,23 @@ async function verifyRegisterCaptcha(context: RegisterContext) {
       requestIp: context.registerIp,
     })
   }
+
+  await verifyRegisterCaptchaWithAddonProviders({
+    request: context.request,
+    payload: {
+      username: context.payload.username,
+      nickname: context.payload.nickname,
+      inviterUsername: context.payload.inviterUsername,
+      inviteCode: context.payload.inviteCode,
+      email: context.payload.email,
+      emailCode: context.payload.emailCode,
+      phone: context.payload.phone,
+      phoneCode: context.payload.phoneCode,
+      gender: context.payload.gender,
+    },
+    registerIp: context.registerIp,
+    addonFields: context.addonFields,
+  })
 }
 
 function verifyRequiredRegisterFields(context: RegisterContext) {
@@ -221,6 +244,7 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
     nicknameMaxLength: settings.registerNicknameMaxLength,
   })
   const body = options.body as Record<string, unknown>
+  const addonFields = readAddonAuthFieldsFromBody(options.body)
   const registerIp = getRequestIp(options.request)
   const userAgent = options.request.headers.get("user-agent")
   const nicknameSafety = payload.nickname
@@ -228,7 +252,9 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
     : null
 
   const context: RegisterContext = {
+    request: options.request,
     payload,
+    addonFields,
     body,
     settings,
     registerIp,
@@ -240,11 +266,44 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
   await verifyRegisterCaptcha(context)
   await ensureRegisterTargetsAvailable(context)
   await verifyRegisterContactCodes(context)
+  await validateRegisterWithAddonProviders({
+    request: options.request,
+    payload: {
+      username: payload.username,
+      nickname: payload.nickname,
+      inviterUsername: payload.inviterUsername,
+      inviteCode: payload.inviteCode,
+      email: payload.email,
+      emailCode: payload.emailCode,
+      phone: payload.phone,
+      phoneCode: payload.phoneCode,
+      gender: payload.gender,
+    },
+    registerIp,
+    addonFields,
+  })
+  const sanitizedNickname = nicknameSafety?.sanitizedText || payload.username
+  const requestUrl = new URL(options.request.url)
+
+  await executeAddonActionHook("auth.register.before", {
+    username: payload.username,
+    nickname: sanitizedNickname,
+    inviterUsername: payload.inviterUsername,
+    inviteCode: payload.inviteCode,
+    email: payload.email,
+    phone: payload.phone,
+    gender: payload.gender,
+    registerIp,
+  }, {
+    request: options.request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
 
   const inviterReward = Math.max(0, settings.inviteRewardInviter)
   const inviteeReward = Math.max(0, settings.inviteRewardInvitee)
   const registerInitialPoints = Math.max(0, settings.registerInitialPoints)
-  const sanitizedNickname = nicknameSafety?.sanitizedText || payload.username
 
   const user = await runRegisterTransaction(async (tx) => {
     let inviter: null | { id: number; username: string; points: number } = null

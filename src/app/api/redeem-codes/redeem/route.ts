@@ -1,4 +1,5 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { redeemPointsCode } from "@/lib/redeem-codes"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
@@ -8,6 +9,7 @@ import { withRequestWriteGuard } from "@/lib/write-guard"
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const code = requireStringField(body, "code", "请输入兑换码")
+  const requestUrl = new URL(request.url)
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("redeem-codes-redeem", {
     request,
@@ -16,9 +18,33 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       code,
     },
   }), async () => {
+    await executeAddonActionHook("redeem-code.redeem.before", {
+      userId: currentUser.id,
+      username: currentUser.username,
+      code,
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+      throwOnError: true,
+    })
+
     const redeemCode = await redeemPointsCode({
       userId: currentUser.id,
       code,
+    })
+
+    await executeAddonActionHook("redeem-code.redeem.after", {
+      userId: currentUser.id,
+      username: currentUser.username,
+      code: redeemCode.code,
+      points: redeemCode.points,
+      codeCategory: redeemCode.codeCategory,
+      categoryUserLimit: redeemCode.categoryUserLimit,
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
     })
 
     logRouteWriteSuccess({

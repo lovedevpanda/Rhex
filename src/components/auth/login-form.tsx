@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import type { ReactNode } from "react"
 import { useState } from "react"
 import { ArrowRight, Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react"
 
@@ -18,15 +19,25 @@ import {
 } from "@/components/ui/input-group"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { collectAddonAuthFieldsFromFormData } from "@/lib/addon-auth-fields"
+import type { AddonExternalAuthEntry } from "@/lib/addon-external-auth-providers"
 import type { SiteSettingsData } from "@/lib/site-settings"
 
 interface LoginFormProps {
   settings: SiteSettingsData
+  addonCaptcha?: ReactNode
+  addonAfterFields?: ReactNode
+  addonExternalAuthEntries?: AddonExternalAuthEntry[]
 }
 
-export function LoginForm({ settings }: LoginFormProps) {
+export function LoginForm({
+  settings,
+  addonCaptcha,
+  addonAfterFields,
+  addonExternalAuthEntries = [],
+}: LoginFormProps) {
   const router = useRouter()
-  const [username, setUsername] = useState("")
+  const [login, setLogin] = useState("")
   const [password, setPassword] = useState("")
   const [captchaToken, setCaptchaToken] = useState("")
   const [builtinCaptchaCode, setBuiltinCaptchaCode] = useState("")
@@ -39,12 +50,16 @@ export function LoginForm({ settings }: LoginFormProps) {
   const useTurnstile = captchaMode === "TURNSTILE" && Boolean(settings.turnstileSiteKey)
   const useBuiltinCaptcha = captchaMode === "BUILTIN"
   const usePowCaptcha = captchaMode === "POW"
-  const hasAlternativeAuth = settings.authGithubEnabled || settings.authGoogleEnabled || settings.authPasskeyEnabled
+  const hasAlternativeAuth = settings.authGithubEnabled || settings.authGoogleEnabled || settings.authPasskeyEnabled || addonExternalAuthEntries.length > 0
+  const hasCaptchaSection = useTurnstile || useBuiltinCaptcha || usePowCaptcha || Boolean(addonCaptcha)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setMessage("")
+    const addonFields = collectAddonAuthFieldsFromFormData(
+      new FormData(event.currentTarget),
+    )
 
     if ((useTurnstile || useBuiltinCaptcha || usePowCaptcha) && !captchaToken) {
       setMessage("请先完成验证码验证")
@@ -69,7 +84,14 @@ export function LoginForm({ settings }: LoginFormProps) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ username, password, captchaToken, builtinCaptchaCode, powNonce }),
+      body: JSON.stringify({
+        login,
+        password,
+        captchaToken,
+        builtinCaptchaCode,
+        powNonce,
+        addonFields,
+      }),
     })
 
     const result = await response.json()
@@ -93,18 +115,18 @@ export function LoginForm({ settings }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <AuthFormSection>
-        <AuthField htmlFor="login-username" label="用户名" required>
+        <AuthField htmlFor="login-identity" label="邮箱 / 用户名" required>
           <InputGroup className="h-11 rounded-2xl bg-background/80">
             <InputGroupAddon>
               <UserRound />
             </InputGroupAddon>
             <InputGroupInput
-              id="login-username"
-              name="username"
+              id="login-identity"
+              name="login"
               autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="输入用户名"
+              value={login}
+              onChange={(event) => setLogin(event.target.value)}
+              placeholder="输入邮箱或用户名"
             />
           </InputGroup>
         </AuthField>
@@ -135,7 +157,7 @@ export function LoginForm({ settings }: LoginFormProps) {
         </AuthField>
       </AuthFormSection>
 
-      {useTurnstile || useBuiltinCaptcha || usePowCaptcha ? (
+      {hasCaptchaSection ? (
         <AuthFormSection>
           {useTurnstile && settings.turnstileSiteKey ? (
             <TurnstileCaptchaField siteKey={settings.turnstileSiteKey} onTokenChange={setCaptchaToken} />
@@ -158,7 +180,13 @@ export function LoginForm({ settings }: LoginFormProps) {
               onLoadError={setMessage}
             />
           ) : null}
+
+          {addonCaptcha}
         </AuthFormSection>
+      ) : null}
+
+      {addonAfterFields ? (
+        <AuthFormSection>{addonAfterFields}</AuthFormSection>
       ) : null}
 
       {message ? (
@@ -183,7 +211,7 @@ export function LoginForm({ settings }: LoginFormProps) {
         </Button>
       </div>
 
-      {hasAlternativeAuth ? <ExternalAuthEntry settings={settings} mode="login" /> : null}
+      {hasAlternativeAuth ? <ExternalAuthEntry settings={settings} mode="login" addonEntries={addonExternalAuthEntries} /> : null}
     </form>
   )
 }

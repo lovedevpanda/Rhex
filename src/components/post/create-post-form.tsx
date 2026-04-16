@@ -11,6 +11,17 @@ import { useCreatePostSubmit } from "@/components/post/use-create-post-submit"
 export function CreatePostForm({
   boardOptions,
   pointName,
+  addonCaptcha,
+  addonFormBefore,
+  addonFormAfter,
+  addonToolsBefore,
+  addonToolsAfter,
+  addonEditorBefore,
+  addonEditorAfter,
+  addonEnhancementsBefore,
+  addonEnhancementsAfter,
+  addonSubmitBefore,
+  addonSubmitAfter,
   anonymousPostEnabled = false,
   anonymousPostPrice = 0,
   postRedPacketEnabled = false,
@@ -67,6 +78,17 @@ export function CreatePostForm({
       <CreatePostFormShell
         boardOptions={boardOptions}
         pointName={pointName}
+        addonCaptcha={addonCaptcha}
+        addonFormBefore={addonFormBefore}
+        addonFormAfter={addonFormAfter}
+        addonToolsBefore={addonToolsBefore}
+        addonToolsAfter={addonToolsAfter}
+        addonEditorBefore={addonEditorBefore}
+        addonEditorAfter={addonEditorAfter}
+        addonEnhancementsBefore={addonEnhancementsBefore}
+        addonEnhancementsAfter={addonEnhancementsAfter}
+        addonSubmitBefore={addonSubmitBefore}
+        addonSubmitAfter={addonSubmitAfter}
         markdownEmojiMap={markdownEmojiMap}
         viewLevelOptions={viewLevelOptions}
         viewVipLevelOptions={viewVipLevelOptions}

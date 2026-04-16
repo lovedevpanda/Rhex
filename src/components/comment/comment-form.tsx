@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
+import { AddonEditor } from "@/components/addon-editor"
 import { Kbd } from "@/components/ui/kbd"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
@@ -175,7 +175,8 @@ export function CommentForm({ postId, commentId, initialContent = "", mode = "cr
   return (
     <form onSubmit={handleSubmit} onKeyDown={handleSubmitShortcut} className={compact ? "min-w-0 w-full space-y-3 rounded-[18px] border border-border bg-card p-4" : "min-w-0 w-full space-y-4"}>
       {disabledMessage ? <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{disabledMessage}</div> : null}
-      <RefinedRichPostEditor
+      <AddonEditor
+        context="comment"
         value={content}
         onChange={setContent}
         disabled={Boolean(disabledMessage)}

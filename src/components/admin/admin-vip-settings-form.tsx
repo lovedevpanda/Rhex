@@ -29,11 +29,13 @@ interface AdminVipSettingsFormProps {
     checkInVip1Reward: number
     checkInVip2Reward: number
     checkInVip3Reward: number
+    checkInMakeUpEnabled: boolean
     checkInMakeUpCardPrice: number
     checkInVip1MakeUpCardPrice: number
     checkInVip2MakeUpCardPrice: number
     checkInVip3MakeUpCardPrice: number
     checkInMakeUpCountsTowardStreak: boolean
+    checkInMakeUpOldestDayLimit: number
     nicknameChangePointCost: number
     nicknameChangeVip1PointCost: number
     nicknameChangeVip2PointCost: number
@@ -113,11 +115,13 @@ export function AdminVipSettingsForm({
   const [checkInVip1Reward, setCheckInVip1Reward] = useState(String(initialSettings.checkInVip1Reward))
   const [checkInVip2Reward, setCheckInVip2Reward] = useState(String(initialSettings.checkInVip2Reward))
   const [checkInVip3Reward, setCheckInVip3Reward] = useState(String(initialSettings.checkInVip3Reward))
+  const [checkInMakeUpEnabled, setCheckInMakeUpEnabled] = useState(initialSettings.checkInMakeUpEnabled ?? true)
   const [checkInMakeUpCardPrice, setCheckInMakeUpCardPrice] = useState(String(initialSettings.checkInMakeUpCardPrice))
   const [checkInVip1MakeUpCardPrice, setCheckInVip1MakeUpCardPrice] = useState(String(initialSettings.checkInVip1MakeUpCardPrice))
   const [checkInVip2MakeUpCardPrice, setCheckInVip2MakeUpCardPrice] = useState(String(initialSettings.checkInVip2MakeUpCardPrice))
   const [checkInVip3MakeUpCardPrice, setCheckInVip3MakeUpCardPrice] = useState(String(initialSettings.checkInVip3MakeUpCardPrice))
   const [checkInMakeUpCountsTowardStreak, setCheckInMakeUpCountsTowardStreak] = useState(initialSettings.checkInMakeUpCountsTowardStreak)
+  const [checkInMakeUpOldestDayLimit, setCheckInMakeUpOldestDayLimit] = useState(String(initialSettings.checkInMakeUpOldestDayLimit ?? 0))
   const [nicknameChangePointCost, setNicknameChangePointCost] = useState(String(initialSettings.nicknameChangePointCost))
   const [nicknameChangeVip1PointCost, setNicknameChangeVip1PointCost] = useState(String(initialSettings.nicknameChangeVip1PointCost))
   const [nicknameChangeVip2PointCost, setNicknameChangeVip2PointCost] = useState(String(initialSettings.nicknameChangeVip2PointCost))
@@ -192,12 +196,14 @@ export function AdminVipSettingsForm({
                 checkInVip1Reward: Number(checkInVip1Reward),
                 checkInVip2Reward: Number(checkInVip2Reward),
                 checkInVip3Reward: Number(checkInVip3Reward),
+                checkInMakeUpEnabled,
                 checkInMakeUpCardPrice: Number(checkInMakeUpCardPrice),
                 checkInVipMakeUpCardPrice: Number(checkInVip1MakeUpCardPrice),
                 checkInVip1MakeUpCardPrice: Number(checkInVip1MakeUpCardPrice),
                 checkInVip2MakeUpCardPrice: Number(checkInVip2MakeUpCardPrice),
                 checkInVip3MakeUpCardPrice: Number(checkInVip3MakeUpCardPrice),
                 checkInMakeUpCountsTowardStreak,
+                checkInMakeUpOldestDayLimit: Number(checkInMakeUpOldestDayLimit),
                 nicknameChangePointCost: Number(nicknameChangePointCost),
                 nicknameChangeVip1PointCost: Number(nicknameChangeVip1PointCost),
                 nicknameChangeVip2PointCost: Number(nicknameChangeVip2PointCost),
@@ -239,17 +245,19 @@ export function AdminVipSettingsForm({
         >
           <SettingsSection
             title="积分基础配置"
-            description="统一配置积分名称、签到奖励、补签价格与修改昵称扣费规则。0 是免费。"
+            description="统一配置积分名称、签到奖励、补签开关、补签范围与修改昵称扣费规则。0 是免费；补签最旧历史限制填 0 表示不限制。"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SettingsInputField label="积分名称" value={pointName} onChange={setPointName} placeholder="如 积分 / 金币 / 钻石" />
               <AdminBooleanSelectField label="签到开关" checked={checkInEnabled} onChange={setCheckInEnabled} />
+              <AdminBooleanSelectField label="补签开关" checked={checkInMakeUpEnabled} onChange={setCheckInMakeUpEnabled} />
               <AdminBooleanSelectField label="补签计入连续签到" checked={checkInMakeUpCountsTowardStreak} onChange={setCheckInMakeUpCountsTowardStreak} />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SettingsInputField label="补签最旧历史限制天数" value={checkInMakeUpOldestDayLimit} onChange={setCheckInMakeUpOldestDayLimit} placeholder="0 表示不限制，如 30" />
               <AdminBooleanSelectField label="兑换码入口链接开关" checked={redeemCodeHelpEnabled} onChange={setRedeemCodeHelpEnabled} />
               <SettingsInputField label="链接文本" value={redeemCodeHelpTitle} onChange={setRedeemCodeHelpTitle} placeholder="如 获取兑换码" />
-              <div className="md:col-span-2 xl:col-span-2">
+              <div className="md:col-span-2 xl:col-span-1">
                 <SettingsInputField label="链接地址" value={redeemCodeHelpUrl} onChange={setRedeemCodeHelpUrl} placeholder="如 /faq/redeem-code 或 https://example.com/redeem-help" />
               </div>
             </div>

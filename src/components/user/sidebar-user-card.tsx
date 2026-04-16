@@ -14,6 +14,7 @@ import { UserStatusBadge } from "@/components/user/user-status-badge"
 import { VipBadge } from "@/components/vip/vip-badge"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
+import { getCheckInMakeUpEarliestDateKey } from "@/lib/check-in-policy"
 import { getLocalDateKey, getMonthKey, getMonthTitle } from "@/lib/date-key"
 import { formatNumber } from "@/lib/formatters"
 import { resolveSiteIconPath } from "@/lib/site-branding"
@@ -33,7 +34,9 @@ interface CheckInCalendarResponse {
   pointName: string
   currentStreak: number
   maxStreak: number
+  makeUpEnabled: boolean
   makeUpCountsTowardStreak: boolean
+  makeUpOldestDayLimit: number
   checkInReward: number
   makeUpPrice: number
   vipMakeUpPrice: number
@@ -65,12 +68,14 @@ export interface SidebarUserCardData {
   pointName?: string
   checkInEnabled?: boolean
   checkInReward?: number
+  checkInMakeUpEnabled?: boolean
   checkInMakeUpCardPrice?: number
   checkInVipMakeUpCardPrice?: number
   checkInVip1MakeUpCardPrice?: number
   checkInVip2MakeUpCardPrice?: number
   checkInVip3MakeUpCardPrice?: number
   checkInMakeUpCountsTowardStreak?: boolean
+  checkInMakeUpOldestDayLimit?: number
   checkedInToday?: boolean
   currentCheckInStreak?: number
   maxCheckInStreak?: number
@@ -312,6 +317,8 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
   const vip1MakeUpPrice = calendarData?.vip1MakeUpPrice ?? (safeUser.checkInVip1MakeUpCardPrice ?? safeUser.checkInVipMakeUpCardPrice ?? 0)
   const vip2MakeUpPrice = calendarData?.vip2MakeUpPrice ?? (safeUser.checkInVip2MakeUpCardPrice ?? safeUser.checkInVipMakeUpCardPrice ?? 0)
   const vip3MakeUpPrice = calendarData?.vip3MakeUpPrice ?? (safeUser.checkInVip3MakeUpCardPrice ?? safeUser.checkInVipMakeUpCardPrice ?? 0)
+  const makeUpEnabled = calendarData?.makeUpEnabled ?? safeUser.checkInMakeUpEnabled ?? true
+  const makeUpOldestDayLimit = calendarData?.makeUpOldestDayLimit ?? safeUser.checkInMakeUpOldestDayLimit ?? 0
   const checkInRewardDescription = vipActive
     ? `当前按 VIP${getVipLevel(safeUser)} 奖励发放`
     : "当前按普通用户奖励发放"
@@ -322,6 +329,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
     ? "补签会计入连续签到"
     : "补签不会计入连续签到"
   const todayKey = getLocalDateKey()
+  const earliestMakeUpDate = getCheckInMakeUpEarliestDateKey(todayKey, makeUpOldestDayLimit)
   const checkInButtonTooltip = checkedInToday
     ? `今日已完成签到，${checkInRewardDescription}`
     : `点击可获得 ${formatNumber(calendarData?.checkInReward ?? safeUser.checkInReward ?? 0)} ${pointName}，${checkInRewardDescription}`
@@ -368,7 +376,7 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
   }
 
   async function handleMakeUp(date: string) {
-    if (loading) {
+    if (loading || !makeUpEnabled) {
       return
     }
 
@@ -555,10 +563,15 @@ export function SidebarUserCard({ user, createPostHref = "/write", siteName = "�
                 const entry = calendarEntries.get(activeDate)
                 const isToday = activeDate === todayKey
                 const isPast = activeDate < todayKey
-                const canMakeUp = !entry && isPast && Boolean(currentUser.checkInEnabled)
-                const makeUpTooltip = canMakeUp
-                  ? `${activeDate} 可补签，需 ${formatNumber(calendarData?.makeUpPrice ?? effectiveMakeUpPrice)} ${pointName}。${makeUpPriceDescription}`
-                  : undefined
+                const withinMakeUpWindow = !earliestMakeUpDate || activeDate >= earliestMakeUpDate
+                const canMakeUp = !entry && isPast && Boolean(currentUser.checkInEnabled) && makeUpEnabled && withinMakeUpWindow
+                const makeUpTooltip = entry || !isPast || !currentUser.checkInEnabled
+                  ? undefined
+                  : !makeUpEnabled
+                    ? "补签功能未开启"
+                    : !withinMakeUpWindow
+                      ? `当前仅允许补签 ${earliestMakeUpDate}（含）之后的历史日期`
+                      : `${activeDate} 可补签，需 ${formatNumber(calendarData?.makeUpPrice ?? effectiveMakeUpPrice)} ${pointName}。${makeUpPriceDescription}`
 
                 return (
                   <Tooltip key={activeDate} content={makeUpTooltip} disabled={!makeUpTooltip} align="center">

@@ -26,16 +26,8 @@ export const PAYMENT_GATEWAY_KEY_TYPES = [
 ] as const
 
 export type PaymentGatewayKeyType = (typeof PAYMENT_GATEWAY_KEY_TYPES)[number]
-
-export const PAYMENT_GATEWAY_CHANNEL_CODES = [
-  "alipay.page",
-  "alipay.wap",
-  "alipay.precreate",
-] as const
-
-export type PaymentGatewayChannelCode = (typeof PAYMENT_GATEWAY_CHANNEL_CODES)[number]
-
-export type PaymentGatewayProviderCode = "alipay"
+export type PaymentGatewayChannelCode = string
+export type PaymentGatewayProviderCode = string
 export type PaymentGatewayPresentationType = "HTML_FORM" | "QR_CODE"
 
 export interface PaymentGatewayCheckoutMethodOption {
@@ -75,14 +67,22 @@ export interface PaymentGatewayChannelToggle {
 }
 
 export interface PaymentGatewayChannelDefinition {
-  channelCode: PaymentGatewayChannelCode
-  providerCode: PaymentGatewayProviderCode
+  channelCode: string
+  providerCode: string
   label: string
   description: string
   clientTypes: PaymentGatewayClientType[]
   presentationType: PaymentGatewayPresentationType
-  alipayMethod: "alipay.trade.page.pay" | "alipay.trade.wap.pay" | "alipay.trade.precreate"
-  productCode: "FAST_INSTANT_TRADE_PAY" | "QUICK_WAP_WAY" | "QR_CODE_OFFLINE"
+}
+
+export interface PaymentGatewayProviderAdminEntry {
+  code: string
+  label: string
+  description: string
+  source: "builtin" | "addon"
+  addonId?: string | null
+  settingsHref?: string | null
+  settingsLabel?: string | null
 }
 
 export interface PaymentGatewayAlipayConfigData {
@@ -170,6 +170,7 @@ export interface PaymentGatewayAdminOrderItem {
 export interface PaymentGatewayAdminData {
   config: PaymentGatewayConfigData
   channelDefinitions: PaymentGatewayChannelDefinition[]
+  providerEntries: PaymentGatewayProviderAdminEntry[]
   recentOrdersPagination: {
     page: number
     pageSize: number

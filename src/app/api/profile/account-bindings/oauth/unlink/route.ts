@@ -1,17 +1,16 @@
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { disconnectExternalAuthProviderFromUser } from "@/lib/external-auth-service"
-import { isExternalAuthProvider } from "@/lib/auth-provider-config"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
-  const provider = requireStringField(body, "provider", "缺少渠道参数")
+  const provider = requireStringField(body, "provider", "缺少渠道参数").trim().toLowerCase()
 
-  if (!isExternalAuthProvider(provider)) {
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(provider)) {
     apiError(400, "不支持的第三方渠道")
   }
 
-  await disconnectExternalAuthProviderFromUser(currentUser.id, provider)
+  await disconnectExternalAuthProviderFromUser(currentUser.id, provider, request)
 
   logRouteWriteSuccess({
     scope: "profile-account-bindings",

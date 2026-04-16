@@ -59,6 +59,7 @@ import { toAbsoluteSiteUrl } from "@/lib/site-origin"
 import { getZones } from "@/lib/zones"
 import { getCanonicalPostPath } from "@/lib/post-links"
 import { canManageBoard, getAvailablePinScopes, isSiteAdmin as isSiteAdminActor, resolveAdminActorFromSessionUser } from "@/lib/moderator-permissions"
+import { AddonSlotRenderer } from "@/addons-host"
 
 export async function generateMetadata(props: PageProps<"/posts/[slug]">): Promise<Metadata> {
   const params = await props.params;
@@ -428,6 +429,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                         post={displayPostWithAiIndicator}
                         isFollowingPost={isFollowingPost}
                         isRestrictedAuthor={isRestrictedAuthor}
+                        pathname={canonicalPath}
                         zone={currentZone ? { slug: currentZone.slug, name: currentZone.name } : null}
                         zoneBoards={currentZoneBoards}
                       />
@@ -450,6 +452,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                       </div>
 
                         <div className="mt-8 space-y-5 text-[15px] leading-8 text-foreground/90 dark:text-foreground/85">
+                          <AddonSlotRenderer slot="post.body.before" />
                           {(displayPost.contentBlocks ?? []).map((block) => (
                             block.type === "PUBLIC"
                               ? <MarkdownContent key={block.id} content={block.text} markdownEmojiMap={settings.markdownEmojiMap} expandImagesWhenImageOnly imageOnly={isImageOnlyMarkdown(block.text, settings.markdownEmojiMap)} />
@@ -478,6 +481,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                        {displayPost.poll ? <PollPanel postId={displayPost.id} totalVotes={displayPost.poll.totalVotes} hasVoted={displayPost.poll.hasVoted} expiresAt={displayPost.poll.expiresAt} options={displayPost.poll.options} /> : null}
                         {displayAttachments.length > 0 ? <PostAttachmentList attachments={displayAttachments} pointName={settings.pointName} /> : null}
                         {displayPost.auction ? <PostAuctionWinnerContent auction={displayPost.auction} pointName={settings.pointName} /> : null}
+                        <AddonSlotRenderer slot="post.body.after" />
 
                         </div>
 

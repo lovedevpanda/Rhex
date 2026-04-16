@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { MessageSquareMore } from "lucide-react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
+import { useInboxRealtime } from "@/components/inbox-realtime-provider"
 import { MessageConversationSidebar } from "@/components/message/message-conversation-sidebar"
 import { MessageThreadPanel } from "@/components/message/message-thread-panel"
 import { Button } from "@/components/ui/rbutton"
@@ -15,7 +17,6 @@ import type {
   MessageConversationListItem,
   MessageHistoryResult,
   MessageParticipantProfile,
-  MessageStreamEvent,
 } from "@/lib/message-types"
 
 interface MessagesClientProps {
@@ -24,6 +25,14 @@ interface MessagesClientProps {
   } | null
   initialData: MessageCenterData | null
   conversationId?: string
+  pageBefore?: ReactNode
+  pageAfter?: ReactNode
+  headerBefore?: ReactNode
+  headerAfter?: ReactNode
+  sidebarBefore?: ReactNode
+  sidebarAfter?: ReactNode
+  threadBefore?: ReactNode
+  threadAfter?: ReactNode
 }
 
 interface LiveConversationPatch {
@@ -35,20 +44,23 @@ interface LiveConversationPatch {
   participants?: MessageParticipantProfile[]
 }
 
-export function MessagesClient({ currentUser, initialData, conversationId }: MessagesClientProps) {
+export function MessagesClient({
+  currentUser,
+  initialData,
+  conversationId,
+  pageBefore,
+  pageAfter,
+  headerBefore,
+  headerAfter,
+  sidebarBefore,
+  sidebarAfter,
+  threadBefore,
+  threadAfter,
+}: MessagesClientProps) {
   const router = useRouter()
-  const pathname = usePathname()
-  const reconnectTimerRef = useRef<number | null>(null)
-  const reconnectAttemptRef = useRef(0)
-  const connectionStateRef = useRef<"connecting" | "connected" | "closed">("connecting")
-  const streamCursorRef = useRef<string | null>(null)
+  const { subscribe } = useInboxRealtime()
   const activeConversationIdRef = useRef<string | undefined>(undefined)
-  const selectedConversationIdRef = useRef<string | undefined>(conversationId)
   const dataRef = useRef<MessageCenterData | null>(initialData)
-  const messagePromptAudioRef = useRef<HTMLAudioElement | null>(null)
-  const previousUnreadConversationCountRef = useRef(0)
-  const unreadTitleCountRef = useRef(0)
-  const originalTitleRef = useRef("")
   const [deletingConversationId, setDeletingConversationId] = useState("")
   const [deletedConversationIds, setDeletedConversationIds] = useState<string[]>([])
   const [historyLoadingConversationId, setHistoryLoadingConversationId] = useState("")
@@ -70,7 +82,8 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
     promotedConversationIds,
   }), [deletedConversationIds, historyHasMoreByConversation, historyMessagesByConversation, incomingMessagesByConversation, initialData, liveConversationPatches, optimisticMessagesByConversation, promotedConversationIds])
   const currentUserId = currentUser?.id
-  const shouldConnectMessageStream = Boolean(currentUserId && data && !data.usingDemoData)
+  const shouldUseLiveInboxEvents = Boolean(currentUserId && data && !data.usingDemoData)
+  const pageError = data?.errorMessage?.trim() ?? ""
 
   const activeConversationId = useMemo(() => {
     if (!data?.activeConversation) {
@@ -85,7 +98,6 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId
-    selectedConversationIdRef.current = conversationId
   }, [activeConversationId, conversationId])
 
   useEffect(() => {
@@ -124,27 +136,6 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
       // Ignore read sync failures here; the next navigation can still reconcile server state.
     }
   }, [])
-
-  function resetWindowAttention() {
-    unreadTitleCountRef.current = 0
-
-    if (typeof document !== "undefined" && originalTitleRef.current) {
-      document.title = originalTitleRef.current
-    }
-  }
-
-  function bumpWindowAttention() {
-    if (typeof document === "undefined") {
-      return
-    }
-
-    if (!originalTitleRef.current) {
-      originalTitleRef.current = document.title
-    }
-
-    unreadTitleCountRef.current += 1
-    document.title = unreadTitleCountRef.current > 1 ? `有新消息（${unreadTitleCountRef.current}）` : "有新消息"
-  }
 
   function handleLocalMessageSent(message: MessageBubbleItem) {
     const activeConversation = data?.activeConversation
@@ -259,57 +250,6 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
   }
 
   useEffect(() => {
-    if (typeof document === "undefined") {
-      return
-    }
-
-    if (!originalTitleRef.current) {
-      originalTitleRef.current = document.title
-    }
-  }, [])
-
-  useEffect(() => {
-    const audio = new Audio("/apps/messages/prompt.mp3")
-    audio.preload = "auto"
-    messagePromptAudioRef.current = audio
-
-    const unlockAudio = () => {
-      const target = messagePromptAudioRef.current
-      if (!target) {
-        return
-      }
-
-      target.muted = true
-      target.currentTime = 0
-      void target.play()
-        .then(() => {
-          target.pause()
-          target.currentTime = 0
-          target.muted = false
-        })
-        .catch(() => {
-          target.muted = false
-        })
-    }
-
-    window.addEventListener("pointerdown", unlockAudio, { passive: true })
-    window.addEventListener("keydown", unlockAudio)
-
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio)
-      window.removeEventListener("keydown", unlockAudio)
-      audio.pause()
-      messagePromptAudioRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (pathname === "/messages" && typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus()) {
-      resetWindowAttention()
-    }
-  }, [pathname])
-
-  useEffect(() => {
     if (!activeConversationId) {
       return
     }
@@ -318,83 +258,41 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
   }, [activeConversationId, markConversationRead])
 
   useEffect(() => {
-    const totalUnreadConversationCount = data?.conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0) ?? 0
-    const previousUnreadConversationCount = previousUnreadConversationCountRef.current
-
-    if (totalUnreadConversationCount > previousUnreadConversationCount) {
-      const audio = messagePromptAudioRef.current
-      if (audio) {
-        audio.currentTime = 0
-        void audio.play().catch(() => undefined)
-      }
-    }
-
-    previousUnreadConversationCountRef.current = totalUnreadConversationCount
-  }, [data?.conversations])
-
-  useEffect(() => {
-    function handleWindowFocus() {
-      resetWindowAttention()
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        resetWindowAttention()
-      }
-    }
-
-    window.addEventListener("focus", handleWindowFocus)
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!shouldConnectMessageStream || !currentUserId) {
-      connectionStateRef.current = "closed"
-      reconnectAttemptRef.current = 0
-      streamCursorRef.current = null
+    if (!shouldUseLiveInboxEvents || !currentUserId) {
       return
     }
 
-    let closed = false
-    let eventSource: EventSource | null = null
-
-    const clearReconnectTimer = () => {
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = null
-      }
-    }
-
-    const scheduleReconnect = () => {
-      if (closed || reconnectTimerRef.current) {
+    return subscribe((payload) => {
+      if (payload.type === "heartbeat" || payload.type === "inbox.snapshot" || payload.type === "notification.count") {
         return
       }
 
-      connectionStateRef.current = "connecting"
-      const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttemptRef.current)
-      reconnectAttemptRef.current += 1
+      if (payload.type === "conversation.read") {
+        if (!payload.conversationId) {
+          return
+        }
 
-      reconnectTimerRef.current = window.setTimeout(() => {
-        reconnectTimerRef.current = null
-        connect()
-      }, delay)
-    }
-
-    const handleMessage = (event: MessageEvent<string>) => {
-      let payload: MessageStreamEvent
-
-      try {
-        payload = JSON.parse(event.data) as MessageStreamEvent
-      } catch {
+        setLiveConversationPatches((current) => ({
+          ...current,
+          [payload.conversationId]: {
+            ...current[payload.conversationId],
+            subtitle: activeConversationIdRef.current === payload.conversationId ? "实时会话" : "最近互动",
+            unreadCount: 0,
+          },
+        }))
         return
       }
 
-      if (payload.type === "heartbeat" || payload.senderId === currentUserId) {
+      if (payload.type === "conversation.deleted") {
+        setDeletedConversationIds((current) => current.includes(payload.conversationId) ? current : [...current, payload.conversationId])
+
+        if (activeConversationIdRef.current === payload.conversationId) {
+          const latestData = dataRef.current
+          const nextConversations = latestData?.conversations.filter((conversation) => conversation.id !== payload.conversationId) ?? []
+          const nextConversationId = nextConversations[0]?.id
+          router.push(nextConversationId ? `/messages?conversation=${nextConversationId}` : "/messages", { scroll: false })
+        }
+
         return
       }
 
@@ -404,9 +302,7 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
         return
       }
 
-      if (!document.hasFocus() || document.visibilityState !== "visible") {
-        bumpWindowAttention()
-      }
+      const isOwnMessage = payload.senderId === currentUserId
 
       const latestData = dataRef.current
       const existingConversation = latestData?.conversations.find((conversation) => conversation.id === conversationIdFromEvent)
@@ -416,7 +312,7 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
       promoteConversation(conversationIdFromEvent)
       setLiveConversationPatches((current) => {
         const currentPatch = current[conversationIdFromEvent]
-        const nextUnreadCount = isActiveConversation
+        const nextUnreadCount = isActiveConversation || isOwnMessage
           ? 0
           : Math.max(1, (currentPatch?.unreadCount ?? existingConversation?.unreadCount ?? 0) + 1)
 
@@ -424,7 +320,7 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
           ...current,
           [conversationIdFromEvent]: {
             title: existingConversation?.title ?? payload.senderDisplayName ?? currentPatch?.title,
-            subtitle: isActiveConversation ? "实时会话" : `未读 ${nextUnreadCount} 条`,
+            subtitle: isActiveConversation ? "实时会话" : nextUnreadCount > 0 ? `未读 ${nextUnreadCount} 条` : "最近互动",
             preview: payload.content ?? existingConversation?.preview ?? currentPatch?.preview,
             updatedAt: payload.createdAtLabel ?? existingConversation?.updatedAt ?? currentPatch?.updatedAt,
             unreadCount: nextUnreadCount,
@@ -449,9 +345,9 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
           createdAt: payload.createdAtLabel,
           occurredAt: payload.occurredAt,
           senderId: payload.senderId,
-          senderName: payload.senderDisplayName ?? fallbackParticipant?.displayName ?? "新消息",
-          senderAvatarPath: payload.senderAvatarPath ?? fallbackParticipant?.avatarPath ?? null,
-          isMine: false,
+          senderName: isOwnMessage ? "我" : payload.senderDisplayName ?? fallbackParticipant?.displayName ?? "新消息",
+          senderAvatarPath: isOwnMessage ? null : payload.senderAvatarPath ?? fallbackParticipant?.avatarPath ?? null,
+          isMine: isOwnMessage,
         }
 
         setIncomingMessagesByConversation((current) => ({
@@ -460,86 +356,27 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
         }))
       }
 
-      if (isActiveConversation) {
+      if (isActiveConversation && !isOwnMessage) {
         void markConversationRead(conversationIdFromEvent)
       }
-    }
-
-    const handleCursor = (event: Event) => {
-      let payload: { cursor?: string }
-
-      try {
-        payload = JSON.parse((event as MessageEvent<string>).data) as { cursor?: string }
-      } catch {
-        return
-      }
-
-      if (typeof payload.cursor === "string" && payload.cursor) {
-        streamCursorRef.current = payload.cursor
-      }
-    }
-
-    const connect = () => {
-      if (closed) {
-        return
-      }
-
-      clearReconnectTimer()
-      connectionStateRef.current = "connecting"
-
-      const streamUrl = new URL("/api/messages/stream", window.location.origin)
-      if (streamCursorRef.current) {
-        streamUrl.searchParams.set("cursor", streamCursorRef.current)
-      }
-
-      eventSource = new EventSource(streamUrl)
-
-      eventSource.onopen = () => {
-        reconnectAttemptRef.current = 0
-        connectionStateRef.current = "connected"
-      }
-
-      eventSource.onmessage = handleMessage
-      eventSource.addEventListener("cursor", handleCursor as EventListener)
-      eventSource.onerror = () => {
-        if (eventSource) {
-          eventSource.close()
-          eventSource = null
-        }
-
-        scheduleReconnect()
-      }
-    }
-
-    connect()
-
-    return () => {
-      closed = true
-      clearReconnectTimer()
-      reconnectAttemptRef.current = 0
-      connectionStateRef.current = "closed"
-      eventSource?.close()
-    }
-  }, [currentUserId, markConversationRead, promoteConversation, shouldConnectMessageStream])
+    })
+  }, [currentUserId, markConversationRead, promoteConversation, router, shouldUseLiveInboxEvents, subscribe])
 
   const isMobileThreadVisible = Boolean(data?.activeConversation)
 
-  return (
-    <main className="mx-auto max-w-[1240px] px-0 py-0 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
-      {!currentUser ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>站内私信</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>请先登录后查看私信列表和聊天记录。</p>
-            <Link href="/login">
-              <Button className="rounded-full">前往登录</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : !data ? null : (
-        <>
+  const headerContent = !currentUser || !data ? null : (
+    <>
+      {headerBefore}
+      <AddonSurfaceClientRenderer
+        surface="messages.header"
+        surfaceProps={{
+          activeConversationId,
+          conversationId,
+          currentUser,
+          data,
+          isMobileThreadVisible,
+        }}
+        fallback={(
           <div className={isMobileThreadVisible ? "hidden sm:mb-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3" : "mb-4 flex flex-wrap items-center justify-between gap-3"}>
             <div>
               <h1 className="mt-2 flex items-center gap-2 text-3xl font-semibold">
@@ -548,30 +385,120 @@ export function MessagesClient({ currentUser, initialData, conversationId }: Mes
               </h1>
             </div>
           </div>
+        )}
+      />
+      {headerAfter}
+    </>
+  )
 
-          <div className="grid items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <MessageConversationSidebar
-              conversations={data.conversations}
-              activeConversationId={data.activeConversation?.id}
-              deletingConversationId={deletingConversationId}
-              onDeleteConversation={handleDeleteConversation}
-              mobileHidden={isMobileThreadVisible}
-            />
-            <div className={isMobileThreadVisible ? "block" : "hidden xl:block"}>
-              <MessageThreadPanel
-                conversation={data.activeConversation}
-                currentUserId={currentUser.id}
-                usingDemoData={data.usingDemoData}
-                onMessageSent={handleLocalMessageSent}
-                onLoadHistory={handleLoadHistory}
-                loadingHistory={loadingHistory}
-                historyError={historyError}
-                onBack={data.activeConversation ? () => router.push("/messages", { scroll: false }) : undefined}
-              />
-            </div>
-          </div>
+  const sidebarContent = !currentUser || !data ? null : (
+    <AddonSurfaceClientRenderer
+      surface="messages.sidebar"
+      surfaceProps={{
+        activeConversationId,
+        conversationId,
+        currentUser,
+        data,
+        deletingConversationId,
+        onDeleteConversation: handleDeleteConversation,
+        isMobileThreadVisible,
+      }}
+      fallback={(
+        <>
+          {sidebarBefore}
+          <MessageConversationSidebar
+            conversations={data.conversations}
+            activeConversationId={data.activeConversation?.id}
+            deletingConversationId={deletingConversationId}
+            onDeleteConversation={handleDeleteConversation}
+            mobileHidden={isMobileThreadVisible}
+          />
+          {sidebarAfter}
         </>
       )}
+    />
+  )
+
+  const threadContent = !currentUser || !data ? null : (
+    <AddonSurfaceClientRenderer
+      surface="messages.thread"
+      surfaceProps={{
+        activeConversationId,
+        conversationId,
+        currentUser,
+        data,
+        handleLoadHistory,
+        handleLocalMessageSent,
+        historyError,
+        loadingHistory,
+      }}
+      fallback={(
+        <>
+          {threadBefore}
+          <MessageThreadPanel
+            conversation={data.activeConversation}
+            currentUserId={currentUser.id}
+            usingDemoData={data.usingDemoData}
+            onMessageSent={handleLocalMessageSent}
+            onLoadHistory={handleLoadHistory}
+            loadingHistory={loadingHistory}
+            historyError={historyError}
+            onBack={data.activeConversation ? () => router.push("/messages", { scroll: false }) : undefined}
+          />
+          {threadAfter}
+        </>
+      )}
+    />
+  )
+
+  const pageContent = !currentUser ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>站内私信</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm text-muted-foreground">
+        <p>请先登录后查看私信列表和聊天记录。</p>
+        <Link href="/login">
+          <Button className="rounded-full">前往登录</Button>
+        </Link>
+      </CardContent>
+    </Card>
+  ) : !data ? null : (
+    <>
+      {headerContent}
+      {pageError ? <p className="mb-4 rounded-[20px] border border-rose-200/70 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-200">{pageError}</p> : null}
+      <div className="grid items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          {sidebarContent}
+        </div>
+        <div className={isMobileThreadVisible ? "block" : "hidden xl:block"}>
+          {threadContent}
+        </div>
+      </div>
+    </>
+  )
+
+  return (
+    <main className="mx-auto max-w-[1240px] px-0 py-0 sm:px-4 sm:py-4 lg:px-5 lg:py-5">
+      {pageBefore}
+      <AddonSurfaceClientRenderer
+        surface="messages.page"
+        surfaceProps={{
+          activeConversationId,
+          conversationId,
+          currentUser,
+          data,
+          deletingConversationId,
+          handleDeleteConversation,
+          handleLoadHistory,
+          handleLocalMessageSent,
+          historyError,
+          isMobileThreadVisible,
+          loadingHistory,
+        }}
+        fallback={pageContent}
+      />
+      {pageAfter}
     </main>
   )
 }

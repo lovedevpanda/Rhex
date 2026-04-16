@@ -1,13 +1,27 @@
 import { AlipaySdk, type AlipaySdkCommonResult } from "alipay-sdk"
 
-import { findPaymentGatewayChannelDefinition } from "@/lib/payment-gateway-registry"
+import { findBuiltinPaymentGatewayChannelDefinition } from "@/lib/payment-gateway-registry"
 import type {
-  PaymentGatewayChannelCode,
   PaymentGatewayCheckoutPresentation,
   ServerPaymentGatewayAlipayConfigData,
 } from "@/lib/payment-gateway.types"
 
-type AlipayChannelCode = Extract<PaymentGatewayChannelCode, `alipay.${string}`>
+type AlipayChannelCode = "alipay.page" | "alipay.wap" | "alipay.precreate"
+
+const ALIPAY_CHANNEL_EXECUTION_MAP = {
+  "alipay.page": {
+    method: "alipay.trade.page.pay",
+    productCode: "FAST_INSTANT_TRADE_PAY",
+  },
+  "alipay.wap": {
+    method: "alipay.trade.wap.pay",
+    productCode: "QUICK_WAP_WAY",
+  },
+  "alipay.precreate": {
+    method: "alipay.trade.precreate",
+    productCode: "QR_CODE_OFFLINE",
+  },
+} as const
 
 export interface CreateAlipayCheckoutPresentationInput {
   channelCode: AlipayChannelCode
@@ -82,8 +96,9 @@ function buildAlipayBusinessParams(requestIp?: string | null) {
 export async function createAlipayCheckoutPresentation(
   input: CreateAlipayCheckoutPresentationInput,
 ): Promise<CreateAlipayCheckoutPresentationResult> {
-  const definition = findPaymentGatewayChannelDefinition(input.channelCode)
-  if (!definition || definition.providerCode !== "alipay") {
+  const definition = findBuiltinPaymentGatewayChannelDefinition(input.channelCode)
+  const execution = ALIPAY_CHANNEL_EXECUTION_MAP[input.channelCode]
+  if (!definition || definition.providerCode !== "alipay" || !execution) {
     throw new Error("不支持的支付宝通道")
   }
 
@@ -99,12 +114,12 @@ export async function createAlipayCheckoutPresentation(
 
   if (input.channelCode === "alipay.page" || input.channelCode === "alipay.wap") {
     const businessParams = buildAlipayBusinessParams(input.requestIp)
-    const html = sdk.pageExecute(definition.alipayMethod, "POST", {
+    const html = sdk.pageExecute(execution.method, "POST", {
       notifyUrl: input.notifyUrl,
       returnUrl: input.returnUrl,
       bizContent: {
         ...commonBizContent,
-        product_code: definition.productCode,
+        product_code: execution.productCode,
         ...(businessParams ? { business_params: JSON.stringify(businessParams) } : {}),
         ...(input.channelCode === "alipay.wap" ? { quit_url: input.returnUrl } : {}),
       },
@@ -120,7 +135,7 @@ export async function createAlipayCheckoutPresentation(
         returnUrl: input.returnUrl,
         bizContent: {
           ...commonBizContent,
-          product_code: definition.productCode,
+          product_code: execution.productCode,
           ...(businessParams ? { business_params: businessParams } : {}),
           ...(input.channelCode === "alipay.wap" ? { quit_url: input.returnUrl } : {}),
         },
@@ -133,11 +148,11 @@ export async function createAlipayCheckoutPresentation(
     }
   }
 
-  const result = await sdk.exec(definition.alipayMethod, {
+  const result = await sdk.exec(execution.method, {
     notifyUrl: input.notifyUrl,
     bizContent: {
       ...commonBizContent,
-      product_code: definition.productCode,
+      product_code: execution.productCode,
       ...(buildAlipayBusinessParams(input.requestIp) ? { business_params: buildAlipayBusinessParams(input.requestIp) } : {}),
     },
   }, {
@@ -157,7 +172,7 @@ export async function createAlipayCheckoutPresentation(
       notifyUrl: input.notifyUrl,
       bizContent: {
         ...commonBizContent,
-        product_code: definition.productCode,
+        product_code: execution.productCode,
         ...(buildAlipayBusinessParams(input.requestIp) ? { business_params: buildAlipayBusinessParams(input.requestIp) } : {}),
       },
     },

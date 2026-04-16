@@ -96,6 +96,7 @@ export interface AdminBasicSettingsInitialSettings {
   registerEmailEnabled: boolean
   registerEmailRequired: boolean
   registerEmailVerification: boolean
+  sessionIpMismatchLogoutEnabled: boolean
   loginIpChangeEmailAlertEnabled: boolean
   passwordChangeRequireEmailVerification: boolean
   registerEmailWhitelistEnabled: boolean
@@ -225,6 +226,7 @@ export interface AdminBasicSettingsDraft {
   registerEmailEnabled: boolean
   registerEmailRequired: boolean
   registerEmailVerification: boolean
+  sessionIpMismatchLogoutEnabled: boolean
   loginIpChangeEmailAlertEnabled: boolean
   passwordChangeRequireEmailVerification: boolean
   registerEmailWhitelistEnabled: boolean
@@ -429,6 +431,7 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     registerEmailEnabled: coerceBoolean(initialSettings.registerEmailEnabled, false),
     registerEmailRequired: coerceBoolean(initialSettings.registerEmailRequired, false),
     registerEmailVerification: coerceBoolean(initialSettings.registerEmailVerification, false),
+    sessionIpMismatchLogoutEnabled: coerceBoolean(initialSettings.sessionIpMismatchLogoutEnabled, true),
     loginIpChangeEmailAlertEnabled: coerceBoolean(initialSettings.loginIpChangeEmailAlertEnabled, false),
     passwordChangeRequireEmailVerification: coerceBoolean(initialSettings.passwordChangeRequireEmailVerification, false),
     registerEmailWhitelistEnabled: coerceBoolean(initialSettings.registerEmailWhitelistEnabled, false),
@@ -532,6 +535,7 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
       registerEmailEnabled: draft.registerEmailEnabled,
       registerEmailRequired: draft.registerEmailRequired,
       registerEmailVerification: draft.registerEmailVerification,
+      sessionIpMismatchLogoutEnabled: draft.sessionIpMismatchLogoutEnabled,
       loginIpChangeEmailAlertEnabled: draft.loginIpChangeEmailAlertEnabled,
       passwordChangeRequireEmailVerification: draft.passwordChangeRequireEmailVerification,
       registerEmailWhitelistEnabled: draft.registerEmailWhitelistEnabled,

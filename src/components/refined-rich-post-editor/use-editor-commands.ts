@@ -120,7 +120,7 @@ export function useEditorCommands({
     fileInputRef.current?.click()
   }, [fileInputRef, markdownImageUploadEnabled, toggleImagePanel, uploadResultsCount, uploading])
 
-  const handleToolbarMouseDown = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleToolbarMouseDown = useCallback((event: React.MouseEvent<HTMLElement>) => {
     if (disabled) {
       return
     }

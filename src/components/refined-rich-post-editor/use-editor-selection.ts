@@ -11,6 +11,7 @@ type UseEditorSelectionOptions = {
   onChange: (value: string) => void
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   selectionRef: React.MutableRefObject<EditorSelectionRange>
+  updateSelection: (selection: EditorSelectionRange) => void
   onRestoreScrollTop: (scrollTop: number) => void
 }
 
@@ -19,6 +20,7 @@ export function useEditorSelection({
   onChange,
   textareaRef,
   selectionRef,
+  updateSelection,
   onRestoreScrollTop,
 }: UseEditorSelectionOptions) {
   const restoreViewStateRef = useRef<EditorRestoreViewState | null>(null)
@@ -29,14 +31,14 @@ export function useEditorSelection({
       ? { start: currentElement.selectionStart, end: currentElement.selectionEnd }
       : selectionRef.current
 
-    selectionRef.current = nextSelection
+    updateSelection(nextSelection)
 
     return {
       value,
       selectionStart: nextSelection.start,
       selectionEnd: nextSelection.end,
     }
-  }, [selectionRef, textareaRef, value])
+  }, [selectionRef, textareaRef, updateSelection, value])
 
   const restoreSelection = useCallback((start: number, end: number = start) => {
     requestAnimationFrame(() => {
@@ -54,7 +56,7 @@ export function useEditorSelection({
       }
 
       element.setSelectionRange(start, end)
-      selectionRef.current = { start, end }
+      updateSelection({ start, end })
 
       if (!viewState) {
         return
@@ -66,7 +68,7 @@ export function useEditorSelection({
       window.scrollTo(viewState.pageXOffset, viewState.pageYOffset)
       restoreViewStateRef.current = null
     })
-  }, [onRestoreScrollTop, selectionRef, textareaRef])
+  }, [onRestoreScrollTop, textareaRef, updateSelection])
 
   const applyEditorUpdate = useCallback((update: MarkdownEditorUpdate) => {
     const element = textareaRef.current
@@ -95,9 +97,9 @@ export function useEditorSelection({
     }
 
     const nextSelection = { start: element.selectionStart, end: element.selectionEnd }
-    selectionRef.current = nextSelection
+    updateSelection(nextSelection)
     return nextSelection
-  }, [selectionRef, textareaRef])
+  }, [selectionRef, textareaRef, updateSelection])
 
   return {
     getEditorState,

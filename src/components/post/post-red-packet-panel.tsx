@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/rbutton"
 import { Tooltip } from "@/components/ui/tooltip"
 import { UserAvatar } from "@/components/user/user-avatar"
 import { formatNumber } from "@/lib/formatters"
-import { getPostRedPacketGrantModeLabel } from "@/lib/post-reward-pool-helpers"
+import { getPostRedPacketGrantModeLabel } from "@/lib/post-reward-pool-labels"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 
 interface PostRedPacketPanelProps {

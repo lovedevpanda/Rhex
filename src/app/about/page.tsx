@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowRight, Compass, HeartHandshake, LibraryBig, MessageSquareText, Sparkles } from "lucide-react"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
@@ -84,7 +85,12 @@ export default async function AboutPage() {
           main={(
             <main className="py-1 pb-12 mt-6">
               <div className="space-y-6 ">
-          <section className="rounded-[28px] border border-border bg-card px-5 py-6 shadow-xs sm:px-7 sm:py-8">
+          <AddonSlotRenderer slot="about.page.before" />
+          <AddonSurfaceRenderer surface="about.page" props={{ settings }}>
+            <>
+          <AddonSlotRenderer slot="about.hero.before" />
+          <AddonSurfaceRenderer surface="about.hero" props={{ settings }}>
+            <section className="rounded-[28px] border border-border bg-card px-5 py-6 shadow-xs sm:px-7 sm:py-8">
             <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-3xl">
                 <div className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
@@ -116,8 +122,12 @@ export default async function AboutPage() {
               </div>
             </div>
           </section>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="about.hero.after" />
 
-          <section className="grid gap-5 2xl:grid-cols-[1.05fr_0.95fr]">
+          <AddonSlotRenderer slot="about.highlights.before" />
+          <AddonSurfaceRenderer surface="about.highlights" props={{ highlights, settings }}>
+            <section className="grid gap-5 2xl:grid-cols-[1.05fr_0.95fr]">
             <Card className="shadow-xs">
               <CardHeader>
                 <CardTitle className="text-xl">这是什么样的社区</CardTitle>
@@ -159,8 +169,12 @@ export default async function AboutPage() {
               })}
             </div>
           </section>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="about.highlights.after" />
 
-          <section className="space-y-4">
+          <AddonSlotRenderer slot="about.principles.before" />
+          <AddonSurfaceRenderer surface="about.principles" props={{ principles, settings }}>
+            <section className="space-y-4">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight">我们的社区原则</h2>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -184,6 +198,11 @@ export default async function AboutPage() {
               })}
             </div>
           </section>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="about.principles.after" />
+            </>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="about.page.after" />
 
     
               </div>
@@ -191,8 +210,12 @@ export default async function AboutPage() {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              <AddonSlotRenderer slot="about.sidebar.before" />
+              <AddonSurfaceRenderer surface="about.sidebar" props={{ announcements, hotTopics, settings }}>
+                <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="about.sidebar.after" />
             </aside>
           )}
         />

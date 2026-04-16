@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import type { LocalPostDraft } from "@/lib/post-draft"
 import type { PostLinkDisplayMode } from "@/lib/site-settings"
 import { getPostPath } from "@/lib/post-links"
+import { collectAddonFormFieldsFromFormData } from "@/lib/addon-form-fields"
 import { toast } from "@/components/ui/toast"
 import { buildSubmitRequest } from "@/components/post/create-post-form.shared"
 
@@ -62,13 +63,19 @@ export function useCreatePostSubmit({
     setSlowSubmitWaitSeconds(8)
 
     try {
+      const addonFields = collectAddonFormFieldsFromFormData(
+        new FormData(event.currentTarget),
+      )
       const { endpoint, payload } = buildSubmitRequest({ mode, postId, draft })
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          addonFields,
+        }),
       })
       const result = (await response.json().catch(() => null)) as {
         message?: string

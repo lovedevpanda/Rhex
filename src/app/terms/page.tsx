@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { BookCheck, Crown, FileText, MessageSquareText, Scale, ShieldAlert } from "lucide-react"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
@@ -136,12 +137,16 @@ export default async function TermsPage() {
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="terms.page.before" />
+        <AddonSurfaceRenderer surface="terms.page" props={{ sections, settings }}>
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <main className="py-1 pb-12 mt-6">
               <div className="space-y-6">
+          <AddonSlotRenderer slot="terms.hero.before" />
+          <AddonSurfaceRenderer surface="terms.hero" props={{ settings }}>
           <section className="rounded-[28px] border border-border bg-card px-5 py-6 shadow-xs sm:px-7 sm:py-8">
             <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-3xl">
@@ -157,7 +162,12 @@ export default async function TermsPage() {
 
             </div>
           </section>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="terms.hero.after" />
 
+          <AddonSlotRenderer slot="terms.content.before" />
+          <AddonSurfaceRenderer surface="terms.content" props={{ highlights, sections, settings }}>
+          <>
           <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {highlights.map((item) => {
               const Icon = item.icon
@@ -244,17 +254,26 @@ export default async function TermsPage() {
               </CardContent>
             </Card>
           </section>
+          </>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="terms.content.after" />
 
               </div>
             </main>
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              <AddonSlotRenderer slot="terms.sidebar.before" />
+              <AddonSurfaceRenderer surface="terms.sidebar" props={{ announcements, hotTopics, settings }}>
+                <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="terms.sidebar.after" />
             </aside>
           )}
         />
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="terms.page.after" />
       </div>
     </div>
   )

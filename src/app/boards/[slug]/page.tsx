@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { AccessDeniedCard } from "@/components/access-denied-card"
 import { BoardSidebarPanels } from "@/components/board/board-sidebar-panels"
 import { BoardFollowButton } from "@/components/board/board-follow-button"
@@ -130,6 +131,8 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="board.page.before" />
+        <AddonSurfaceRenderer surface="board.page" props={{ board, settings }}>
         <ForumPageShell
           zones={zones}
           boards={boards}
@@ -137,56 +140,59 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
           main={(
             <main className="pb-12 py-1 mt-5">
             <div className="space-y-3">
-
-              <CollapsibleInfoCard
-                badge="兴趣节点"
-                title={board.name}
-                icon={board.icon}
-                description={board.description}
-                summary={`当前共收录 ${board.count} 篇内容`}
-                summaryActions={<RssSubscribeButton href={`/boards/${board.slug}/rss.xml`} label="订阅节点 RSS" />}
-                detailAction={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} showLabel className="border border-border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent" />}
-                alwaysOpen
-                hidePills
-                pills={[]}
-              />
-
-
+              <AddonSlotRenderer slot="board.hero.before" />
+              <AddonSurfaceRenderer surface="board.hero" props={{ board, isFollowingBoard, settings }}>
+                <CollapsibleInfoCard
+                  badge="兴趣节点"
+                  title={board.name}
+                  icon={board.icon}
+                  description={board.description}
+                  summary={`当前共收录 ${board.count} 篇内容`}
+                  summaryActions={<RssSubscribeButton href={`/boards/${board.slug}/rss.xml`} label="订阅节点 RSS" />}
+                  detailAction={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} showLabel className="border border-border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent" />}
+                  alwaysOpen
+                  hidePills
+                  pills={[]}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="board.hero.after" />
 
               {!permission.allowed ? (
                 <AccessDeniedCard title="当前节点暂不可访问" description={`该节点设置了${settings.pointName}、等级或 VIP 浏览门槛，未满足条件的用户无法查看节点内容。`} reason={permission.message || "当前没有访问权限"} isLoggedIn={Boolean(currentUser)} />
               ) : (
                 <>
-         
+                  <AddonSlotRenderer slot="board.content.before" />
+                  <AddonSurfaceRenderer surface="board.content" props={{ board, hasNextPage, page, permission, posts, settings, totalPages, useInfinitePostList }}>
+                    <>
+                      {useInfinitePostList ? (
+                        <InfiniteForumPostStream
+                          apiPath={`/api/boards/${encodeURIComponent(params.slug)}/posts`}
+                          initialItems={postDisplayItems}
+                          initialPage={page}
+                          initialHasNextPage={hasNextPage}
+                          listDisplayMode={board.postListDisplayMode}
+                          showBoard={false}
+                          showPinnedDivider={page === 1}
+                          postLinkDisplayMode={settings.postLinkDisplayMode}
+                        />
+                      ) : (
+                        <ForumPostStream posts={posts} listDisplayMode={board.postListDisplayMode} showBoard={false} showPinnedDivider={page === 1} />
+                      )}
 
-                  {useInfinitePostList ? (
-                    <InfiniteForumPostStream
-                      apiPath={`/api/boards/${encodeURIComponent(params.slug)}/posts`}
-                      initialItems={postDisplayItems}
-                      initialPage={page}
-                      initialHasNextPage={hasNextPage}
-                      listDisplayMode={board.postListDisplayMode}
-                      showBoard={false}
-                      showPinnedDivider={page === 1}
-                      postLinkDisplayMode={settings.postLinkDisplayMode}
-                    />
-                  ) : (
-                    <ForumPostStream posts={posts} listDisplayMode={board.postListDisplayMode} showBoard={false} showPinnedDivider={page === 1} />
-                  )}
+                      {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前节点还没有内容。</div> : null}
 
-
-
-                  {posts.length === 0 ? <div className="rounded-md border bg-background p-8 text-sm text-muted-foreground">当前节点还没有内容。</div> : null}
-
-                  {useInfinitePostList ? null : (
-                    <PageNumberPagination
-                      page={page}
-                      totalPages={totalPages}
-                      hasPrevPage={hasPrevPage}
-                      hasNextPage={hasNextPage}
-                      buildHref={(targetPage) => buildBoardPageHref(params.slug, targetPage)}
-                    />
-                  )}
+                      {useInfinitePostList ? null : (
+                        <PageNumberPagination
+                          page={page}
+                          totalPages={totalPages}
+                          hasPrevPage={hasPrevPage}
+                          hasNextPage={hasNextPage}
+                          buildHref={(targetPage) => buildBoardPageHref(params.slug, targetPage)}
+                        />
+                      )}
+                    </>
+                  </AddonSurfaceRenderer>
+                  <AddonSlotRenderer slot="board.content.after" />
                 </>
               )}
             </div>
@@ -194,23 +200,29 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <BoardSidebarPanels
-                user={sidebarUser}
-                hotTopics={hotTopics}
-                board={board}
-                moderators={moderators}
-                announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
-                postLinkDisplayMode={settings.postLinkDisplayMode}
-                createPostHref={`/write?board=${board.slug}`}
-                siteName={settings.siteName}
-                siteDescription={settings.siteDescription}
-                siteLogoPath={settings.siteLogoPath}
-                siteIconPath={settings.siteIconPath}
-              />
+              <AddonSlotRenderer slot="board.sidebar.before" />
+              <AddonSurfaceRenderer surface="board.sidebar" props={{ announcements, board, hotTopics, moderators, settings }}>
+                <BoardSidebarPanels
+                  user={sidebarUser}
+                  hotTopics={hotTopics}
+                  board={board}
+                  moderators={moderators}
+                  announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                  postLinkDisplayMode={settings.postLinkDisplayMode}
+                  createPostHref={`/write?board=${board.slug}`}
+                  siteName={settings.siteName}
+                  siteDescription={settings.siteDescription}
+                  siteLogoPath={settings.siteLogoPath}
+                  siteIconPath={settings.siteIconPath}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="board.sidebar.after" />
             </aside>
           )}
         />
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="board.page.after" />
       </div>
     </div>
   )

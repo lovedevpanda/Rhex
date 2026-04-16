@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { FavoriteCollectionDetail } from "@/components/collection/favorite-collection-detail"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
@@ -72,33 +73,50 @@ export default async function FavoriteCollectionDetailPage(props: {
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="collection.page.before" />
+        <AddonSurfaceRenderer surface="collection.page" props={{ data, settings }}>
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <div className="mt-6 pb-12">
-              <FavoriteCollectionDetail initialData={data} postLinkDisplayMode={settings.postLinkDisplayMode} />
+              <FavoriteCollectionDetail
+                initialData={data}
+                postLinkDisplayMode={settings.postLinkDisplayMode}
+                heroBefore={<AddonSlotRenderer slot="collection.hero.before" />}
+                heroAfter={<AddonSlotRenderer slot="collection.hero.after" />}
+                pendingBefore={<AddonSlotRenderer slot="collection.pending.before" />}
+                pendingAfter={<AddonSlotRenderer slot="collection.pending.after" />}
+                contentBefore={<AddonSlotRenderer slot="collection.content.before" />}
+                contentAfter={<AddonSlotRenderer slot="collection.content.after" />}
+              />
             </div>
           )}
           rightSidebar={(
             <div className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels
-                user={sidebarUser}
-                hotTopics={hotTopics}
-                postLinkDisplayMode={settings.postLinkDisplayMode}
-                announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
-                friendLinks={friendLinks.compact}
-                friendLinksEnabled={settings.friendLinksEnabled}
-                stats={sidebarStats}
-                siteName={settings.siteName}
-                siteDescription={settings.siteDescription}
-                siteLogoPath={settings.siteLogoPath}
-                siteIconPath={settings.siteIconPath}
-              />
+              <AddonSlotRenderer slot="collection.sidebar.before" />
+              <AddonSurfaceRenderer surface="collection.sidebar" props={{ announcements, friendLinks, hotTopics, settings, sidebarStats }}>
+                <HomeSidebarPanels
+                  user={sidebarUser}
+                  hotTopics={hotTopics}
+                  postLinkDisplayMode={settings.postLinkDisplayMode}
+                  announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                  friendLinks={friendLinks.compact}
+                  friendLinksEnabled={settings.friendLinksEnabled}
+                  stats={sidebarStats}
+                  siteName={settings.siteName}
+                  siteDescription={settings.siteDescription}
+                  siteLogoPath={settings.siteLogoPath}
+                  siteIconPath={settings.siteIconPath}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="collection.sidebar.after" />
             </div>
           )}
         />
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="collection.page.after" />
       </div>
     </div>
   )

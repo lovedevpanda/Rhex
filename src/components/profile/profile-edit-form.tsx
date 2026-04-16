@@ -6,7 +6,7 @@ import { Camera, LoaderCircle, Mail, PencilLine, UserRound } from "lucide-react"
 import { PasswordChangeForm } from "@/components/profile/password-change-form"
 import { Modal } from "@/components/ui/modal"
 import { AvatarCropModal } from "@/components/profile/avatar-crop-modal"
-import { RefinedRichPostEditor } from "@/components/refined-rich-post-editor"
+import { AddonEditor } from "@/components/addon-editor"
 import { UserAvatar } from "@/components/user/user-avatar"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
@@ -785,7 +785,8 @@ export function ProfileEditForm({
             <p className="text-sm font-medium">个人介绍</p>
             <span className="text-xs text-muted-foreground">{pendingIntroduction.length}/20000</span>
           </div>
-          <RefinedRichPostEditor
+          <AddonEditor
+            context="profile"
             value={pendingIntroduction}
             onChange={setPendingIntroduction}
             minHeight={320}

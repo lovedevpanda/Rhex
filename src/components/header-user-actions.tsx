@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, MessageSquareMore, User } from "lucide-react"
 
+import { useInboxRealtime } from "@/components/inbox-realtime-provider"
 import { Button } from "@/components/ui/rbutton"
 import { UserAvatar } from "@/components/user/user-avatar"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
@@ -18,8 +19,6 @@ interface HeaderUserActionsProps {
     vipLevel?: number
     vipExpiresAt?: string | null
   } | null
-  unreadMessageCount: number
-  unreadNotificationCount: number
 }
 
 function formatUnreadBadge(count: number) {
@@ -45,9 +44,10 @@ function HeaderUnreadBadge({ count, className }: { count: number; className?: st
 }
 
 
-export function HeaderUserActions({ user, unreadMessageCount, unreadNotificationCount }: HeaderUserActionsProps) {
+export function HeaderUserActions({ user }: HeaderUserActionsProps) {
 
   const router = useRouter()
+  const { unreadMessageCount, unreadNotificationCount } = useInboxRealtime()
   const mobileMenuRef = useRef<HTMLDivElement | null>(null)
   const desktopMenuRef = useRef<HTMLDivElement | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -181,6 +181,13 @@ export function HeaderUserActions({ user, unreadMessageCount, unreadNotification
       </div>
 
       <div className="hidden items-center gap-1.5 sm:flex">
+        <Link href="/notifications" className="relative">
+          <Button variant="ghost" size="icon" className="size-8 rounded-md">
+            <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
+          </Button>
+          <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
+        </Link>
+
         <Link href="/messages" className="relative">
           <Button variant="ghost" className="h-8 rounded-md px-3 gap-1.5">
             <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />

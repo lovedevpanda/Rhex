@@ -6,7 +6,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const credentialId = requireStringField(body, "credentialId", "缺少 Passkey 标识")
 
-  await disconnectPasskeyCredentialFromUser(currentUser.id, credentialId)
+  await disconnectPasskeyCredentialFromUser(currentUser.id, credentialId, request)
 
   logRouteWriteSuccess({
     scope: "profile-account-bindings",

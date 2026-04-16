@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { AddonSlotRenderer, AddonSurfaceRenderBoundary } from "@/addons-host"
 import { SettingsPageContent } from "@/app/settings/settings-page-content"
 import { loadSettingsPageData, resolveSettingsRoute, settingsTabTitles } from "@/app/settings/settings-page-loader"
 import { SettingsShell } from "@/components/settings/settings-shell"
@@ -26,9 +27,21 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-[1240px] px-4 sm:py-8 lg:px-6">
-        <SettingsShell profile={data.profile} pointName={data.settings.pointName} boardApplicationEnabled={data.settings.boardApplicationEnabled}>
-          <SettingsPageContent data={data} />
-        </SettingsShell>
+        <AddonSlotRenderer slot="settings.page.before" />
+        <AddonSurfaceRenderBoundary surface="settings.page" props={{ data }}>
+          <SettingsShell
+            profile={data.profile}
+            pointName={data.settings.pointName}
+            boardApplicationEnabled={data.settings.boardApplicationEnabled}
+            sidebarTop={<AddonSlotRenderer slot="settings.sidebar.top" />}
+            sidebarBottom={<AddonSlotRenderer slot="settings.sidebar.bottom" />}
+            contentBefore={<AddonSlotRenderer slot="settings.content.before" />}
+            contentAfter={<AddonSlotRenderer slot="settings.content.after" />}
+          >
+            <SettingsPageContent data={data} />
+          </SettingsShell>
+        </AddonSurfaceRenderBoundary>
+        <AddonSlotRenderer slot="settings.page.after" />
       </main>
     </div>
   )

@@ -157,7 +157,7 @@ export function ThemeToggle() {
         <CurrentIcon className="h-3.5 w-3.5" />
         <span
           className="h-2 w-2 rounded-full border border-white/60"
-          style={{ backgroundColor: `hsl(${currentPresetMeta.preview[0]})` }}
+          style={{ backgroundColor: "hsl(var(--primary))" }}
           aria-hidden="true"
         />
       </Button>

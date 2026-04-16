@@ -12,6 +12,7 @@ import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { isUserProfileVisibility, mapLegacyVisibilityBoolean, mergeUserProfileSettings, resolveUserProfileSettings, type UserProfileVisibility } from "@/lib/user-profile-settings"
 import { VerificationChannel } from "@/lib/shared/verification-channel"
 import { resolveVipTierPrice } from "@/lib/vip-tier-pricing"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 type ProfileUpdateResponse = {
   username: string
@@ -60,6 +61,7 @@ function toProfileUpdateResponse(input: {
 export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ request, currentUser }) => {
 
   const body = await readJsonBody(request)
+  const requestUrl = new URL(request.url)
   const settings = await getSiteSettings()
 
   const validated = validateProfilePayload(body, {
@@ -221,6 +223,28 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
     apiError(400, `保存资料需要 ${totalRequiredPoints} ${pointName}，当前余额不足`)
   }
 
+  await executeAddonActionHook("user.update.before", {
+    userId: currentUser.id,
+    username: dbUser.username,
+    nickname: nextNickname,
+    bio: bioSafety.sanitizedText,
+    introduction: nextIntroduction,
+    gender,
+    avatarPath,
+    email: nextEmail,
+    activityVisibility,
+    introductionVisibility,
+    nicknameChanged,
+    introductionChanged,
+    avatarChanged,
+    emailChanged,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
+
   const updated = await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: currentUser.id },
@@ -323,6 +347,19 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   revalidateUserSurfaceCache(currentUser.id)
 
   const updatedProfileSettings = resolveUserProfileSettings(updated.signature)
+
+  await executeAddonActionHook("user.update.after", {
+    userId: currentUser.id,
+    username: updated.username,
+    nicknameChanged,
+    introductionChanged,
+    avatarChanged,
+    emailChanged,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 
   return apiSuccess(toProfileUpdateResponse({
     ...updated,

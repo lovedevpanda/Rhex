@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto"
 
-import { createInviteCodesBatch, findInviteCodeByCode, findInviteCodeForUse, findInviteCodeList, findInviteCodesByCodes, findInvitePurchaseUser, findUserInviteResolverById, findUserInviteResolverByUsername } from "@/db/invite-code-queries"
+import { countInviteCodesByCreator, createInviteCodesBatch, findInviteCodeByCode, findInviteCodeForUse, findInviteCodeList, findInviteCodesByCodes, findInviteCodesByCreator, findInvitePurchaseUser, findUserInviteResolverById, findUserInviteResolverByUsername } from "@/db/invite-code-queries"
 import { purchaseInviteCodeTransaction } from "@/db/invite-code-write-queries"
 import { apiError } from "@/lib/api-route"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -20,6 +20,24 @@ export interface InviteCodeItem {
   usedAt: string | null
   usedByUsername: string | null
   note: string | null
+}
+
+export interface InviteCodePageData {
+  items: Array<{
+    id: string
+    code: string
+    createdAt: string
+    usedAt: string | null
+    usedByUsername: string | null
+  }>
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+    hasPrevPage: boolean
+    hasNextPage: boolean
+  }
 }
 
 function randomInviteCode(length = DEFAULT_CODE_LENGTH) {
@@ -77,6 +95,33 @@ export async function getInviteCodeList(limit = 100): Promise<InviteCodeItem[]> 
     usedByUsername: row.usedBy?.username ?? null,
     note: row.note,
   }))
+}
+
+export async function getPurchasedInviteCodePage(userId: number, options?: { page?: number; pageSize?: number }): Promise<InviteCodePageData> {
+  const requestedPage = Math.max(1, Math.trunc(options?.page ?? 1))
+  const pageSize = Math.max(1, Math.min(Math.trunc(options?.pageSize ?? 10), 50))
+  const total = await countInviteCodesByCreator(userId)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(requestedPage, totalPages)
+  const rows = await findInviteCodesByCreator(userId, { page, pageSize })
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      createdAt: row.createdAt.toISOString(),
+      usedAt: row.usedAt?.toISOString() ?? null,
+      usedByUsername: row.usedBy?.username ?? null,
+    })),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasPrevPage: page > 1,
+      hasNextPage: page < totalPages,
+    },
+  }
 }
 
 export async function resolveInviter(input: { inviterUsername?: string; inviteCode?: string; username: string }) {

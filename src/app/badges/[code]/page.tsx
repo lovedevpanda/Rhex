@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import type { ReactNode } from "react"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
 import { LevelIcon } from "@/components/level-icon"
@@ -103,12 +104,16 @@ export default async function BadgeDetailPage(props: BadgeDetailPageProps) {
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="badge.page.before" />
+        <AddonSurfaceRenderer surface="badge.page" props={{ badge, settings }}>
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <main className="mt-6 pb-12">
               <div className="space-y-6">
+                <AddonSlotRenderer slot="badge.hero.before" />
+                <AddonSurfaceRenderer surface="badge.hero" props={{ badge, badgeRules, settings }}>
                 <section className="rounded-[28px] border border-border bg-card px-5 py-6 shadow-xs sm:px-7 sm:py-8">
                   <div className="mx-auto max-w-3xl text-center">
                     <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
@@ -244,24 +249,32 @@ export default async function BadgeDetailPage(props: BadgeDetailPageProps) {
                     </div>
                   </div>
                 </section>
+                </AddonSurfaceRenderer>
+                <AddonSlotRenderer slot="badge.hero.after" />
               </div>
             </main>
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels
-                user={sidebarUser}
-                hotTopics={hotTopics}
-                announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
-                siteName={settings.siteName}
-                siteDescription={settings.siteDescription}
-                siteLogoPath={settings.siteLogoPath}
-                siteIconPath={settings.siteIconPath}
-              />
+              <AddonSlotRenderer slot="badge.sidebar.before" />
+              <AddonSurfaceRenderer surface="badge.sidebar" props={{ announcements, hotTopics, settings }}>
+                <HomeSidebarPanels
+                  user={sidebarUser}
+                  hotTopics={hotTopics}
+                  announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled}
+                  siteName={settings.siteName}
+                  siteDescription={settings.siteDescription}
+                  siteLogoPath={settings.siteLogoPath}
+                  siteIconPath={settings.siteIconPath}
+                />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="badge.sidebar.after" />
             </aside>
           )}
         />
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="badge.page.after" />
       </div>
     </div>
   )

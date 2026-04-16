@@ -1,6 +1,7 @@
 import { ensureBackgroundJobRuntimeReady } from "@/lib/background-jobs"
 import { logError } from "@/lib/logger"
 import { ensureMessageEventBusRuntimeReady } from "@/lib/message-event-bus"
+import { ensureNotificationEventBusRuntimeReady } from "@/lib/notification-event-bus"
 
 type GlobalServerRuntimeState = {
   __bbsServerRuntimeReadyPromise?: Promise<void>
@@ -12,6 +13,7 @@ export function ensureServerRuntimeReady() {
   globalForServerRuntime.__bbsServerRuntimeReadyPromise ??= Promise.allSettled([
     ensureBackgroundJobRuntimeReady(),
     ensureMessageEventBusRuntimeReady(),
+    ensureNotificationEventBusRuntimeReady(),
   ]).then((results) => {
     for (const result of results) {
       if (result.status === "rejected") {

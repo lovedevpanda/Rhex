@@ -2,10 +2,20 @@ import { randomUUID } from "crypto"
 
 import { normalizeIp } from "@/lib/request-ip"
 import { persistSessionRecord, readPersistedSessionRecord, revokePersistedSession } from "@/lib/session-store"
+import { getServerSiteSettings } from "@/lib/site-settings"
 
 const SESSION_COOKIE_NAME = "bbs_session"
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
 const SESSION_RENEW_THRESHOLD_SECONDS = 60 * 60 * 24 * 3
+
+async function isSessionIpMismatchLogoutEnabled() {
+  try {
+    const settings = await getServerSiteSettings()
+    return settings.sessionIpMismatchLogoutEnabled
+  } catch {
+    return true
+  }
+}
 
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET?.trim()
@@ -166,7 +176,9 @@ export async function parseSessionToken(token: string | undefined, options?: Par
 
   const requestIp = normalizeIp(options?.requestIp ?? null)
   if (session.ip && requestIp && session.ip !== requestIp) {
-    return null
+    if (await isSessionIpMismatchLogoutEnabled()) {
+      return null
+    }
   }
 
   if (session.sessionId) {

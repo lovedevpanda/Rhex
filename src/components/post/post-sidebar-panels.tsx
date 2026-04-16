@@ -3,6 +3,7 @@ import { FolderOpen, Tag } from "lucide-react"
 
 import { SidebarUserCard, type SidebarUserCardData } from "@/components/user/sidebar-user-card"
 import { getPostPath } from "@/lib/post-links"
+import { AddonSlotRenderer } from "@/addons-host"
 
 interface RelatedTopic {
   id: string
@@ -47,6 +48,7 @@ export function PostSidebarPanels({
 }: PostSidebarPanelsProps) {
   return (
     <div className="post-sidebar-panels mobile-sidebar-stack flex min-w-0 w-full max-w-full flex-col gap-4">
+      <AddonSlotRenderer slot="post.sidebar.top" />
       <SidebarUserCard user={currentUser} siteName={siteName} siteDescription={siteDescription} siteLogoPath={siteLogoPath} siteIconPath={siteIconPath} />
 
       <div className="mobile-sidebar-section rounded-[24px] border border-border bg-card p-4 shadow-xs shadow-black/5 dark:shadow-black/30">
@@ -108,6 +110,7 @@ export function PostSidebarPanels({
           ) : null}
         </div>
       </div>
+      <AddonSlotRenderer slot="post.sidebar.bottom" />
     </div>
   )
 }

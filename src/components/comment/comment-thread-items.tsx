@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { CornerDownRight, Flag } from "lucide-react"
 
+import { AddonSurfaceClientRenderer } from "@/addons-host/client/addon-surface-client-renderer"
 import { AiAgentIndicator } from "@/components/user/ai-agent-indicator"
 import { AnonymousUserIndicator } from "@/components/user/anonymous-user-indicator"
 import { CommentForm } from "@/components/comment/comment-form"
@@ -27,6 +28,7 @@ import { getVipNameClass } from "@/lib/vip-status"
 
 type ThreadEntry = SiteCommentItem | SiteCommentReplyItem
 export type CommentThreadReplyLayout = "tree" | "flat"
+type CommentThreadEntryType = "comment" | "reply"
 
 interface CommentThreadCommentItemProps {
   comment: SiteCommentItem
@@ -90,6 +92,236 @@ interface CommentThreadReplyItemProps {
 
 function getRegularAuthorNameClassName(className: string) {
   return className.replace(/\bfont-medium\b/g, "").replace(/\s+/g, " ").trim()
+}
+
+interface CommentAuthorSurfaceProps<TEntry extends ThreadEntry = ThreadEntry> {
+  entryType: CommentThreadEntryType
+  entry: TEntry
+  authorHref: string
+  authorNameClassName: string
+  isRestrictedAuthor: boolean
+  shouldDimRestrictedAuthor: boolean
+  showVerification: boolean
+}
+
+interface CommentAuthorMetaSurfaceProps<TEntry extends ThreadEntry = ThreadEntry>
+  extends CommentAuthorSurfaceProps<TEntry> {
+  showEditButton: boolean
+  editButtonLabel: string
+  onToggleEdit: () => void
+}
+
+function CommentAuthorVerificationContent({
+  entry,
+  showVerification,
+}: CommentAuthorSurfaceProps) {
+  if (!showVerification) {
+    return null
+  }
+
+  return (
+    <UserVerificationBadge
+      verification={entry.authorVerification ?? null}
+      compact
+      appearance="plain"
+    />
+  )
+}
+
+function CommentAuthorNameContent({
+  entry,
+  authorHref,
+  authorNameClassName,
+}: CommentAuthorSurfaceProps) {
+  return (
+    <VipNameTooltip isVip={entry.authorIsVip} level={entry.authorVipLevel}>
+      <span className="inline-flex items-center gap-1">
+        <Link href={authorHref} className={authorNameClassName}>
+          {entry.author}
+        </Link>
+        {entry.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
+        {entry.authorIsAiAgent ? <AiAgentIndicator /> : null}
+      </span>
+    </VipNameTooltip>
+  )
+}
+
+function CommentAuthorBadgesContent({ entry }: CommentAuthorSurfaceProps) {
+  return (
+    <UserDisplayedBadges
+      badges={entry.authorDisplayedBadges}
+      compact
+      appearance="plain"
+    />
+  )
+}
+
+function CommentAuthorMetaContent({
+  entry,
+  authorHref,
+  authorNameClassName,
+  entryType,
+  isRestrictedAuthor,
+  shouldDimRestrictedAuthor,
+  showVerification,
+  showEditButton,
+  editButtonLabel,
+  onToggleEdit,
+}: CommentAuthorMetaSurfaceProps) {
+  const sharedProps = {
+    entry,
+    entryType,
+    authorHref,
+    authorNameClassName,
+    isRestrictedAuthor,
+    shouldDimRestrictedAuthor,
+    showVerification,
+  } satisfies CommentAuthorSurfaceProps
+
+  const replyToAuthor =
+    entryType === "reply" && "replyToAuthor" in entry ? entry.replyToAuthor : null
+  const showPendingBadge = entry.status === "PENDING"
+  const showPinnedBadge =
+    entryType === "comment" && "isPinnedByAuthor" in entry && entry.isPinnedByAuthor
+  const showAcceptedAnswerBadge =
+    entryType === "comment" && "isAcceptedAnswer" in entry && entry.isAcceptedAnswer
+
+  return (
+    <AddonSurfaceClientRenderer
+      surface="comment.author.meta"
+      surfaceProps={{
+        ...sharedProps,
+        showEditButton,
+        editButtonLabel,
+        onToggleEdit,
+      }}
+      fallback={(
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
+          <AddonSurfaceClientRenderer
+            surface="comment.author.verification"
+            surfaceProps={sharedProps}
+            fallback={<CommentAuthorVerificationContent {...sharedProps} />}
+          />
+          <AddonSurfaceClientRenderer
+            surface="comment.author.name"
+            surfaceProps={sharedProps}
+            fallback={<CommentAuthorNameContent {...sharedProps} />}
+          />
+          <CommentAuthorIdentityBadges
+            isPostAuthor={entry.isPostAuthor}
+            authorRole={entry.authorRole}
+          />
+          <AddonSurfaceClientRenderer
+            surface="comment.author.badges"
+            surfaceProps={sharedProps}
+            fallback={<CommentAuthorBadgesContent {...sharedProps} />}
+          />
+          {isRestrictedAuthor ? (
+            <UserStatusBadge status={entry.authorStatus} compact />
+          ) : null}
+          {replyToAuthor ? (
+            <span className="rounded-full bg-background/75 px-1.5 py-0.5 text-[10px] text-muted-foreground/90">
+              回复 @{replyToAuthor}
+            </span>
+          ) : null}
+          <span>·</span>
+          <TimeTooltip value={entry.createdAtRaw}>
+            <span>{entry.createdAt}</span>
+          </TimeTooltip>
+          {showPendingBadge ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+              待审核
+            </span>
+          ) : null}
+          {showPinnedBadge ? (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+              楼主置顶
+            </span>
+          ) : null}
+          {showAcceptedAnswerBadge ? (
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+              已采纳答案
+            </span>
+          ) : null}
+          {showEditButton ? (
+            <button
+              type="button"
+              className="text-[11px] transition-colors hover:text-foreground"
+              onClick={onToggleEdit}
+            >
+              {editButtonLabel}
+            </button>
+          ) : null}
+        </div>
+      )}
+    />
+  )
+}
+
+function CommentAuthorRowContent({
+  entry,
+  authorHref,
+  authorNameClassName,
+  entryType,
+  isRestrictedAuthor,
+  shouldDimRestrictedAuthor,
+  showVerification,
+  showEditButton,
+  editButtonLabel,
+  onToggleEdit,
+}: CommentAuthorMetaSurfaceProps) {
+  return (
+    <AddonSurfaceClientRenderer
+      surface="comment.author.row"
+      surfaceProps={{
+        entry,
+        entryType,
+        authorHref,
+        authorNameClassName,
+        isRestrictedAuthor,
+        shouldDimRestrictedAuthor,
+        showVerification,
+        showEditButton,
+        editButtonLabel,
+        onToggleEdit,
+      }}
+      fallback={(
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <Link
+            href={authorHref}
+            className={cn("shrink-0", shouldDimRestrictedAuthor && "grayscale")}
+          >
+            <UserAvatar
+              name={entry.author}
+              avatarPath={entry.authorAvatarPath}
+              size="xs"
+              isVip={entry.authorIsVip}
+              vipLevel={entry.authorVipLevel}
+            />
+          </Link>
+          <div
+            className={cn(
+              entryType === "comment" ? "min-w-0 flex-1 space-y-1.5" : "min-w-0 flex-1",
+              shouldDimRestrictedAuthor && "grayscale",
+            )}
+          >
+            <CommentAuthorMetaContent
+              entry={entry}
+              entryType={entryType}
+              authorHref={authorHref}
+              authorNameClassName={authorNameClassName}
+              isRestrictedAuthor={isRestrictedAuthor}
+              shouldDimRestrictedAuthor={shouldDimRestrictedAuthor}
+              showVerification={showVerification}
+              showEditButton={showEditButton}
+              editButtonLabel={editButtonLabel}
+              onToggleEdit={onToggleEdit}
+            />
+          </div>
+        </div>
+      )}
+    />
+  )
 }
 
 function CommentAdminActionMenu({
@@ -180,6 +412,7 @@ export function CommentThreadReplyItem({
   const replyAuthorNameClassName = reply.authorIsVip
     ? getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })
     : getRegularAuthorNameClassName(getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true }))
+  const replyAuthorHref = `/users/${reply.authorUsername}`
   const replyUnavailableMessage = getCommentUnavailableMessage({
     isAdmin,
     status: reply.status,
@@ -211,78 +444,62 @@ export function CommentThreadReplyItem({
     >
       {!isFlatLayout ? <span aria-hidden="true" className="absolute -left-[14px] top-4 h-2 w-2 rounded-full bg-muted-foreground/30 sm:-left-[18px]" /> : null}
       <div className="flex flex-col gap-2.5">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <Link href={`/users/${reply.authorUsername}`} className={cn("shrink-0", shouldDimRestrictedReplyAuthor && "grayscale")}>
-            <UserAvatar name={reply.author} avatarPath={reply.authorAvatarPath} size="xs" isVip={reply.authorIsVip} vipLevel={reply.authorVipLevel} />
-          </Link>
-          <div className={cn("min-w-0 flex-1", shouldDimRestrictedReplyAuthor && "grayscale")}>
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-              <VipNameTooltip isVip={reply.authorIsVip} level={reply.authorVipLevel}>
-                <span className="inline-flex items-center gap-1">
-                  <Link href={`/users/${reply.authorUsername}`} className={replyAuthorNameClassName}>{reply.author}</Link>
-                  {reply.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
-                  {reply.authorIsAiAgent ? <AiAgentIndicator /> : null}
-                </span>
-              </VipNameTooltip>
-              <CommentAuthorIdentityBadges isPostAuthor={reply.isPostAuthor} authorRole={reply.authorRole} />
-              <UserDisplayedBadges badges={reply.authorDisplayedBadges} compact appearance="plain" />
-              {isRestrictedReplyAuthor ? <UserStatusBadge status={reply.authorStatus} compact /> : null}
-              {reply.replyToAuthor ? <span className="rounded-full bg-background/75 px-1.5 py-0.5 text-[10px] text-muted-foreground/90">回复 @{reply.replyToAuthor}</span> : null}
-              <span>·</span>
-              <TimeTooltip value={reply.createdAtRaw}>
-                <span>{reply.createdAt}</span>
-              </TimeTooltip>
-              {reply.status === "PENDING" ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">待审核</span> : null}
-              {canEditCurrentReply && !isHiddenReplyForViewer ? (
-                <button type="button" className="text-[11px] transition-colors hover:text-foreground" onClick={() => editingCommentId === reply.id ? onStopEdit() : onStartEdit(reply.id)}>
-                  {getEditButtonLabel(reply)}
-                </button>
-              ) : null}
-            </div>
-            <div className="mt-2">
-              {editingCommentId === reply.id ? (
-                <CommentForm
-                  postId={reply.postId}
-                  commentId={reply.id}
-                  initialContent={reply.content}
-                  mode="edit"
-                  compact
-                  onCancel={onStopEdit}
-                  markdownEmojiMap={markdownEmojiMap}
-                  editWindowMinutes={commentEditWindowMinutes}
-                />
-              ) : (
-                <>
-                  {isAdmin ? <AdminCommentStatusNotice status={reply.status} /> : null}
-                  <CommentReviewStatusNotice status={reply.status} reviewNote={reply.reviewNote} isAdmin={isAdmin} isOwner={canEditCurrentReply} />
-                  {isFlatLayout && (reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt) ? (
-                    <div className="mb-2.5 flex items-start gap-2">
-                      <CornerDownRight className="mt-3 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
-                      <div className="min-w-0 flex-1 rounded-2xl border border-border/70 bg-secondary/30 px-3 py-2.5 text-[12px] leading-5 text-muted-foreground">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-medium text-foreground/80">{reply.replyToCommentAuthor ?? reply.parentCommentAuthor ? `回复 @${reply.replyToCommentAuthor ?? reply.parentCommentAuthor}` : "回复原评论"}</span>
-                          {referenceCommentId ?? parentCommentId ? (
-                            <button
-                              type="button"
-                              onClick={() => onJumpToParentComment?.(referenceCommentId ?? parentCommentId, parentCommentHref)}
-                              className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-                            >
-                              查看原文
-                            </button>
-                          ) : null}
-                        </div>
-                        <p className="mt-1.5 line-clamp-2">{reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt}</p>
+        <CommentAuthorRowContent
+          entry={reply}
+          entryType="reply"
+          authorHref={replyAuthorHref}
+          authorNameClassName={replyAuthorNameClassName}
+          isRestrictedAuthor={isRestrictedReplyAuthor}
+          shouldDimRestrictedAuthor={shouldDimRestrictedReplyAuthor}
+          showVerification={false}
+          showEditButton={canEditCurrentReply && !isHiddenReplyForViewer}
+          editButtonLabel={getEditButtonLabel(reply)}
+          onToggleEdit={() => editingCommentId === reply.id ? onStopEdit() : onStartEdit(reply.id)}
+        />
+        <div className={cn("min-w-0 flex-1", shouldDimRestrictedReplyAuthor && "grayscale")}>
+          <div className="mt-2">
+            {editingCommentId === reply.id ? (
+              <CommentForm
+                postId={reply.postId}
+                commentId={reply.id}
+                initialContent={reply.content}
+                mode="edit"
+                compact
+                onCancel={onStopEdit}
+                markdownEmojiMap={markdownEmojiMap}
+                editWindowMinutes={commentEditWindowMinutes}
+              />
+            ) : (
+              <>
+                {isAdmin ? <AdminCommentStatusNotice status={reply.status} /> : null}
+                <CommentReviewStatusNotice status={reply.status} reviewNote={reply.reviewNote} isAdmin={isAdmin} isOwner={canEditCurrentReply} />
+                {isFlatLayout && (reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt) ? (
+                  <div className="mb-2.5 flex items-start gap-2">
+                    <CornerDownRight className="mt-3 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                    <div className="min-w-0 flex-1 rounded-2xl border border-border/70 bg-secondary/30 px-3 py-2.5 text-[12px] leading-5 text-muted-foreground">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-foreground/80">{reply.replyToCommentAuthor ?? reply.parentCommentAuthor ? `回复 @${reply.replyToCommentAuthor ?? reply.parentCommentAuthor}` : "回复原评论"}</span>
+                        {referenceCommentId ?? parentCommentId ? (
+                          <button
+                            type="button"
+                            onClick={() => onJumpToParentComment?.(referenceCommentId ?? parentCommentId, parentCommentHref)}
+                            className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                          >
+                            查看原文
+                          </button>
+                        ) : null}
                       </div>
+                      <p className="mt-1.5 line-clamp-2">{reply.replyToCommentExcerpt ?? reply.parentCommentExcerpt}</p>
                     </div>
-                  ) : null}
-                  {replyUnavailableMessage ? (
-                    <CommentUnavailablePlaceholder message={replyUnavailableMessage} />
-                  ) : (
-                    <MarkdownContent content={reply.content} className="text-[13px] leading-6 text-foreground/90 dark:text-foreground/85 sm:text-sm sm:leading-7" markdownEmojiMap={markdownEmojiMap} />
-                  )}
-                </>
-              )}
-            </div>
+                  </div>
+                ) : null}
+                {replyUnavailableMessage ? (
+                  <CommentUnavailablePlaceholder message={replyUnavailableMessage} />
+                ) : (
+                  <MarkdownContent content={reply.content} className="text-[13px] leading-6 text-foreground/90 dark:text-foreground/85 sm:text-sm sm:leading-7" markdownEmojiMap={markdownEmojiMap} />
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -380,6 +597,7 @@ export function CommentThreadCommentItem({
   const commentAuthorNameClassName = comment.authorIsVip
     ? getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })
     : getRegularAuthorNameClassName(getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true }))
+  const commentAuthorHref = `/users/${comment.authorUsername}`
   const commentUnavailableMessage = getCommentUnavailableMessage({
     isAdmin,
     status: comment.status,
@@ -409,58 +627,40 @@ export function CommentThreadCommentItem({
       )}
     >
       <div className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <Link href={`/users/${comment.authorUsername}`} className={cn("shrink-0", shouldDimRestrictedCommentAuthor && "grayscale")}>
-            <UserAvatar name={comment.author} avatarPath={comment.authorAvatarPath} size="xs" isVip={comment.authorIsVip} vipLevel={comment.authorVipLevel} />
-          </Link>
-          <div className={cn("min-w-0 flex-1 space-y-1.5", shouldDimRestrictedCommentAuthor && "grayscale")}>
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
-              <UserVerificationBadge verification={comment.authorVerification ?? null} compact appearance="plain" />
-              <VipNameTooltip isVip={comment.authorIsVip} level={comment.authorVipLevel}>
-                <span className="inline-flex items-center gap-1">
-                  <Link href={`/users/${comment.authorUsername}`} className={commentAuthorNameClassName}>{comment.author}</Link>
-                  {comment.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
-                  {comment.authorIsAiAgent ? <AiAgentIndicator /> : null}
-                </span>
-              </VipNameTooltip>
-              <CommentAuthorIdentityBadges isPostAuthor={comment.isPostAuthor} authorRole={comment.authorRole} />
-              <UserDisplayedBadges badges={comment.authorDisplayedBadges} compact appearance="plain" />
-              {isRestrictedCommentAuthor ? <UserStatusBadge status={comment.authorStatus} compact /> : null}
-              <span>·</span>
-              <TimeTooltip value={comment.createdAtRaw}>
-                <span>{comment.createdAt}</span>
-              </TimeTooltip>
-              {comment.status === "PENDING" ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">待审核</span> : null}
-              {comment.isPinnedByAuthor ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">楼主置顶</span> : null}
-              {comment.isAcceptedAnswer ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">已采纳答案</span> : null}
-              {canEditCurrentComment && !isHiddenCommentForViewer ? (
-                <button type="button" className="text-[11px] transition-colors hover:text-foreground" onClick={() => editingCommentId === comment.id ? onStopEdit() : onStartEdit(comment.id)}>
-                  {getEditButtonLabel(comment)}
-                </button>
-              ) : null}
-            </div>
-            {editingCommentId === comment.id ? (
-              <CommentForm
-                postId={comment.postId}
-                commentId={comment.id}
-                initialContent={comment.content}
-                mode="edit"
-                onCancel={onStopEdit}
-                markdownEmojiMap={markdownEmojiMap}
-                editWindowMinutes={commentEditWindowMinutes}
-              />
-            ) : (
-              <>
-                {isAdmin ? <AdminCommentStatusNotice status={comment.status} /> : null}
-                <CommentReviewStatusNotice status={comment.status} reviewNote={comment.reviewNote} isAdmin={isAdmin} isOwner={canEditCurrentComment} />
-                {commentUnavailableMessage ? (
-                  <CommentUnavailablePlaceholder message={commentUnavailableMessage} />
-                ) : (
-                  <MarkdownContent content={comment.content} className="text-[13px] leading-6 text-foreground/90 dark:text-foreground/85 sm:text-sm sm:leading-7" markdownEmojiMap={markdownEmojiMap} />
-                )}
-              </>
-            )}
-          </div>
+        <CommentAuthorRowContent
+          entry={comment}
+          entryType="comment"
+          authorHref={commentAuthorHref}
+          authorNameClassName={commentAuthorNameClassName}
+          isRestrictedAuthor={isRestrictedCommentAuthor}
+          shouldDimRestrictedAuthor={shouldDimRestrictedCommentAuthor}
+          showVerification
+          showEditButton={canEditCurrentComment && !isHiddenCommentForViewer}
+          editButtonLabel={getEditButtonLabel(comment)}
+          onToggleEdit={() => editingCommentId === comment.id ? onStopEdit() : onStartEdit(comment.id)}
+        />
+        <div className={cn("min-w-0 flex-1 space-y-1.5", shouldDimRestrictedCommentAuthor && "grayscale")}>
+          {editingCommentId === comment.id ? (
+            <CommentForm
+              postId={comment.postId}
+              commentId={comment.id}
+              initialContent={comment.content}
+              mode="edit"
+              onCancel={onStopEdit}
+              markdownEmojiMap={markdownEmojiMap}
+              editWindowMinutes={commentEditWindowMinutes}
+            />
+          ) : (
+            <>
+              {isAdmin ? <AdminCommentStatusNotice status={comment.status} /> : null}
+              <CommentReviewStatusNotice status={comment.status} reviewNote={comment.reviewNote} isAdmin={isAdmin} isOwner={canEditCurrentComment} />
+              {commentUnavailableMessage ? (
+                <CommentUnavailablePlaceholder message={commentUnavailableMessage} />
+              ) : (
+                <MarkdownContent content={comment.content} className="text-[13px] leading-6 text-foreground/90 dark:text-foreground/85 sm:text-sm sm:leading-7" markdownEmojiMap={markdownEmojiMap} />
+              )}
+            </>
+          )}
         </div>
 
         <div className={cn("flex w-full items-center gap-2 text-[11px] text-muted-foreground sm:text-xs", commentRewardBadges ? "justify-between" : "justify-end", editingCommentId === comment.id && "border-t border-border/60 pt-2")}>

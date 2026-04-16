@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { Crown, ShieldCheck } from "lucide-react"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { SiteHeader } from "@/components/site-header"
 import { VipActionPanel } from "@/components/vip/vip-action-panel"
 import { VipBadge } from "@/components/vip/vip-badge"
@@ -89,7 +90,12 @@ export default async function VipPage() {
     <div className="min-h-screen ">
       <SiteHeader />
       <main className="mx-auto max-w-[1000px] px-4 py-8 lg:px-6">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <AddonSlotRenderer slot="vip.page.before" />
+        <AddonSurfaceRenderer surface="vip.page" props={{ milestones, settings, user, vipUser }}>
+          <>
+        <AddonSlotRenderer slot="vip.hero.before" />
+        <AddonSurfaceRenderer surface="vip.hero" props={{ milestones, settings, user, vipActive, currentLevel }}>
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card className="overflow-hidden border-none bg-linear-to-r from-violet-700 via-fuchsia-700 to-purple-700 text-white shadow-soft">
             <CardContent className="p-3">
               <div className="flex items-center gap-3">
@@ -149,16 +155,19 @@ export default async function VipPage() {
 
             </CardContent>
           </Card>
-        </div>
+          </div>
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="vip.hero.after" />
 
-        {user ? <VipActionPanel vipMonthlyPrice={settings.vipMonthlyPrice} vipQuarterlyPrice={settings.vipQuarterlyPrice} vipYearlyPrice={settings.vipYearlyPrice} pointName={settings.pointName} userPoints={user.points} vipExpiresAt={(vipUser?.vipExpiresAt as string | Date | null | undefined)?.toString?.() ?? null} /> : null}
+        <AddonSlotRenderer slot="vip.actions.before" />
+        <AddonSurfaceRenderer surface="vip.actions" props={{ settings, user, vipUser }}>
+          {user ? <VipActionPanel vipMonthlyPrice={settings.vipMonthlyPrice} vipQuarterlyPrice={settings.vipQuarterlyPrice} vipYearlyPrice={settings.vipYearlyPrice} pointName={settings.pointName} userPoints={user.points} vipExpiresAt={(vipUser?.vipExpiresAt as string | Date | null | undefined)?.toString?.() ?? null} /> : null}
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="vip.actions.after" />
 
-
-
-
-
-
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <AddonSlotRenderer slot="vip.levels.before" />
+        <AddonSurfaceRenderer surface="vip.levels" props={{ milestones, settings }}>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
           {milestones.map((item) => (
 
             <Card key={item.level}>
@@ -179,7 +188,12 @@ export default async function VipPage() {
               </CardContent>
             </Card>
           ))}
-        </div>
+          </div>
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="vip.levels.after" />
+          </>
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="vip.page.after" />
       </main>
     </div>
   )

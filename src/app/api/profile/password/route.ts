@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { prisma } from "@/db/client"
 import { verifyPasswordChangeVerificationCode } from "@/lib/account-security"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
@@ -14,6 +15,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const currentPassword = requireStringField(body, "currentPassword", "缺少必要参数")
   const newPassword = requireStringField(body, "newPassword", "缺少必要参数")
   const emailCode = typeof body.emailCode === "string" ? body.emailCode.trim() : ""
+  const requestUrl = new URL(request.url)
 
 
   if (!currentPassword || !newPassword) {
@@ -61,6 +63,18 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     })
   }
 
+  await executeAddonActionHook("auth.password.change.before", {
+    userId: currentUser.id,
+    username: currentUser.username,
+    email: user.email,
+    requiresEmailVerification: settings.passwordChangeRequireEmailVerification,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
+
   const passwordHash = await bcrypt.hash(newPassword, 10)
   await prisma.user.update({
     where: { id: user.id },
@@ -71,6 +85,17 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   })
 
   await revokeSessionToken(readSessionTokenFromCookieHeader(request.headers.get("cookie")))
+
+  await executeAddonActionHook("auth.password.change.after", {
+    userId: currentUser.id,
+    username: currentUser.username,
+    email: user.email,
+    requiresEmailVerification: settings.passwordChangeRequireEmailVerification,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 
   logRouteWriteSuccess({
     scope: "profile-password",

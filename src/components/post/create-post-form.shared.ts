@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import type { AccessThresholdOption } from "@/lib/access-threshold-options"
 import { createEmptyLocalPostDraft, type LocalPostDraft } from "@/lib/post-draft"
@@ -228,6 +230,17 @@ export interface CreatePostFormInitialValues {
 export interface CreatePostFormProps {
   boardOptions: CreatePostFormBoardGroup[]
   pointName: string
+  addonCaptcha?: ReactNode
+  addonFormBefore?: ReactNode
+  addonFormAfter?: ReactNode
+  addonToolsBefore?: ReactNode
+  addonToolsAfter?: ReactNode
+  addonEditorBefore?: ReactNode
+  addonEditorAfter?: ReactNode
+  addonEnhancementsBefore?: ReactNode
+  addonEnhancementsAfter?: ReactNode
+  addonSubmitBefore?: ReactNode
+  addonSubmitAfter?: ReactNode
   anonymousPostEnabled?: boolean
   anonymousPostPrice?: number
   postRedPacketEnabled?: boolean

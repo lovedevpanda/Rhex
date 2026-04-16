@@ -1,7 +1,12 @@
+import "server-only"
+
 import { randomInt } from "crypto"
 
 import { PostRedPacketClaimOrderMode, PostRedPacketGrantMode, PostRedPacketStatus, PostRedPacketTriggerType } from "@/db/types"
 import { getPostContentMeta } from "@/lib/post-content"
+import {
+  getPostRedPacketTriggerLabel,
+} from "@/lib/post-reward-pool-labels"
 import type { PostRewardPoolEffectFeedback } from "@/lib/post-reward-effect-feedback"
 import { parseStoredPostRewardPoolConfig, toPositiveInteger, type PostRewardPoolMode } from "@/lib/post-reward-pool-config"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -64,22 +69,6 @@ interface PostRedPacketAllocationSnapshot {
 const JACKPOT_REPEAT_REPLY_PROBABILITY_FACTOR = 0.35
 const JACKPOT_REPEAT_WINNER_PROBABILITY_FACTOR = 0.5
 
-const RED_PACKET_TRIGGER_LABELS: Record<PostRedPacketTriggerType, string> = {
-  REPLY: "回复帖子",
-  LIKE: "点赞帖子",
-  FAVORITE: "收藏帖子",
-}
-
-const RED_PACKET_GRANT_MODE_LABELS: Record<PostRedPacketGrantMode, string> = {
-  FIXED: "固定红包",
-  RANDOM: "拼手气红包",
-}
-
-const RED_PACKET_CLAIM_ORDER_MODE_LABELS: Record<PostRedPacketClaimOrderMode, string> = {
-  FIRST_COME_FIRST_SERVED: "先到先得",
-  RANDOM: "随机机会",
-}
-
 function parseRewardPoolConfigFromMeta(value: unknown) {
   return parseStoredPostRewardPoolConfig(value)
 }
@@ -115,18 +104,6 @@ function clampJackpotProbability(value: number) {
 
 export function parsePostRewardPoolConfigFromContent(rawContent: string) {
   return parseRewardPoolConfigFromMeta(getPostContentMeta(rawContent)?.rewardPool)
-}
-
-export function getPostRedPacketTriggerLabel(triggerType: PostRedPacketTriggerType) {
-  return RED_PACKET_TRIGGER_LABELS[triggerType]
-}
-
-export function getPostRedPacketGrantModeLabel(grantMode: PostRedPacketGrantMode) {
-  return RED_PACKET_GRANT_MODE_LABELS[grantMode]
-}
-
-export function getPostRedPacketClaimOrderModeLabel(claimOrderMode: PostRedPacketClaimOrderMode) {
-  return RED_PACKET_CLAIM_ORDER_MODE_LABELS[claimOrderMode]
 }
 
 export async function normalizePostRedPacketConfig(input: unknown): Promise<{
@@ -192,15 +169,15 @@ export async function normalizePostRedPacketConfig(input: unknown): Promise<{
     ? multiplyPositiveSafeIntegers(unitPoints, packetCount)
     : configuredTotalPoints
 
-  if (!(grantMode in RED_PACKET_GRANT_MODE_LABELS)) {
+  if (!(grantMode in PostRedPacketGrantMode)) {
     return { success: false, message: "红包发放方式不合法", data: null }
   }
 
-  if (!(claimOrderMode in RED_PACKET_CLAIM_ORDER_MODE_LABELS)) {
+  if (!(claimOrderMode in PostRedPacketClaimOrderMode)) {
     return { success: false, message: "红包领取规则不合法", data: null }
   }
 
-  if (!(triggerType in RED_PACKET_TRIGGER_LABELS)) {
+  if (!(triggerType in PostRedPacketTriggerType)) {
     return { success: false, message: "红包领取条件不合法", data: null }
   }
 

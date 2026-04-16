@@ -30,6 +30,39 @@ export function findInviteCodeList(limit: number) {
   })
 }
 
+export function countInviteCodesByCreator(userId: number) {
+  return prisma.inviteCode.count({
+    where: {
+      createdById: userId,
+    },
+  })
+}
+
+export function findInviteCodesByCreator(userId: number, options: { page: number; pageSize: number }) {
+  const page = Math.max(1, Math.trunc(options.page))
+  const pageSize = Math.max(1, Math.min(Math.trunc(options.pageSize), 50))
+
+  return prisma.inviteCode.findMany({
+    where: {
+      createdById: userId,
+    },
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    select: {
+      id: true,
+      code: true,
+      createdAt: true,
+      usedAt: true,
+      usedBy: {
+        select: {
+          username: true,
+        },
+      },
+    },
+  })
+}
+
 export function findInviteCodeForUse(code: string) {
   return prisma.inviteCode.findUnique({
     where: { code },

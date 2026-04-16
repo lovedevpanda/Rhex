@@ -1,4 +1,5 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody, requireNumberField, readOptionalStringField } from "@/lib/api-route"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { sendDirectMessage } from "@/lib/messages"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
@@ -9,6 +10,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const recipientId = requireNumberField(body, "recipientId", "缺少接收方信息")
   const content = readOptionalStringField(body, "body")
+  const requestUrl = new URL(request.url)
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("messages-send", {
     request,
@@ -18,7 +20,34 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       body: content,
     },
   }), async () => {
+    await executeAddonActionHook("message.send.before", {
+      senderId: currentUser.id,
+      senderUsername: currentUser.username,
+      recipientId,
+      body: content,
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+      throwOnError: true,
+    })
+
     const data = await sendDirectMessage(currentUser.id, recipientId, content)
+
+    await executeAddonActionHook("message.send.after", {
+      senderId: currentUser.id,
+      senderUsername: currentUser.username,
+      recipientId,
+      messageId: data.id,
+      conversationId: data.conversationId,
+      body: data.content,
+      contentAdjusted: data.contentAdjusted,
+      occurredAt: data.occurredAt,
+    }, {
+      request,
+      pathname: requestUrl.pathname,
+      searchParams: requestUrl.searchParams,
+    })
 
     revalidateUserSurfaceCache(currentUser.id)
     revalidateUserSurfaceCache(recipientId)

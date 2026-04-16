@@ -1,4 +1,5 @@
 import { prisma } from "@/db/client"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { mergeUserProfileSettings, resolveUserProfileSettings } from "@/lib/user-profile-settings"
@@ -12,6 +13,7 @@ type NotificationSettingsResponse = {
 export const POST = createUserRouteHandler<NotificationSettingsResponse>(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const validated = validateNotificationSettingsPayload(body)
+  const requestUrl = new URL(request.url)
 
   if (!validated.success || !validated.data) {
     apiError(400, validated.message ?? "参数错误")
@@ -31,6 +33,18 @@ export const POST = createUserRouteHandler<NotificationSettingsResponse>(async (
 
   const nextSignature = mergeUserProfileSettings(dbUser.signature, validated.data)
 
+  await executeAddonActionHook("user.notification-settings.update.before", {
+    userId: currentUser.id,
+    username: currentUser.username,
+    externalNotificationEnabled: validated.data.externalNotificationEnabled,
+    notificationWebhookUrl: validated.data.notificationWebhookUrl,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+    throwOnError: true,
+  })
+
   const updated = await prisma.user.update({
     where: { id: currentUser.id },
     data: {
@@ -42,6 +56,17 @@ export const POST = createUserRouteHandler<NotificationSettingsResponse>(async (
   })
 
   const profileSettings = resolveUserProfileSettings(updated.signature)
+
+  await executeAddonActionHook("user.notification-settings.update.after", {
+    userId: currentUser.id,
+    username: currentUser.username,
+    externalNotificationEnabled: profileSettings.externalNotificationEnabled,
+    notificationWebhookUrl: profileSettings.notificationWebhookUrl,
+  }, {
+    request,
+    pathname: requestUrl.pathname,
+    searchParams: requestUrl.searchParams,
+  })
 
   logRouteWriteSuccess({
     scope: "profile-notification-settings",

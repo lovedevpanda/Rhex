@@ -1,10 +1,14 @@
 import { GitHub, Google, generateCodeVerifier, generateState } from "arctic"
 
 import type { ServerSiteSettingsData, SiteSettingsData } from "@/lib/site-settings"
-import type { ExternalAuthProvider, ExternalOAuthProfile } from "@/lib/external-auth-types"
+import type {
+  BuiltinExternalAuthProvider,
+  ExternalAuthProvider,
+  ExternalOAuthProfile,
+} from "@/lib/external-auth-types"
 import { resolveSiteOrigin } from "@/lib/site-origin"
 
-const OAUTH_PROVIDER_LABELS: Record<ExternalAuthProvider, string> = {
+const OAUTH_PROVIDER_LABELS: Record<BuiltinExternalAuthProvider, string> = {
   github: "GitHub",
   google: "Google",
 }
@@ -14,7 +18,15 @@ export function isExternalAuthProvider(value: string): value is ExternalAuthProv
 }
 
 export function getExternalAuthProviderLabel(provider: ExternalAuthProvider) {
-  return OAUTH_PROVIDER_LABELS[provider]
+  if (provider === "github") {
+    return OAUTH_PROVIDER_LABELS.github
+  }
+
+  if (provider === "google") {
+    return OAUTH_PROVIDER_LABELS.google
+  }
+
+  return provider.trim() || "第三方账号"
 }
 
 export function isExternalAuthProviderEnabled(settings: Pick<SiteSettingsData, "authGithubEnabled" | "authGoogleEnabled">, provider: ExternalAuthProvider) {
@@ -22,7 +34,11 @@ export function isExternalAuthProviderEnabled(settings: Pick<SiteSettingsData, "
     return settings.authGithubEnabled
   }
 
-  return settings.authGoogleEnabled
+  if (provider === "google") {
+    return settings.authGoogleEnabled
+  }
+
+  return false
 }
 
 export function getEnabledExternalAuthProviders(settings: Pick<SiteSettingsData, "authGithubEnabled" | "authGoogleEnabled">) {

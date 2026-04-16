@@ -1,3 +1,4 @@
+import { executeAddonAsyncWaterfallHook } from "@/addons-host/runtime/hooks"
 import { getBoards, type SiteBoardItem } from "@/lib/boards"
 import { getZones } from "@/lib/zones"
 
@@ -15,8 +16,10 @@ export async function getPrimaryNavigation(): Promise<NavigationItem[]> {
     activePrefix: `/zones/${zone.slug}`,
   }))
   const boardItems = boards.slice(0, 3).map(mapBoardToNavigationItem)
+  const items = [{ label: "首页", href: "/", activePrefix: "/" }, ...zoneItems, ...boardItems]
+  const hooked = await executeAddonAsyncWaterfallHook("navigation.primary.items", items)
 
-  return [{ label: "首页", href: "/", activePrefix: "/" }, ...zoneItems, ...boardItems]
+  return Array.isArray(hooked.value) ? hooked.value : items
 }
 
 function mapBoardToNavigationItem(board: SiteBoardItem): NavigationItem {

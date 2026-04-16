@@ -8,6 +8,12 @@ export type EditorSelectionRange = {
   end: number
 }
 
+export type EditorSelectionStore = {
+  getSnapshot: () => EditorSelectionRange
+  subscribe: (listener: () => void) => () => void
+  setSelection: (selection: EditorSelectionRange) => void
+}
+
 export type EditorRestoreViewState = {
   scrollTop: number
   scrollLeft: number

@@ -26,7 +26,7 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
   }
 
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+    <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-2.5 sm:gap-x-3 sm:gap-y-3">
       {badges.map((badge) => (
         <Tooltip
           key={badge.id}
@@ -55,7 +55,7 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
           }
           contentClassName="max-w-[240px]"
         >
-          <Link href={`/badges/${badge.code}`} className="flex min-w-0 items-center gap-1.5 text-left">
+          <Link href={`/badges/${badge.code}`} className="flex min-w-0 items-center gap-1 text-left sm:gap-1.5">
             <div
               className="flex h-5 w-5 shrink-0 items-center justify-center text-lg"
               style={{ color: badge.color }}
@@ -63,12 +63,12 @@ export function UserProfileBadgeShowcase({ badges }: UserProfileBadgeShowcasePro
               <LevelIcon
                 icon={badge.iconText}
                 color={badge.color}
-                className="h-4 w-4 text-[16px]"
+                className="h-3.5 w-3.5 text-[14px] sm:h-4 sm:w-4 sm:text-[16px]"
                 emojiClassName="text-inherit"
                 svgClassName="[&>svg]:block"
               />
             </div>
-            <p className="line-clamp-1 min-w-0 text-[12px] font-semibold leading-5 text-foreground">
+            <p className="line-clamp-1 min-w-0 text-[11px] font-semibold leading-4 text-foreground sm:text-[12px] sm:leading-5">
               {badge.name}
             </p>
           </Link>

@@ -45,6 +45,7 @@ export function findAuthUserStatusById(userId: number, client?: DbClient) {
     where: { id: userId },
     select: {
       id: true,
+      username: true,
       status: true,
     },
   })
@@ -62,7 +63,7 @@ export function findAuthenticatedUserSummaryById(userId: number, client?: DbClie
   })
 }
 
-export function findExternalAuthLoginCandidate(login: string, client?: DbClient) {
+export function findUserLoginCandidate(login: string, client?: DbClient) {
   return resolveClient(client).user.findFirst({
     where: {
       OR: [
@@ -80,8 +81,13 @@ export function findExternalAuthLoginCandidate(login: string, client?: DbClient)
       username: true,
       passwordHash: true,
       status: true,
+      lastLoginIp: true,
     },
   })
+}
+
+export function findExternalAuthLoginCandidate(login: string, client?: DbClient) {
+  return findUserLoginCandidate(login, client)
 }
 
 export function findInviteCodeRegistrationContext(code: string, client?: DbClient) {

@@ -1,12 +1,13 @@
 import type { Metadata } from "next"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { NotificationsPagination } from "@/components/notification/notifications-pagination"
 import { NotificationsToolbar } from "@/components/notification/notifications-toolbar"
 import { NotificationListItem } from "@/components/notification/notification-list-item"
 import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
-import { getUserNotifications, getUserUnreadNotificationCount } from "@/lib/notifications"
+import { getUserNotifications } from "@/lib/notifications"
 import { getSiteSettings } from "@/lib/site-settings"
 
 const PAGE_SIZE = 20
@@ -51,12 +52,14 @@ export default async function NotificationsPage(
       <div className="min-h-screen bg-background">
         <SiteHeader />
         <main className="mx-auto max-w-[900px] px-4 py-8">
+          <AddonSlotRenderer slot="notifications.page.before" />
           <Card>
             <CardHeader>
               <CardTitle>消息通知</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">请先登录后查看通知。</CardContent>
           </Card>
+          <AddonSlotRenderer slot="notifications.page.after" />
         </main>
       </div>
     )
@@ -66,43 +69,58 @@ export default async function NotificationsPage(
   const after = readParam(resolvedSearchParams?.after)
   const before = readParam(resolvedSearchParams?.before)
 
-  const [{ items: notifications, hasPrevPage, hasNextPage, prevCursor, nextCursor }, unreadCount] = await Promise.all([
-    getUserNotifications(user.id, { pageSize: PAGE_SIZE, after, before }),
-    getUserUnreadNotificationCount(user.id),
-  ])
+  const { items: notifications, hasPrevPage, hasNextPage, prevCursor, nextCursor } = await getUserNotifications(user.id, {
+    pageSize: PAGE_SIZE,
+    after,
+    before,
+  })
 
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-[900px] px-4 py-8">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>消息通知</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <NotificationsToolbar unreadCount={unreadCount} />
-              {notifications.length === 0 ? <p className="text-sm text-muted-foreground">暂时还没有新的通知。</p> : null}
-              {notifications.map((notification: (typeof notifications)[number]) => (
+          <AddonSlotRenderer slot="notifications.page.before" />
+          <AddonSurfaceRenderer surface="notifications.page" props={{ notifications, user }}>
+            <Card>
+              <CardHeader>
+                <CardTitle>消息通知</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <AddonSlotRenderer slot="notifications.toolbar.before" />
+                <AddonSurfaceRenderer surface="notifications.toolbar" props={{ user }}>
+                  <NotificationsToolbar />
+                </AddonSurfaceRenderer>
+                <AddonSlotRenderer slot="notifications.toolbar.after" />
+                <AddonSlotRenderer slot="notifications.list.before" />
+                <AddonSurfaceRenderer surface="notifications.list" props={{ hasNextPage, hasPrevPage, nextCursor, notifications, prevCursor }}>
+                  <>
+                    {notifications.length === 0 ? <p className="text-sm text-muted-foreground">暂时还没有新的通知。</p> : null}
+                    {notifications.map((notification: (typeof notifications)[number]) => (
 
-                <NotificationListItem
-                  key={notification.id}
-                  id={notification.id}
-                  href={notification.relatedUrl}
-                  isRead={notification.isRead}
-                  typeLabel={notification.typeLabel}
-                  title={notification.title}
-                  content={notification.content}
-                  senderName={notification.senderName}
-                  createdAt={notification.createdAt}
-                />
-              ))}
-              <NotificationsPagination
-                prevHref={hasPrevPage && prevCursor ? buildNotificationsHref({ before: prevCursor }) : null}
-                nextHref={hasNextPage && nextCursor ? buildNotificationsHref({ after: nextCursor }) : null}
-              />
-            </CardContent>
-          </Card>
+                      <NotificationListItem
+                        key={notification.id}
+                        id={notification.id}
+                        href={notification.relatedUrl}
+                        isRead={notification.isRead}
+                        typeLabel={notification.typeLabel}
+                        title={notification.title}
+                        content={notification.content}
+                        senderName={notification.senderName}
+                        createdAt={notification.createdAt}
+                      />
+                    ))}
+                    <NotificationsPagination
+                      prevHref={hasPrevPage && prevCursor ? buildNotificationsHref({ before: prevCursor }) : null}
+                      nextHref={hasNextPage && nextCursor ? buildNotificationsHref({ after: nextCursor }) : null}
+                    />
+                  </>
+                </AddonSurfaceRenderer>
+                <AddonSlotRenderer slot="notifications.list.after" />
+              </CardContent>
+            </Card>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="notifications.page.after" />
         </div>
       </main>
     </div>

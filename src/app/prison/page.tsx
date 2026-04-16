@@ -3,6 +3,7 @@ import Link from "next/link"
 import { UserStatus } from "@/db/types"
 import { getHomeAnnouncements } from "@/lib/announcements"
 
+import { AddonSlotRenderer, AddonSurfaceRenderer } from "@/addons-host"
 import { ForumPageShell } from "@/components/forum/forum-page-shell"
 import { HomeSidebarPanels } from "@/components/home/home-sidebar-panels"
 import { SiteHeader } from "@/components/site-header"
@@ -78,12 +79,16 @@ export default async function PrisonPage(props: PageProps<"/prison">) {
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
       <div className="mx-auto max-w-[1200px] px-1">
+        <AddonSlotRenderer slot="prison.page.before" />
+        <AddonSurfaceRenderer surface="prison.page" props={{ activeStatus, users }}>
         <ForumPageShell
           zones={zones}
           boards={boards}
           main={(
             <main className="py-1 pb-12 mt-6">
               <div className="space-y-6">
+          <AddonSlotRenderer slot="prison.hero.before" />
+          <AddonSurfaceRenderer surface="prison.hero" props={{ activeStatus, bannedCount, mutedCount, totalCount, users }}>
           <section className="rounded-[30px] border border-border bg-card px-6 py-8 shadow-xs sm:px-8 lg:px-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
@@ -103,96 +108,110 @@ export default async function PrisonPage(props: PageProps<"/prison">) {
               </div>
             </div>
           </section>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="prison.hero.after" />
 
-          <section className="rounded-[24px] border border-border bg-card p-4 shadow-xs">
-            <div className="flex flex-wrap gap-2">
-              {statusTabs.map((tab) => {
-                const active = tab.key === activeStatus
-                const href = tab.key === "ALL" ? "/prison" : `/prison?status=${tab.key}`
+          <AddonSlotRenderer slot="prison.content.before" />
+          <AddonSurfaceRenderer surface="prison.content" props={{ activeStatus, users }}>
+            <>
+              <section className="rounded-[24px] border border-border bg-card p-4 shadow-xs">
+                <div className="flex flex-wrap gap-2">
+                  {statusTabs.map((tab) => {
+                    const active = tab.key === activeStatus
+                    const href = tab.key === "ALL" ? "/prison" : `/prison?status=${tab.key}`
 
-                return (
-                  <Link
-                    key={tab.key}
-                    href={href}
-                    className={active ? "inline-flex items-center rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background" : "inline-flex items-center rounded-full border border-transparent px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
-                  >
-                    {tab.label}
-                  </Link>
-                )
-              })}
-            </div>
-          </section>
+                    return (
+                      <Link
+                        key={tab.key}
+                        href={href}
+                        className={active ? "inline-flex items-center rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background" : "inline-flex items-center rounded-full border border-transparent px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
+                      >
+                        {tab.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </section>
 
-          <section className="rounded-[24px] border border-border bg-card shadow-xs">
-            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold">禁闭名单</h2>
-                <p className="mt-1 text-sm text-muted-foreground">按最近处理时间排序，用户昵称可直接跳转到个人主页。</p>
-              </div>
-              <div className="text-xs text-muted-foreground">当前显示 {users.length} 条</div>
-            </div>
+              <section className="rounded-[24px] border border-border bg-card shadow-xs">
+                <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+                  <div>
+                    <h2 className="text-base font-semibold">禁闭名单</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">按最近处理时间排序，用户昵称可直接跳转到个人主页。</p>
+                  </div>
+                  <div className="text-xs text-muted-foreground">当前显示 {users.length} 条</div>
+                </div>
 
-            <div className="divide-y divide-border">
-              {users.length === 0 ? (
-                <div className="px-5 py-12 text-center text-sm text-muted-foreground">当前筛选条件下，小黑屋里还没有用户。</div>
-              ) : (
-                users.map((user) => {
-                  const displayName = user.nickname ?? user.username
-                  const isBanned = user.status === UserStatus.BANNED
+                <div className="divide-y divide-border">
+                  {users.length === 0 ? (
+                    <div className="px-5 py-12 text-center text-sm text-muted-foreground">当前筛选条件下，小黑屋里还没有用户。</div>
+                  ) : (
+                    users.map((user) => {
+                      const displayName = user.nickname ?? user.username
+                      const isBanned = user.status === UserStatus.BANNED
 
-                  return (
-                    <div key={user.id} className="px-5 py-4">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Link href={`/users/${user.username}`} className="text-sm font-semibold text-foreground hover:underline">
-                              {displayName}
-                            </Link>
-                            <span className="text-xs text-muted-foreground">@{user.username}</span>
-                            <span className={isBanned ? "rounded-full bg-red-100 px-3 py-1 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-200" : "rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"}>
-                              {isBanned ? "已拉黑" : "已禁言"}
-                            </span>
-                          </div>
+                      return (
+                        <div key={user.id} className="px-5 py-4">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link href={`/users/${user.username}`} className="text-sm font-semibold text-foreground hover:underline">
+                                  {displayName}
+                                </Link>
+                                <span className="text-xs text-muted-foreground">@{user.username}</span>
+                                <span className={isBanned ? "rounded-full bg-red-100 px-3 py-1 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-200" : "rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"}>
+                                  {isBanned ? "已拉黑" : "已禁言"}
+                                </span>
+                              </div>
 
-                          <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
-                            <div>
-                              <span className="font-medium text-foreground">处理时间：</span>
-                              {formatDateTime(user.updatedAt)}
+                              <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
+                                <div>
+                                  <span className="font-medium text-foreground">处理时间：</span>
+                                  {formatDateTime(user.updatedAt)}
+                                </div>
+                                <div>
+                                  <span className="font-medium text-foreground">加入社区：</span>
+                                  {serializeDate(user.createdAt) ?? "-"}
+                                </div>
+
+                                <div>
+                                  <span className="font-medium text-foreground">当前状态：</span>
+                                  {isBanned ? "拉黑" : "禁言"}
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-medium text-foreground">加入社区：</span>
-                              {serializeDate(user.createdAt) ?? "-"}
-                            </div>
 
-                            <div>
-                              <span className="font-medium text-foreground">当前状态：</span>
-                              {isBanned ? "拉黑" : "禁言"}
+                            <div className="shrink-0">
+                              <Link href={`/users/${user.username}`} className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent">
+                                查看主页
+                              </Link>
                             </div>
                           </div>
                         </div>
-
-                        <div className="shrink-0">
-                          <Link href={`/users/${user.username}`} className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent">
-                            查看主页
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </section>
+                      )
+                    })
+                  )}
+                </div>
+              </section>
+            </>
+          </AddonSurfaceRenderer>
+          <AddonSlotRenderer slot="prison.content.after" />
               </div>
             </main>
           )}
           rightSidebar={(
             <aside className="mt-6 hidden pb-12 lg:block">
-              <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
-                showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              <AddonSlotRenderer slot="prison.sidebar.before" />
+              <AddonSurfaceRenderer surface="prison.sidebar" props={{ announcements, hotTopics, settings }}>
+                <HomeSidebarPanels user={sidebarUser} hotTopics={hotTopics} announcements={announcements}
+                  showAnnouncements={settings.homeSidebarAnnouncementsEnabled} siteName={settings.siteName} siteDescription={settings.siteDescription} siteLogoPath={settings.siteLogoPath} siteIconPath={settings.siteIconPath} />
+              </AddonSurfaceRenderer>
+              <AddonSlotRenderer slot="prison.sidebar.after" />
             </aside>
           )}
         />
+        </AddonSurfaceRenderer>
+        <AddonSlotRenderer slot="prison.page.after" />
       </div>
     </div>
   )

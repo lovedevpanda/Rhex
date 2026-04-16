@@ -24,6 +24,7 @@ import { apiError } from "@/lib/api-route"
 import { enforceSensitiveText } from "@/lib/content-safety"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { messageEventBus } from "@/lib/message-event-bus"
+import { isPublicRouteError } from "@/lib/public-route-error"
 import { getUserDisplayName } from "@/lib/user-display"
 import { ensureUsersCanInteract } from "@/lib/user-blocks"
 import type {
@@ -53,6 +54,14 @@ type MessageRecipientRecord = NonNullable<Awaited<ReturnType<typeof findMessageR
 type ResolvedConversationReference =
   | { kind: "database"; conversationId: string }
   | { kind: "draft"; recipient: MessageRecipientRecord }
+
+function normalizeMessageCenterError(error: unknown) {
+  if (isPublicRouteError(error)) {
+    return error.message
+  }
+
+  return "私信加载失败，请稍后重试"
+}
 
 function mapUserProfile(
   user: {
@@ -351,7 +360,7 @@ async function getValidatedMessageRecipient(
 
 
   if (!recipient || recipient.status !== UserStatus.ACTIVE) {
-    throw new Error("接收方不存在或不可接收私信")
+    apiError(400, "接收方不存在或不可接收私信")
   }
 
   return recipient
@@ -425,11 +434,11 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
   const content = body.trim()
 
   if (!content) {
-    throw new Error("消息内容不能为空")
+    apiError(400, "消息内容不能为空")
   }
 
   if (content.length > 1000) {
-    throw new Error("消息内容不能超过 1000 个字符")
+    apiError(400, "消息内容不能超过 1000 个字符")
   }
 
   const recipient = await getValidatedMessageRecipient(senderId, recipientId, {
@@ -442,6 +451,7 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
 
   const message = await createDirectMessageInTransaction(conversation.id, senderId, recipient.id, contentSafety.sanitizedText)
   const sender = await findMessageRecipientById(senderId)
+  const recipientUnreadMessageCount = await getUnreadConversationCount(recipient.id)
   const occurredAt = message.createdAt.toISOString()
   const senderDisplayName = sender ? getUserDisplayName(sender) : "用户"
   const senderUsername = sender?.username ?? ""
@@ -458,6 +468,7 @@ export async function sendDirectMessage(senderId: number, recipientId: number, b
     senderDisplayName,
     senderAvatarPath,
     recipientId: recipient.id,
+    recipientUnreadMessageCount,
     occurredAt,
   })
 
@@ -517,17 +528,42 @@ export async function deleteConversationForUser(conversationId: string, currentU
 }
 
 export async function getMessageCenterData(currentUserId: number, conversationId?: string): Promise<MessageCenterData> {
-  const resolvedConversation = await resolveConversationReference(currentUserId, conversationId)
-  const conversations = await getDatabaseBackedConversations(currentUserId)
-  const activeConversation = resolvedConversation?.kind === "database"
-    ? await getDatabaseConversationDetail(currentUserId, resolvedConversation.conversationId)
-    : resolvedConversation?.kind === "draft"
-      ? buildDraftConversationDetail(currentUserId, resolvedConversation.recipient)
-      : null
+  try {
+    const conversations = await getDatabaseBackedConversations(currentUserId)
+    let activeConversation: MessageConversationDetail | null = null
+    let errorMessage: string | null = null
 
-  return {
-    conversations,
-    activeConversation: activeConversation ?? null,
-    usingDemoData: false,
+    if (conversationId) {
+      try {
+        const resolvedConversation = await resolveConversationReference(currentUserId, conversationId)
+        activeConversation = resolvedConversation?.kind === "database"
+          ? await getDatabaseConversationDetail(currentUserId, resolvedConversation.conversationId)
+          : resolvedConversation?.kind === "draft"
+            ? buildDraftConversationDetail(currentUserId, resolvedConversation.recipient)
+            : null
+      } catch (error) {
+        errorMessage = normalizeMessageCenterError(error)
+
+        if (!isPublicRouteError(error)) {
+          console.error("[messages] failed to resolve active conversation", error)
+        }
+      }
+    }
+
+    return {
+      conversations,
+      activeConversation,
+      usingDemoData: false,
+      errorMessage,
+    }
+  } catch (error) {
+    console.error("[messages] failed to load message center", error)
+
+    return {
+      conversations: [],
+      activeConversation: null,
+      usingDemoData: false,
+      errorMessage: normalizeMessageCenterError(error),
+    }
   }
 }

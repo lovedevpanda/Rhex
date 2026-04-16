@@ -2,8 +2,10 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { AddonSlotRenderer } from "@/addons-host"
 import { AuthPanelNotice, AuthShell } from "@/components/auth/auth-shell"
 import { RegisterForm } from "@/components/auth/register-form"
+import { listAddonExternalAuthEntries } from "@/lib/addon-external-auth-providers"
 import { getCurrentUser } from "@/lib/auth"
 import { readSearchParam } from "@/lib/search-params"
 import { getSiteSettings } from "@/lib/site-settings"
@@ -19,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RegisterPage(props: PageProps<"/register">) {
   const searchParams = await props.searchParams
-  const [user, settings] = await Promise.all([getCurrentUser(), getSiteSettings()])
+  const [user, settings, addonExternalAuthEntries] = await Promise.all([getCurrentUser(), getSiteSettings(), listAddonExternalAuthEntries()])
 
   if (user) {
     redirect("/")
@@ -76,7 +78,12 @@ export default async function RegisterPage(props: PageProps<"/register">) {
         </p>
       )}
     >
-      <RegisterForm settings={settings} />
+      <RegisterForm
+        settings={settings}
+        addonCaptcha={<AddonSlotRenderer slot="auth.register.captcha" />}
+        addonAfterFields={<AddonSlotRenderer slot="auth.register.form.after" />}
+        addonExternalAuthEntries={addonExternalAuthEntries}
+      />
     </AuthShell>
   )
 }

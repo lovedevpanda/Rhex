@@ -54,7 +54,7 @@ export function UserRecentActivityPanel({
 </span>
         </div>
         <div className="space-y-4 pt-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {tabs.map((tab) => {
               const Icon = tab.icon ?? defaultActivityTabMeta[tab.key]?.icon ?? FileText
               const active = currentTab?.key === tab.key
@@ -65,16 +65,16 @@ export function UserRecentActivityPanel({
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                    "inline-flex w-full items-center justify-center gap-1 rounded-full border px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:text-sm",
                     active
                       ? "border-foreground bg-foreground text-background"
                       : "border-border bg-background text-muted-foreground hover:bg-accent/40 hover:text-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="hidden h-4 w-4 sm:block" />
                   <span>{tab.label}</span>
                   {typeof tab.count === "number" ? (
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px]", active ? "bg-background/15 text-background" : "bg-secondary text-muted-foreground")}>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] sm:px-2 sm:text-[11px]", active ? "bg-background/15 text-background" : "bg-secondary text-muted-foreground")}>
                       {tab.count}
                     </span>
                   ) : null}

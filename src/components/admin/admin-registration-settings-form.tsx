@@ -332,9 +332,17 @@ export function AdminRegistrationSettingsForm({
         <div className="rounded-[24px] border border-border p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold">账号安全</h3>
-            <p className="mt-1 text-xs leading-6 text-muted-foreground">控制异地登录邮件提醒，以及用户在个人页面修改密码时是否必须完成邮箱验证码验证。</p>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground">控制会话 IP 保护、异地登录邮件提醒，以及用户在个人页面修改密码时是否必须完成邮箱验证码验证。</p>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-3">
+            <FieldGroup title="会话保护">
+              <AdminBooleanSelectField
+                label="IP 不一致自动踢下线"
+                checked={draft.sessionIpMismatchLogoutEnabled}
+                onChange={(value) => updateDraftField("sessionIpMismatchLogoutEnabled", value)}
+              />
+              <p className="text-xs leading-6 text-muted-foreground">开启后，会话会绑定登录时记录的 IP；后续请求 IP 与登录 IP 不一致时，当前登录态会立即失效。若用户常处于移动网络、代理或出口 IP 经常变化的环境，可关闭以减少误踢。</p>
+            </FieldGroup>
             <FieldGroup title="登录安全提醒">
               <AdminBooleanSelectField
                 label="登录 IP 变化发送邮件提醒"
@@ -354,7 +362,7 @@ export function AdminRegistrationSettingsForm({
           </div>
           {!draft.smtpEnabled ? (
             <div className="rounded-[20px] border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800">
-              当前尚未启用 SMTP。即使这里开启安全开关，异地登录提醒任务也会自动跳过，前台改密入口也会提示“邮件能力未配置”。
+              当前尚未启用 SMTP。即使这里开启登录 IP 变化邮件提醒或改密邮箱验证，相关能力仍会自动跳过或提示“邮件能力未配置”；会话 IP 保护开关不受 SMTP 影响。
             </div>
           ) : null}
         </div>

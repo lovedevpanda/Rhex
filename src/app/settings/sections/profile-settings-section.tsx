@@ -22,7 +22,7 @@ const profileSectionCopy: Record<ProfileTabKey, { title: string; description: st
   },
   accounts: {
     title: "账号绑定",
-    description: "在这里绑定或解绑 GitHub、Google 与 Passkey 登录方式。",
+    description: "在这里管理内置第三方登录、插件追加登录方式与 Passkey。",
   },
   browsing: {
     title: "浏览设置",

@@ -1,3 +1,4 @@
+import fs from "fs"
 import path from "path"
 
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas"
@@ -40,35 +41,59 @@ type PreparedWatermarkLayout = {
 }
 
 type GlobalWatermarkRuntimeState = {
-  __bbsWatermarkFontReady?: boolean
+  __bbsWatermarkFontStatus?: "ready" | "failed"
+  __bbsWatermarkFontWarningLogged?: boolean
 }
 
 const globalForWatermarkRuntime = globalThis as typeof globalThis & GlobalWatermarkRuntimeState
-const WATERMARK_FONT_PATH = path.join(
-  process.cwd(),
-  "node_modules",
-  "@fontsource",
-  "zhi-mang-xing",
-  "files",
-  "zhi-mang-xing-chinese-simplified-400-normal.woff",
-)
+const WATERMARK_FONT_CANDIDATE_PATHS = [
+  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.ttf"),
+  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.otf"),
+  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.woff"),
+  path.join(process.cwd(), "node_modules", "@fontsource", "zhi-mang-xing", "files", "zhi-mang-xing-chinese-simplified-400-normal.woff"),
+]
 const TOKEN_PATTERN = /[\u3400-\u9fff]|[A-Za-z0-9@#&_.:/+\-]+|\s+|./gu
 const JPEG_QUALITY = 92
 
+function resolveWatermarkFontPath() {
+  return WATERMARK_FONT_CANDIDATE_PATHS.find((candidatePath) => fs.existsSync(candidatePath)) ?? null
+}
+
 function ensureWatermarkFontRegistered() {
-  if (globalForWatermarkRuntime.__bbsWatermarkFontReady) {
-    return
+  if (globalForWatermarkRuntime.__bbsWatermarkFontStatus === "ready") {
+    return true
   }
 
-  if (!GlobalFonts.has(WATERMARK_FONT_ALIAS)) {
-    const registered = GlobalFonts.registerFromPath(WATERMARK_FONT_PATH, WATERMARK_FONT_ALIAS)
+  if (globalForWatermarkRuntime.__bbsWatermarkFontStatus === "failed") {
+    return false
+  }
 
-    if (!registered) {
-      throw new Error(`Failed to register watermark font from ${WATERMARK_FONT_PATH}`)
+  try {
+    if (!GlobalFonts.has(WATERMARK_FONT_ALIAS)) {
+      const fontPath = resolveWatermarkFontPath()
+      if (!fontPath) {
+        throw new Error(`No watermark font file found in ${WATERMARK_FONT_CANDIDATE_PATHS.join(", ")}`)
+      }
+
+      const registered = GlobalFonts.registerFromPath(fontPath, WATERMARK_FONT_ALIAS)
+
+      if (!registered) {
+        throw new Error(`Failed to register watermark font from ${fontPath}`)
+      }
     }
-  }
 
-  globalForWatermarkRuntime.__bbsWatermarkFontReady = true
+    globalForWatermarkRuntime.__bbsWatermarkFontStatus = "ready"
+    return true
+  } catch (error) {
+    globalForWatermarkRuntime.__bbsWatermarkFontStatus = "failed"
+
+    if (!globalForWatermarkRuntime.__bbsWatermarkFontWarningLogged) {
+      console.warn("[watermark] failed to register custom watermark font, fallback to system fonts", error)
+      globalForWatermarkRuntime.__bbsWatermarkFontWarningLogged = true
+    }
+
+    return false
+  }
 }
 
 function buildFontSpec(fontSize: number, fontFamily: string) {

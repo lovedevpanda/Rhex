@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto"
 
 import { prisma } from "@/db/client"
 import { apiError, type JsonObject } from "@/lib/api-route"
+import type { PaymentGatewayChannelDefinition } from "@/lib/payment-gateway.types"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
-import { findPaymentGatewayChannelDefinition, listPaymentGatewayChannelDefinitions } from "@/lib/payment-gateway-registry"
+import { listPaymentGatewayChannelDefinitions } from "@/lib/payment-gateway-registry"
 import {
   PAYMENT_GATEWAY_APP_KEY,
   PAYMENT_GATEWAY_CLIENT_TYPES,
@@ -45,11 +46,6 @@ export interface ResolvedPaymentGatewayConfigDraft {
   config: ServerPaymentGatewayConfigData
 }
 
-const DEFAULT_CHANNEL_TOGGLES: PaymentGatewayChannelToggle[] = listPaymentGatewayChannelDefinitions().map((item) => ({
-  channelCode: item.channelCode,
-  enabled: false,
-}))
-
 const DEFAULT_ROUTES: PaymentGatewayRouteRule[] = [
   {
     id: "payment-route-desktop-default",
@@ -83,68 +79,77 @@ const DEFAULT_ROUTES: PaymentGatewayRouteRule[] = [
   },
 ]
 
-const DEFAULT_SERVER_CONFIG: ServerPaymentGatewayConfigData = {
-  enabled: false,
-  orderExpireMinutes: 30,
-  defaultCurrency: "CNY",
-  defaultReturnPath: "/settings",
-  paymentSuccessEmailNotificationEnabled: false,
-  paymentSuccessEmailRecipient: "",
-  topupEnabled: false,
-  topupPackages: [
-    {
-      id: "points-topup-1000",
-      title: "新手包",
-      amountFen: 1000,
-      points: 100,
-      bonusPoints: 0,
-      enabled: true,
-      sortOrder: 10,
+function buildDefaultChannelToggles(channelDefinitions: PaymentGatewayChannelDefinition[]): PaymentGatewayChannelToggle[] {
+  return channelDefinitions.map((item) => ({
+    channelCode: item.channelCode,
+    enabled: false,
+  }))
+}
+
+function buildDefaultServerConfig(channelDefinitions: PaymentGatewayChannelDefinition[]): ServerPaymentGatewayConfigData {
+  return {
+    enabled: false,
+    orderExpireMinutes: 30,
+    defaultCurrency: "CNY",
+    defaultReturnPath: "/settings",
+    paymentSuccessEmailNotificationEnabled: false,
+    paymentSuccessEmailRecipient: "",
+    topupEnabled: false,
+    topupPackages: [
+      {
+        id: "points-topup-1000",
+        title: "新手包",
+        amountFen: 1000,
+        points: 100,
+        bonusPoints: 0,
+        enabled: true,
+        sortOrder: 10,
+      },
+      {
+        id: "points-topup-3000",
+        title: "常用包",
+        amountFen: 3000,
+        points: 330,
+        bonusPoints: 30,
+        enabled: true,
+        sortOrder: 20,
+      },
+      {
+        id: "points-topup-10000",
+        title: "进阶包",
+        amountFen: 10000,
+        points: 1200,
+        bonusPoints: 200,
+        enabled: true,
+        sortOrder: 30,
+      },
+    ],
+    topupCustomAmountEnabled: false,
+    topupCustomMinAmountFen: 1000,
+    topupCustomMaxAmountFen: 100000,
+    topupCustomPointsPerYuan: 10,
+    channels: buildDefaultChannelToggles(channelDefinitions),
+    routes: DEFAULT_ROUTES,
+    alipay: {
+      sandbox: true,
+      signMode: "PUBLIC_KEY",
+      keyType: "PKCS1",
+      appId: "",
+      sellerId: "",
+      returnPath: "/settings",
+      notifyPath: "/api/payments/notify/alipay",
+      privateKey: null,
+      alipayPublicKey: null,
+      appCertContent: null,
+      alipayPublicCertContent: null,
+      alipayRootCertContent: null,
+      privateKeyConfigured: false,
+      alipayPublicKeyConfigured: false,
+      appCertConfigured: false,
+      alipayPublicCertConfigured: false,
+      alipayRootCertConfigured: false,
     },
-    {
-      id: "points-topup-3000",
-      title: "常用包",
-      amountFen: 3000,
-      points: 330,
-      bonusPoints: 30,
-      enabled: true,
-      sortOrder: 20,
-    },
-    {
-      id: "points-topup-10000",
-      title: "进阶包",
-      amountFen: 10000,
-      points: 1200,
-      bonusPoints: 200,
-      enabled: true,
-      sortOrder: 30,
-    },
-  ],
-  topupCustomAmountEnabled: false,
-  topupCustomMinAmountFen: 1000,
-  topupCustomMaxAmountFen: 100000,
-  topupCustomPointsPerYuan: 10,
-  channels: DEFAULT_CHANNEL_TOGGLES,
-  routes: DEFAULT_ROUTES,
-  alipay: {
-    sandbox: true,
-    signMode: "PUBLIC_KEY",
-    keyType: "PKCS1",
-    appId: "",
-    sellerId: "",
-    returnPath: "/settings",
-    notifyPath: "/api/payments/notify/alipay",
-    privateKey: null,
-    alipayPublicKey: null,
-    appCertContent: null,
-    alipayPublicCertContent: null,
-    alipayRootCertContent: null,
-    privateKeyConfigured: false,
-    alipayPublicKeyConfigured: false,
-    appCertConfigured: false,
-    alipayPublicCertConfigured: false,
-    alipayRootCertConfigured: false,
-  },
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -267,9 +272,14 @@ function normalizeKeyType(value: unknown, fallback: PaymentGatewayKeyType): Paym
     : fallback
 }
 
-function normalizeChannelToggles(value: unknown, fallback: PaymentGatewayChannelToggle[]) {
+function normalizeChannelToggles(
+  value: unknown,
+  fallback: PaymentGatewayChannelToggle[],
+  channelDefinitions: PaymentGatewayChannelDefinition[],
+) {
   const source = Array.isArray(value) ? value : []
   const enabledMap = new Map<string, boolean>()
+  const channelDefinitionMap = new Map(channelDefinitions.map((item) => [item.channelCode, item]))
 
   for (const item of source) {
     if (!isRecord(item)) {
@@ -277,14 +287,14 @@ function normalizeChannelToggles(value: unknown, fallback: PaymentGatewayChannel
     }
 
     const channelCode = typeof item.channelCode === "string" ? item.channelCode.trim() : ""
-    if (!findPaymentGatewayChannelDefinition(channelCode)) {
+    if (!channelDefinitionMap.has(channelCode)) {
       continue
     }
 
     enabledMap.set(channelCode, normalizeBoolean(item.enabled, false))
   }
 
-  return listPaymentGatewayChannelDefinitions().map((item) => ({
+  return channelDefinitions.map((item) => ({
     channelCode: item.channelCode,
     enabled: enabledMap.has(item.channelCode)
       ? enabledMap.get(item.channelCode) ?? false
@@ -295,6 +305,7 @@ function normalizeChannelToggles(value: unknown, fallback: PaymentGatewayChannel
 function normalizeRouteRules(
   value: unknown,
   fallback: PaymentGatewayRouteRule[],
+  channelDefinitions: PaymentGatewayChannelDefinition[],
   options?: { allowEmpty?: boolean },
 ) {
   if (!Array.isArray(value)) {
@@ -302,6 +313,7 @@ function normalizeRouteRules(
   }
 
   const next: PaymentGatewayRouteRule[] = []
+  const channelDefinitionMap = new Map(channelDefinitions.map((item) => [item.channelCode, item]))
 
   for (const item of value) {
     if (!isRecord(item)) {
@@ -309,7 +321,7 @@ function normalizeRouteRules(
     }
 
     const channelCode = typeof item.channelCode === "string" ? item.channelCode.trim() : ""
-    const channelDefinition = findPaymentGatewayChannelDefinition(channelCode)
+    const channelDefinition = channelDefinitionMap.get(channelCode)
     if (!channelDefinition) {
       continue
     }
@@ -394,7 +406,9 @@ function normalizeTopupPackages(
 function normalizeServerConfig(
   record: PaymentGatewayStateRecord | null,
   sensitiveStateJson: string | null | undefined,
+  channelDefinitions: PaymentGatewayChannelDefinition[],
 ): ServerPaymentGatewayConfigData {
+  const defaultConfig = buildDefaultServerConfig(channelDefinitions)
   const config = record?.config ?? {}
   const alipayConfig = isRecord(config.alipay) ? config.alipay : {}
   const sensitiveState = readSensitiveState(sensitiveStateJson)
@@ -412,36 +426,36 @@ function normalizeServerConfig(
   const alipayRootCertContent = normalizeNullableSecret(alipaySensitiveConfig.alipayRootCertContent)
 
   return {
-    enabled: normalizeBoolean(record?.enabled, DEFAULT_SERVER_CONFIG.enabled),
+    enabled: normalizeBoolean(record?.enabled, defaultConfig.enabled),
     orderExpireMinutes: typeof config.orderExpireMinutes === "number" && Number.isFinite(config.orderExpireMinutes)
       ? Math.max(5, Math.min(1440, Math.trunc(config.orderExpireMinutes)))
-      : DEFAULT_SERVER_CONFIG.orderExpireMinutes,
-    defaultCurrency: normalizeCurrency(config.defaultCurrency, DEFAULT_SERVER_CONFIG.defaultCurrency),
-    defaultReturnPath: normalizePathOrUrl(config.defaultReturnPath, DEFAULT_SERVER_CONFIG.defaultReturnPath),
-    paymentSuccessEmailNotificationEnabled: normalizeBoolean(config.paymentSuccessEmailNotificationEnabled, DEFAULT_SERVER_CONFIG.paymentSuccessEmailNotificationEnabled),
-    paymentSuccessEmailRecipient: normalizeOptionalString(config.paymentSuccessEmailRecipient, DEFAULT_SERVER_CONFIG.paymentSuccessEmailRecipient, 160),
-    topupEnabled: normalizeBoolean(config.topupEnabled, DEFAULT_SERVER_CONFIG.topupEnabled),
-    topupPackages: normalizeTopupPackages(config.topupPackages, DEFAULT_SERVER_CONFIG.topupPackages),
-    topupCustomAmountEnabled: normalizeBoolean(config.topupCustomAmountEnabled, DEFAULT_SERVER_CONFIG.topupCustomAmountEnabled),
+      : defaultConfig.orderExpireMinutes,
+    defaultCurrency: normalizeCurrency(config.defaultCurrency, defaultConfig.defaultCurrency),
+    defaultReturnPath: normalizePathOrUrl(config.defaultReturnPath, defaultConfig.defaultReturnPath),
+    paymentSuccessEmailNotificationEnabled: normalizeBoolean(config.paymentSuccessEmailNotificationEnabled, defaultConfig.paymentSuccessEmailNotificationEnabled),
+    paymentSuccessEmailRecipient: normalizeOptionalString(config.paymentSuccessEmailRecipient, defaultConfig.paymentSuccessEmailRecipient, 160),
+    topupEnabled: normalizeBoolean(config.topupEnabled, defaultConfig.topupEnabled),
+    topupPackages: normalizeTopupPackages(config.topupPackages, defaultConfig.topupPackages),
+    topupCustomAmountEnabled: normalizeBoolean(config.topupCustomAmountEnabled, defaultConfig.topupCustomAmountEnabled),
     topupCustomMinAmountFen: typeof config.topupCustomMinAmountFen === "number" && Number.isFinite(config.topupCustomMinAmountFen)
       ? Math.max(100, Math.min(100_000_000, Math.trunc(config.topupCustomMinAmountFen)))
-      : DEFAULT_SERVER_CONFIG.topupCustomMinAmountFen,
+      : defaultConfig.topupCustomMinAmountFen,
     topupCustomMaxAmountFen: typeof config.topupCustomMaxAmountFen === "number" && Number.isFinite(config.topupCustomMaxAmountFen)
       ? Math.max(100, Math.min(100_000_000, Math.trunc(config.topupCustomMaxAmountFen)))
-      : DEFAULT_SERVER_CONFIG.topupCustomMaxAmountFen,
+      : defaultConfig.topupCustomMaxAmountFen,
     topupCustomPointsPerYuan: typeof config.topupCustomPointsPerYuan === "number" && Number.isFinite(config.topupCustomPointsPerYuan)
       ? Math.max(1, Math.min(1_000_000, Math.trunc(config.topupCustomPointsPerYuan)))
-      : DEFAULT_SERVER_CONFIG.topupCustomPointsPerYuan,
-    channels: normalizeChannelToggles(config.channels, DEFAULT_SERVER_CONFIG.channels),
-    routes: normalizeRouteRules(config.routes, DEFAULT_SERVER_CONFIG.routes),
+      : defaultConfig.topupCustomPointsPerYuan,
+    channels: normalizeChannelToggles(config.channels, defaultConfig.channels, channelDefinitions),
+    routes: normalizeRouteRules(config.routes, defaultConfig.routes, channelDefinitions),
     alipay: {
-      sandbox: normalizeBoolean(alipayConfig.sandbox, DEFAULT_SERVER_CONFIG.alipay.sandbox),
-      signMode: normalizeSignMode(alipayConfig.signMode, DEFAULT_SERVER_CONFIG.alipay.signMode),
-      keyType: normalizeKeyType(alipayConfig.keyType, DEFAULT_SERVER_CONFIG.alipay.keyType),
-      appId: normalizeOptionalString(alipayConfig.appId, DEFAULT_SERVER_CONFIG.alipay.appId, 64),
-      sellerId: normalizeOptionalString(alipayConfig.sellerId, DEFAULT_SERVER_CONFIG.alipay.sellerId, 64),
-      returnPath: normalizePathOrUrl(alipayConfig.returnPath, DEFAULT_SERVER_CONFIG.alipay.returnPath),
-      notifyPath: normalizePathOrUrl(alipayConfig.notifyPath, DEFAULT_SERVER_CONFIG.alipay.notifyPath),
+      sandbox: normalizeBoolean(alipayConfig.sandbox, defaultConfig.alipay.sandbox),
+      signMode: normalizeSignMode(alipayConfig.signMode, defaultConfig.alipay.signMode),
+      keyType: normalizeKeyType(alipayConfig.keyType, defaultConfig.alipay.keyType),
+      appId: normalizeOptionalString(alipayConfig.appId, defaultConfig.alipay.appId, 64),
+      sellerId: normalizeOptionalString(alipayConfig.sellerId, defaultConfig.alipay.sellerId, 64),
+      returnPath: normalizePathOrUrl(alipayConfig.returnPath, defaultConfig.alipay.returnPath),
+      notifyPath: normalizePathOrUrl(alipayConfig.notifyPath, defaultConfig.alipay.notifyPath),
       privateKey,
       alipayPublicKey,
       appCertContent,
@@ -514,9 +528,12 @@ async function getOrCreatePaymentGatewaySettingsRecord() {
 }
 
 export async function getServerPaymentGatewayConfig(): Promise<ServerPaymentGatewayConfigData> {
-  const record = await getOrCreatePaymentGatewaySettingsRecord()
+  const [record, channelDefinitions] = await Promise.all([
+    getOrCreatePaymentGatewaySettingsRecord(),
+    listPaymentGatewayChannelDefinitions(),
+  ])
   const stateRecord = readPaymentGatewayStateRecord(record.appStateJson)
-  return normalizeServerConfig(stateRecord, record.sensitiveStateJson)
+  return normalizeServerConfig(stateRecord, record.sensitiveStateJson, channelDefinitions)
 }
 
 export async function getPaymentGatewayConfig(): Promise<PaymentGatewayConfigData> {
@@ -647,8 +664,11 @@ function assertRuntimeConfig(config: ServerPaymentGatewayConfigData) {
 }
 
 export async function resolvePaymentGatewayConfigDraftFromAdminInput(body: JsonObject): Promise<ResolvedPaymentGatewayConfigDraft> {
-  const record = await getOrCreatePaymentGatewaySettingsRecord()
-  const current = await getServerPaymentGatewayConfig()
+  const [record, current, channelDefinitions] = await Promise.all([
+    getOrCreatePaymentGatewaySettingsRecord(),
+    getServerPaymentGatewayConfig(),
+    listPaymentGatewayChannelDefinitions(),
+  ])
 
   const rawConfig = body.config
   const rawSecret = body.secret
@@ -659,10 +679,12 @@ export async function resolvePaymentGatewayConfigDraftFromAdminInput(body: JsonO
   const channels = normalizeChannelToggles(
     configInput.channels,
     current.channels,
+    channelDefinitions,
   )
   const routes = normalizeRouteRules(
     configInput.routes,
     current.routes,
+    channelDefinitions,
     { allowEmpty: Array.isArray(configInput.routes) },
   )
 
@@ -776,8 +798,11 @@ async function persistResolvedPaymentGatewayConfigDraft(resolved: ResolvedPaymen
 }
 
 export async function resolvePaymentGatewayBaseConfigDraftFromAdminInput(body: JsonObject): Promise<ResolvedPaymentGatewayConfigDraft> {
-  const record = await getOrCreatePaymentGatewaySettingsRecord()
-  const current = await getServerPaymentGatewayConfig()
+  const [record, current, channelDefinitions] = await Promise.all([
+    getOrCreatePaymentGatewaySettingsRecord(),
+    getServerPaymentGatewayConfig(),
+    listPaymentGatewayChannelDefinitions(),
+  ])
 
   const rawConfig = body.config
   const configInput = isRecord(rawConfig) ? rawConfig : {}
@@ -785,10 +810,12 @@ export async function resolvePaymentGatewayBaseConfigDraftFromAdminInput(body: J
   const channels = normalizeChannelToggles(
     configInput.channels,
     current.channels,
+    channelDefinitions,
   )
   const routes = normalizeRouteRules(
     configInput.routes,
     current.routes,
+    channelDefinitions,
     { allowEmpty: Array.isArray(configInput.routes) },
   )
 

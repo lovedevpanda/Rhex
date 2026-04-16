@@ -362,6 +362,7 @@ export function mergeRegisterEmailWhitelistSettings(
 
 export function resolveSiteSecuritySettings(options: {
   appStateJson?: string | null
+  sessionIpMismatchLogoutEnabledFallback?: boolean
   loginIpChangeEmailAlertEnabledFallback?: boolean
   passwordChangeRequireEmailVerificationFallback?: boolean
 } = {}): SiteSecuritySettings {
@@ -371,6 +372,10 @@ export function resolveSiteSecuritySettings(options: {
     : {}
 
   return {
+    sessionIpMismatchLogoutEnabled:
+      typeof siteSecurity.sessionIpMismatchLogoutEnabled === "boolean"
+        ? siteSecurity.sessionIpMismatchLogoutEnabled
+        : options.sessionIpMismatchLogoutEnabledFallback ?? true,
     loginIpChangeEmailAlertEnabled:
       typeof siteSecurity.loginIpChangeEmailAlertEnabled === "boolean"
         ? siteSecurity.loginIpChangeEmailAlertEnabled
@@ -391,6 +396,7 @@ export function mergeSiteSecuritySettings(
   return writeSiteSettingsState(appStateJson, {
     ...siteSettingsState,
     siteSecurity: {
+      sessionIpMismatchLogoutEnabled: Boolean(input.sessionIpMismatchLogoutEnabled),
       loginIpChangeEmailAlertEnabled: Boolean(input.loginIpChangeEmailAlertEnabled),
       passwordChangeRequireEmailVerification: Boolean(input.passwordChangeRequireEmailVerification),
     },
@@ -581,7 +587,9 @@ export function mergeRedeemCodeHelpSettings(
 
 export function resolveCheckInStreakSettings(options: {
   appStateJson?: string | null
+  enabledFallback?: boolean
   makeUpCountsTowardStreakFallback?: boolean
+  oldestDayLimitFallback?: number
 } = {}): CheckInStreakSettings {
   const siteSettingsState = readSiteSettingsState(options.appStateJson)
   const checkInStreak = isRecord(siteSettingsState.checkInStreak)
@@ -589,10 +597,18 @@ export function resolveCheckInStreakSettings(options: {
     : {}
 
   return {
+    enabled:
+      typeof checkInStreak.enabled === "boolean"
+        ? checkInStreak.enabled
+        : options.enabledFallback ?? true,
     makeUpCountsTowardStreak:
       typeof checkInStreak.makeUpCountsTowardStreak === "boolean"
         ? checkInStreak.makeUpCountsTowardStreak
         : options.makeUpCountsTowardStreakFallback ?? true,
+    oldestDayLimit:
+      typeof checkInStreak.oldestDayLimit === "number" && Number.isFinite(checkInStreak.oldestDayLimit)
+        ? Math.max(0, Math.floor(checkInStreak.oldestDayLimit))
+        : Math.max(0, Math.floor(options.oldestDayLimitFallback ?? 0)),
   }
 }
 
@@ -605,7 +621,9 @@ export function mergeCheckInStreakSettings(
   return writeSiteSettingsState(appStateJson, {
     ...siteSettingsState,
     checkInStreak: {
+      enabled: Boolean(input.enabled),
       makeUpCountsTowardStreak: input.makeUpCountsTowardStreak,
+      oldestDayLimit: Math.max(0, Math.floor(input.oldestDayLimit)),
     },
   })
 }

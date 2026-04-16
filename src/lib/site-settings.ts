@@ -1,7 +1,11 @@
+import "server-only"
+
 import { unstable_cache } from "next/cache"
 
 import { listActiveGiftDefinitions } from "@/db/post-gift-queries"
 import { createSiteSettingsRecord, findSensitiveWordsPage, findSiteSettingsRecord, getSensitiveWordStats } from "@/db/site-settings-queries"
+import { mergeMarkdownEmojiItems } from "@/lib/addon-emoji-providers"
+import { mergeAddonNavigationLinks } from "@/lib/addon-navigation-providers"
 import { normalizeSensitiveActionType } from "@/lib/content-safety"
 import {
   normalizeCaptchaMode,
@@ -53,6 +57,9 @@ function normalizeLegacyServerSiteSettings(data: ServerSiteSettingsData): Server
 
   return {
     ...data,
+    checkInMakeUpEnabled: typeof data.checkInMakeUpEnabled === "boolean"
+      ? data.checkInMakeUpEnabled
+      : defaults.checkInMakeUpEnabled,
     registerInviteCodeHelpEnabled: typeof data.registerInviteCodeHelpEnabled === "boolean"
       ? data.registerInviteCodeHelpEnabled
       : defaults.registerInviteCodeHelpEnabled,
@@ -68,6 +75,9 @@ function normalizeLegacyServerSiteSettings(data: ServerSiteSettingsData): Server
     registerEmailWhitelistDomains: Array.isArray(data.registerEmailWhitelistDomains)
       ? data.registerEmailWhitelistDomains.filter((item): item is string => typeof item === "string")
       : defaults.registerEmailWhitelistDomains,
+    sessionIpMismatchLogoutEnabled: typeof data.sessionIpMismatchLogoutEnabled === "boolean"
+      ? data.sessionIpMismatchLogoutEnabled
+      : defaults.sessionIpMismatchLogoutEnabled,
     loginIpChangeEmailAlertEnabled: typeof data.loginIpChangeEmailAlertEnabled === "boolean"
       ? data.loginIpChangeEmailAlertEnabled
       : defaults.loginIpChangeEmailAlertEnabled,
@@ -83,6 +93,9 @@ function normalizeLegacyServerSiteSettings(data: ServerSiteSettingsData): Server
     redeemCodeHelpUrl: typeof data.redeemCodeHelpUrl === "string"
       ? data.redeemCodeHelpUrl
       : defaults.redeemCodeHelpUrl,
+    checkInMakeUpOldestDayLimit: typeof data.checkInMakeUpOldestDayLimit === "number" && Number.isFinite(data.checkInMakeUpOldestDayLimit)
+      ? Math.max(0, Math.floor(data.checkInMakeUpOldestDayLimit))
+      : defaults.checkInMakeUpOldestDayLimit,
   }
 }
 
@@ -150,7 +163,9 @@ function mapSiteSettings(record: SiteSettingsRecordData, tippingGifts: SiteTippi
   })
   const checkInStreakSettings = resolveCheckInStreakSettings({
     appStateJson: record.appStateJson,
+    enabledFallback: true,
     makeUpCountsTowardStreakFallback: true,
+    oldestDayLimitFallback: 0,
   })
   const nicknameChangePointCosts = resolveNicknameChangePointCostSettings({
     appStateJson: record.appStateJson,
@@ -372,11 +387,13 @@ function mapSiteSettings(record: SiteSettingsRecordData, tippingGifts: SiteTippi
     checkInVip2Reward: checkInRewards.vip2,
     checkInVip3Reward: checkInRewards.vip3,
     checkInMakeUpCardPrice: checkInMakeUpPrices.normal,
+    checkInMakeUpEnabled: checkInStreakSettings.enabled,
     checkInVipMakeUpCardPrice: checkInMakeUpPrices.vip1,
     checkInVip1MakeUpCardPrice: checkInMakeUpPrices.vip1,
     checkInVip2MakeUpCardPrice: checkInMakeUpPrices.vip2,
     checkInVip3MakeUpCardPrice: checkInMakeUpPrices.vip3,
     checkInMakeUpCountsTowardStreak: checkInStreakSettings.makeUpCountsTowardStreak,
+    checkInMakeUpOldestDayLimit: checkInStreakSettings.oldestDayLimit,
     postOfflinePrice: record.postOfflinePrice,
     postOfflineVip1Price: record.postOfflineVip1Price,
     postOfflineVip2Price: record.postOfflineVip2Price,
@@ -449,6 +466,7 @@ function mapSiteSettings(record: SiteSettingsRecordData, tippingGifts: SiteTippi
     registerEmailEnabled: record.registerEmailEnabled,
     registerEmailRequired: record.registerEmailRequired,
     registerEmailVerification: record.registerEmailVerification,
+    sessionIpMismatchLogoutEnabled: siteSecuritySettings.sessionIpMismatchLogoutEnabled,
     loginIpChangeEmailAlertEnabled: siteSecuritySettings.loginIpChangeEmailAlertEnabled,
     passwordChangeRequireEmailVerification: siteSecuritySettings.passwordChangeRequireEmailVerification,
     registerEmailWhitelistEnabled: registerEmailWhitelistSettings.enabled,
@@ -521,16 +539,39 @@ function mapSiteSettings(record: SiteSettingsRecordData, tippingGifts: SiteTippi
   }
 }
 
+async function applyAddonSiteSettings(
+  data: ServerSiteSettingsData,
+): Promise<ServerSiteSettingsData> {
+  const [navigationLinks, markdownEmojiMap] = await Promise.all([
+    mergeAddonNavigationLinks({
+      footerLinks: data.footerLinks,
+      headerAppLinks: data.headerAppLinks,
+    }),
+    mergeMarkdownEmojiItems(data.markdownEmojiMap),
+  ])
+
+  return {
+    ...data,
+    footerLinks: navigationLinks.footerLinks,
+    headerAppLinks: navigationLinks.headerAppLinks,
+    markdownEmojiMap,
+  }
+}
+
 export async function ensureSiteSettings(): Promise<SiteSettingsData> {
   const existingRecord = await findSiteSettingsRecord()
 
   if (existingRecord) {
-    return toPublicSiteSettings(mapSiteSettings(existingRecord))
+    return toPublicSiteSettings(
+      await applyAddonSiteSettings(mapSiteSettings(existingRecord)),
+    )
   }
 
   const createdRecord = await createSiteSettingsRecord(defaultSiteSettingsCreateInput)
 
-  return toPublicSiteSettings(mapSiteSettings(createdRecord))
+  return toPublicSiteSettings(
+    await applyAddonSiteSettings(mapSiteSettings(createdRecord)),
+  )
 }
 
 function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
@@ -585,13 +626,17 @@ function isMissingIncrementalCacheInUnstableCacheError(error: unknown) {
 
 async function resolveServerSiteSettings(): Promise<ServerSiteSettingsData> {
   try {
-    return normalizeLegacyServerSiteSettings(await getPersistentSiteSettings())
+    return applyAddonSiteSettings(
+      normalizeLegacyServerSiteSettings(await getPersistentSiteSettings()),
+    )
   } catch (error) {
     if (!isMissingIncrementalCacheInUnstableCacheError(error)) {
       throw error
     }
 
-    return normalizeLegacyServerSiteSettings(await readSiteSettingsFromDB())
+    return applyAddonSiteSettings(
+      normalizeLegacyServerSiteSettings(await readSiteSettingsFromDB()),
+    )
   }
 }
 
