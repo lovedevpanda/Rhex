@@ -33,6 +33,7 @@ export interface PostStreamDisplayItem {
   metaPrimary: string
   metaPrimaryRaw?: string
   metaSecondary?: string | null
+  latestReplyAuthorName?: string | null
   commentCount: number
   commentAccentColor: string
 }
@@ -108,7 +109,8 @@ export function mapSitePostsToDisplayItems(
       authorDisplayedBadges: post.authorDisplayedBadges,
       metaPrimary: post.publishedAt,
       metaPrimaryRaw: post.publishedAtRaw,
-      metaSecondary: null,
+      metaSecondary: post.latestReplyAuthorName ? `最新回复 ${post.latestReplyAuthorName}` : null,
+      latestReplyAuthorName: post.latestReplyAuthorName ?? null,
       commentCount: post.stats.comments,
       commentAccentColor: commentHeat.color,
     }

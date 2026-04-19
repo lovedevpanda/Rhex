@@ -1,5 +1,7 @@
 import { BoardStatus, PostStatus } from "@/db/types"
 
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
+import type { AddonReadablePostStatus } from "@/addons-host/types"
 import { apiError } from "@/lib/api-route"
 import {
   defineAdminAction,
@@ -45,21 +47,35 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
     return { message: scopeLabel }
   }),
   "post.hide": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员下线帖子" }, async (context) => {
-    await ensureCanManagePost(context.actor, context.targetId)
+    const post = await ensureCanManagePost(context.actor, context.targetId)
+    const previousStatus = post.status as AddonReadablePostStatus
     await updatePostStatus(context.targetId, PostStatus.OFFLINE)
     revalidateHomeSidebarStatsCache()
     expireTaxonomyCacheImmediately()
+    await executeAddonActionHook("post.status.changed.after", {
+      postId: context.targetId,
+      editorId: String(context.adminUserId),
+      previousStatus,
+      nextStatus: "OFFLINE",
+    })
     await writeAdminActionLog(context, adminPostActionHandlers["post.hide"].metadata)
     return { message: "帖子已下线" }
   }),
   "post.show": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员上线帖子" }, async (context) => {
     const post = await ensureCanManagePost(context.actor, context.targetId)
+    const previousStatus = post.status as AddonReadablePostStatus
     await updatePostStatus(context.targetId, PostStatus.NORMAL, null)
     if (post.type === "AUCTION") {
       await activatePostAuctionForPost(post.id)
     }
     revalidateHomeSidebarStatsCache()
     expireTaxonomyCacheImmediately()
+    await executeAddonActionHook("post.status.changed.after", {
+      postId: context.targetId,
+      editorId: String(context.adminUserId),
+      previousStatus,
+      nextStatus: "NORMAL",
+    })
 
     await writeAdminActionLog(context, adminPostActionHandlers["post.show"].metadata)
     return { message: "帖子已上线" }
@@ -88,12 +104,19 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
   }),
   "post.approve": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员审核通过帖子" }, async (context) => {
     const post = await ensureCanManagePost(context.actor, context.targetId)
+    const previousStatus = post.status as AddonReadablePostStatus
     await updatePostStatus(context.targetId, PostStatus.NORMAL, context.message || null, new Date())
     if (post.type === "AUCTION") {
       await activatePostAuctionForPost(post.id)
     }
     revalidateHomeSidebarStatsCache()
     expireTaxonomyCacheImmediately()
+    await executeAddonActionHook("post.status.changed.after", {
+      postId: context.targetId,
+      editorId: String(context.adminUserId),
+      previousStatus,
+      nextStatus: "NORMAL",
+    })
 
     if (post.authorId !== context.adminUserId) {
       void createSystemNotification({
@@ -113,9 +136,16 @@ export const adminPostActionHandlers: Record<string, AdminActionDefinition> = {
   }),
   "post.reject": defineAdminAction({ targetType: "POST", revalidatePaths: ["/", "/admin"], buildDetail: () => "管理员驳回帖子审核" }, async (context) => {
     const post = await ensureCanManagePost(context.actor, context.targetId)
+    const previousStatus = post.status as AddonReadablePostStatus
     await updatePostStatus(context.targetId, PostStatus.OFFLINE, context.message || "审核未通过")
     revalidateHomeSidebarStatsCache()
     expireTaxonomyCacheImmediately()
+    await executeAddonActionHook("post.status.changed.after", {
+      postId: context.targetId,
+      editorId: String(context.adminUserId),
+      previousStatus,
+      nextStatus: "OFFLINE",
+    })
 
     if (post.authorId !== context.adminUserId) {
       void createSystemNotification({

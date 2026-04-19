@@ -5,6 +5,7 @@ import { getFollowTargetCopy, normalizeFollowTargetType } from "@/lib/follows"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { ensureUsersCanInteract } from "@/lib/user-blocks"
 import { getUserDisplayName } from "@/lib/users"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
@@ -59,6 +60,15 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 
   if (targetType === "user" && result.changed) {
     revalidateUserSurfaceCache(Number(targetId))
+  }
+
+  if (targetType === "user") {
+    const requestUrl = new URL(request.url)
+    await executeAddonActionHook("user.follow.toggle.after", {
+      followerId: currentUser.id,
+      followeeId: String(targetId),
+      following: result.followed,
+    }, { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams })
   }
 
   return apiSuccess(

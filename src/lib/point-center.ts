@@ -8,6 +8,7 @@ import { getPointEffectAllScopeKeyByTargetType, isPointEffectScopeMatchableForBa
 import { buildPointLogEffectMetadata, buildPointLogTaxMetadata, mergePointLogMetadataIntoEventData } from "@/lib/point-log-audit"
 import type { PointLogEventDataInput, PointLogEventType } from "@/lib/point-log-events"
 import { addSafeIntegers, subtractSafeIntegers } from "@/lib/shared/safe-integer"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 type PointEffectClient = Prisma.TransactionClient
 const POINT_EFFECT_RULE_CACHE_TTL_MS = 5_000
@@ -510,6 +511,17 @@ export async function applyPointDelta(params: {
       relatedType: params.relatedType ?? null,
       relatedId: params.relatedId ?? null,
     })
+
+    try {
+      await executeAddonActionHook("points.change.after", {
+        userId: String(params.userId),
+        delta: finalDelta,
+        balance: actualAfterBalance,
+        reason: params.reason.trimEnd(),
+      })
+    } catch {
+      // 插件失败不应影响积分事务
+    }
 
     return {
       finalDelta,

@@ -3,6 +3,7 @@ import {  apiSuccess, createUserRouteHandler, readJsonBody, requireStringField }
 import { handlePostFavoriteSideEffects } from "@/lib/interaction-side-effects"
 import { logRequestSucceeded } from "@/lib/request-log"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
@@ -29,6 +30,13 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   }, {
     favored: result.favored,
   })
+
+  const requestUrl = new URL(request.url)
+  await executeAddonActionHook("post.favorite.toggle.after", {
+    postId,
+    userId: currentUser.id,
+    favorited: result.favored,
+  }, { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams })
 
   return apiSuccess({ favored: result.favored }, result.favored ? "收藏成功" : "已取消收藏")
 }, {

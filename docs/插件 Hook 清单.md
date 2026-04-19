@@ -56,12 +56,44 @@
 | `user.notification-settings.update.after` | user | 用户通知设置更新后执行副作用逻辑 | `void` |
 | `addon.config.changed.before` | system | 插件配置写入前执行副作用或拦截逻辑 | `void` |
 | `addon.config.changed.after` | system | 插件配置变更后执行副作用逻辑 | `void` |
+| `auth.logout.before` | auth | 登出清除会话前执行副作用或拦截逻辑 | `void` |
+| `auth.logout.after` | auth | 用户登出成功后执行副作用逻辑 | `void` |
+| `post.update.before` | post | 帖子更新写入前执行副作用或拦截逻辑 | `void` |
+| `post.update.after` | post | 帖子更新成功后执行副作用逻辑（含最新 post 快照） | `void` |
+| `post.delete.before` | post | 帖子删除前执行副作用或拦截逻辑 | `void` |
+| `post.delete.after` | post | 帖子删除成功后执行副作用逻辑 | `void` |
+| `post.status.changed.after` | post | 帖子状态（上架/下架/精华/置顶等）变更后执行副作用 | `void` |
+| `post.like.after` | post | 帖子点赞/取消点赞后执行副作用 | `void` |
+| `post.favorite.toggle.after` | post | 帖子收藏/取消收藏后执行副作用 | `void` |
+| `comment.update.before` | comment | 评论更新写入前执行副作用或拦截逻辑 | `void` |
+| `comment.update.after` | comment | 评论更新成功后执行副作用逻辑（含最新 comment 快照） | `void` |
+| `comment.delete.before` | comment | 评论删除前执行副作用或拦截逻辑 | `void` |
+| `comment.delete.after` | comment | 评论删除成功后执行副作用逻辑 | `void` |
+| `comment.like.after` | comment | 评论点赞/取消点赞后执行副作用 | `void` |
+| `user.follow.toggle.after` | user | 关注/取消关注后执行副作用 | `void` |
+| `notification.create.before` | notification | 站内通知写入前执行副作用或拦截逻辑 | `void` |
+| `notification.create.after` | notification | 通知写入成功后执行副作用逻辑（含 notification 快照） | `void` |
+| `points.change.after` | points | 用户积分变更（获得/扣除）后执行副作用 | `void` |
+| `upload.file.before` | upload | 文件上传前执行副作用或拦截逻辑（可用于类型/大小/黑名单预检） | `void` |
+| `upload.file.after` | upload | 文件上传完成后执行副作用逻辑（payload 含 fileId/url） | `void` |
+| `addon.installed.after` | system | 插件安装完成后执行副作用逻辑 | `void` |
+| `addon.uninstalled.after` | system | 插件卸载完成后执行副作用逻辑 | `void` |
+| `addon.enabled.after` | system | 插件启用后执行副作用逻辑 | `void` |
+| `addon.disabled.after` | system | 插件禁用后执行副作用逻辑 | `void` |
+| `search.query.after` | search | 搜索请求完成后执行副作用（埋点、热词统计等） | `void` |
 
 ## Waterfall
 
 | Hook | 分类 | 说明 | 返回值 |
 | --- | --- | --- | --- |
 | `post.slug.value` | post | 串行改写帖子最终 slug | `string` |
+| `post.title.value` | post | 串行改写帖子标题（落库前；可用于敏感词替换、自动加标记等） | `string` |
+| `user.displayName.value` | user | 串行改写用户展示名（用于列表/详情渲染前的显示加工） | `string` |
+| `user.avatar.url.value` | user | 串行改写用户头像 URL（可插入 CDN 前缀、占位头像等） | `string` |
+| `search.query.normalize` | search | 串行规范化搜索关键词（大小写、同义词、繁简转换等） | `string` |
+| `seo.meta.title` | seo | 串行改写 SEO `<title>` | `string` |
+| `seo.meta.description` | seo | 串行改写 SEO meta description | `string` |
+| `breadcrumb.items` | navigation | 串行改写当前页面面包屑条目数组 | `AddonBreadcrumbItem[]` |
 
 ## AsyncWaterfall
 
@@ -70,6 +102,12 @@
 | `navigation.primary.items` | navigation | 串行改写站点主导航项数组 | `NavigationItem[]` |
 | `home.sidebar.hot-topics.items` | home | 串行改写首页右栏热点帖子列表 | `HomeSidebarHotTopic[]` |
 | `settings.post-management.tabs` | settings | 串行扩展用户设置页“帖子管理”的插件 tab 列表 | `AddonSettingsPostManagementTab[]` |
+| `feed.posts.items` | post | 串行改写帖子流（首页 / 分类 / 搜索结果列表），可插入广告位、置顶项、重排序 | `AddonPostRecord[]` |
+| `search.results.rerank` | search | 串行对搜索结果重排序（含 query / scope 上下文） | `AddonSearchResultItem[]` |
+| `notification.dispatch.targets` | notification | 串行改写单条通知的分发目标（站内 / 邮件 / 其他通道） | `AddonNotificationDispatchTarget[]` |
+| `sitemap.entries` | seo | 串行扩展 sitemap.xml 条目列表 | `AddonSitemapEntry[]` |
+| `post.related.items` | post | 串行改写帖子详情页相关推荐列表 | `AddonPostRecord[]` |
+| `post.content.render` | post | 串行改写帖子正文渲染后的 HTML（代码高亮、LaTeX、Mermaid、表格美化等） | `string` |
 
 ## Surface
 

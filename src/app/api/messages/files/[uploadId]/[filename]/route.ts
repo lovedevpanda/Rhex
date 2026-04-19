@@ -3,6 +3,10 @@ import { apiError, createUserRouteHandler } from "@/lib/api-route"
 import { MESSAGE_FILE_UPLOAD_FOLDER } from "@/lib/message-media"
 import { createDownloadResponseFromStoredUpload } from "@/lib/upload"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 interface MessageFileRouteProps {
   params: Promise<{
     uploadId: string

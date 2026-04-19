@@ -361,7 +361,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
     ),
   )
 
-  const jsonLd = buildArticleJsonLd({
+  const jsonLd = await buildArticleJsonLd({
 
     title: displayPost.title,
     description: displayPost.description,

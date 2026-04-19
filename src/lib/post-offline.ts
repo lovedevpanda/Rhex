@@ -1,5 +1,6 @@
 import { PostStatus } from "@/db/types"
 
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { findPostOfflineTarget, findPostOfflineUser, runPostOfflineTransaction, updatePostOfflineTarget } from "@/db/post-offline-queries"
 import { getCurrentUser } from "@/lib/auth"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
@@ -119,6 +120,13 @@ export async function offlineOwnPost(input: { postId: string; reason?: string | 
       price: latestPrice,
       pointName: settings.pointName,
     }
+  })
+
+  await executeAddonActionHook("post.status.changed.after", {
+    postId: input.postId,
+    editorId: String(result.userId),
+    previousStatus: "NORMAL",
+    nextStatus: "OFFLINE",
   })
 
   return result

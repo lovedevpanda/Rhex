@@ -12,6 +12,7 @@ import {
   WATERMARK_FONT_ALIAS,
   WATERMARK_PREVIEW_HEIGHT,
   WATERMARK_PREVIEW_WIDTH,
+  WATERMARK_TEXT_MAX_LINES,
   type WatermarkRenderPresentation,
 } from "@/lib/watermark-lib"
 
@@ -38,6 +39,13 @@ type PreparedWatermarkLayout = {
   paddingX: number
   paddingY: number
   presentation: WatermarkRenderPresentation
+  // Shared character-width cache built during wrap/layout and reused by the
+  // draw phase. Previously each of wrapWatermarkText / buildWatermarkLineLayouts
+  // / drawSpacedText operated with its own Map (or no cache at all), so every
+  // character was measured 2–N+1 times. Keyed by `${ctx.font}::${character}`,
+  // so sharing is only valid while the same `ctx.font` is in effect — which
+  // is the case across prepare/draw on a single canvas.
+  widthCache: Map<string, number>
 }
 
 type GlobalWatermarkRuntimeState = {
@@ -47,10 +55,7 @@ type GlobalWatermarkRuntimeState = {
 
 const globalForWatermarkRuntime = globalThis as typeof globalThis & GlobalWatermarkRuntimeState
 const WATERMARK_FONT_CANDIDATE_PATHS = [
-  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.ttf"),
-  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.otf"),
-  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.woff"),
-  path.join(process.cwd(), "node_modules", "@fontsource", "zhi-mang-xing", "files", "zhi-mang-xing-chinese-simplified-400-normal.woff"),
+  path.join(process.cwd(), "public", "fonts", "zhi-mang-xing.ttf")
 ]
 const TOKEN_PATTERN = /[\u3400-\u9fff]|[A-Za-z0-9@#&_.:/+\-]+|\s+|./gu
 const JPEG_QUALITY = 92
@@ -133,11 +138,19 @@ function measureSpacedTextWidth(ctx: SKRSContext2D, value: string, letterSpacing
   return width
 }
 
-function splitTokenToFit(ctx: SKRSContext2D, token: string, maxWidth: number, letterSpacing: number, cache: Map<string, number>) {
+function splitTokenToFit(ctx: SKRSContext2D, token: string, maxWidth: number, letterSpacing: number, cache: Map<string, number>, maxParts = WATERMARK_TEXT_MAX_LINES) {
   const parts: string[] = []
   let current = ""
 
   for (const character of Array.from(token)) {
+    // Early exit: once we have enough parts to fill the allowed line budget,
+    // stop scanning the rest of the token. This bounds splitTokenToFit to
+    // O(maxParts · maxCharsPerLine) instead of O(tokenLength) which could be
+    // huge under a DoS input.
+    if (parts.length >= maxParts) {
+      break
+    }
+
     const candidate = `${current}${character}`
 
     if (current && measureSpacedTextWidth(ctx, candidate, letterSpacing, cache) > maxWidth) {
@@ -161,11 +174,14 @@ function splitTokenToFit(ctx: SKRSContext2D, token: string, maxWidth: number, le
   return parts.length > 0 ? parts : [token.trim()]
 }
 
-function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, letterSpacing: number) {
+function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, letterSpacing: number, widthCache: Map<string, number>, maxLines = WATERMARK_TEXT_MAX_LINES) {
   const lines: string[] = []
-  const widthCache = new Map<string, number>()
 
   for (const paragraph of text.split("\n")) {
+    if (lines.length >= maxLines) {
+      break
+    }
+
     const tokens = tokenizeWatermarkParagraph(paragraph)
 
     if (tokens.length === 0) {
@@ -176,6 +192,10 @@ function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, l
     let currentLine = ""
 
     for (const rawToken of tokens) {
+      if (lines.length >= maxLines) {
+        break
+      }
+
       const token = currentLine ? rawToken : rawToken.replace(/^\s+/g, "")
 
       if (!token) {
@@ -191,6 +211,9 @@ function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, l
       if (currentLine.trim()) {
         lines.push(currentLine.trimEnd())
         currentLine = ""
+        if (lines.length >= maxLines) {
+          break
+        }
       }
 
       const trimmedToken = rawToken.replace(/^\s+/g, "")
@@ -203,7 +226,10 @@ function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, l
         continue
       }
 
-      const tokenParts = splitTokenToFit(ctx, trimmedToken, maxWidth, letterSpacing, widthCache)
+      // Bound the split output to the remaining line budget (+1 so the last
+      // part may continue as currentLine for potential merge with next token).
+      const remaining = Math.max(1, maxLines - lines.length + 1)
+      const tokenParts = splitTokenToFit(ctx, trimmedToken, maxWidth, letterSpacing, widthCache, remaining)
       for (let index = 0; index < tokenParts.length; index += 1) {
         const part = tokenParts[index]
         if (!part) {
@@ -215,23 +241,23 @@ function wrapWatermarkText(ctx: SKRSContext2D, text: string, maxWidth: number, l
           continue
         }
 
+        if (lines.length >= maxLines) {
+          break
+        }
         lines.push(part)
       }
     }
 
-    if (currentLine.trim()) {
+    if (lines.length < maxLines && currentLine.trim()) {
       lines.push(currentLine.trimEnd())
     }
   }
 
-  return lines
+  return lines.slice(0, maxLines)
 }
 
-function buildWatermarkLineLayouts(ctx: SKRSContext2D, text: string, maxWidth: number, letterSpacing: number) {
-  const widthCache = new Map<string, number>()
-
-  return wrapWatermarkText(ctx, text, maxWidth, letterSpacing)
-    .slice(0, 6)
+function buildWatermarkLineLayouts(ctx: SKRSContext2D, text: string, maxWidth: number, letterSpacing: number, widthCache: Map<string, number>) {
+  return wrapWatermarkText(ctx, text, maxWidth, letterSpacing, widthCache, WATERMARK_TEXT_MAX_LINES)
     .map((line) => ({
       text: line,
       width: measureSpacedTextWidth(ctx, line, letterSpacing, widthCache),
@@ -239,13 +265,16 @@ function buildWatermarkLineLayouts(ctx: SKRSContext2D, text: string, maxWidth: n
     .filter((line) => line.text.length > 0 && line.width > 0)
 }
 
-function drawSpacedText(ctx: SKRSContext2D, text: string, x: number, y: number, letterSpacing: number) {
+function drawSpacedText(ctx: SKRSContext2D, text: string, x: number, y: number, letterSpacing: number, widthCache: Map<string, number>) {
   let cursor = x
   const characters = Array.from(text)
 
   for (const [index, character] of characters.entries()) {
     ctx.fillText(character, cursor, y)
-    cursor += ctx.measureText(character).width
+    // Reuse the shared per-layout width cache instead of issuing a fresh
+    // `ctx.measureText` per character per tile. On a 4000-tile render this
+    // turns 100s of thousands of measure calls into ~|unique chars| lookups.
+    cursor += measureCharacterWidth(ctx, character, widthCache)
 
     if (index < characters.length - 1) {
       cursor += letterSpacing
@@ -297,7 +326,8 @@ function prepareWatermarkLayout(ctx: SKRSContext2D, width: number, settings: Wat
   }
 
   ctx.font = buildFontSpec(presentation.fontSize, presentation.fontFamily)
-  const lines = buildWatermarkLineLayouts(ctx, presentation.text, presentation.maxTextWidth, presentation.letterSpacing)
+  const widthCache = new Map<string, number>()
+  const lines = buildWatermarkLineLayouts(ctx, presentation.text, presentation.maxTextWidth, presentation.letterSpacing, widthCache)
 
   if (lines.length === 0) {
     return null
@@ -315,6 +345,7 @@ function prepareWatermarkLayout(ctx: SKRSContext2D, width: number, settings: Wat
     paddingX,
     paddingY,
     presentation,
+    widthCache,
   }
 }
 
@@ -340,7 +371,7 @@ function drawWatermarkBlock(
     const offsetX = resolveLineOffset(position, layout.contentWidth, line.width)
     const x = originX + offsetX
     const y = originY + index * layout.presentation.lineHeight
-    drawSpacedText(ctx, line.text, x, y, layout.presentation.letterSpacing)
+    drawSpacedText(ctx, line.text, x, y, layout.presentation.letterSpacing, layout.widthCache)
   }
 }
 
@@ -415,11 +446,30 @@ function renderTiledWatermark(
 ) {
   const tileWidth = layout.contentWidth + layout.paddingX * 2
   const tileHeight = layout.contentHeight + layout.paddingY * 2
-  const tileStepX = tileWidth + Math.max(layout.presentation.margin * 2, Math.round(layout.presentation.fontSize * 3.25))
-  const tileStepY = tileHeight + Math.max(layout.presentation.margin * 1.5, Math.round(layout.presentation.lineHeight * 1.8))
-  const phase = resolveTilePhase(settings.position, tileStepX, tileStepY)
+  let tileStepX = tileWidth + Math.max(layout.presentation.margin * 2, Math.round(layout.presentation.fontSize * 3.25))
+  let tileStepY = tileHeight + Math.max(layout.presentation.margin * 1.5, Math.round(layout.presentation.lineHeight * 1.8))
   const diagonal = Math.ceil(Math.hypot(width, height))
-  const tileCanvasSize = diagonal + tileStepX * 2
+  let tileCanvasSize = diagonal + tileStepX * 2
+
+  // Safety cap: bound total tile fillText calls on extremely large images.
+  // Without this, a 30k×30k image with a small fontSize could produce
+  // hundreds of thousands of tiles and pin the CPU indefinitely.
+  const MAX_TILES = 4000
+  const estimateTileCount = () => {
+    const cols = Math.ceil((tileCanvasSize + tileStepX * 2) / Math.max(1, tileStepX)) + 1
+    const rows = Math.ceil((tileCanvasSize + tileStepY * 2) / Math.max(1, tileStepY)) + 1
+    return cols * rows
+  }
+  let projected = estimateTileCount()
+  if (projected > MAX_TILES) {
+    const scale = Math.sqrt(projected / MAX_TILES)
+    tileStepX = Math.max(1, Math.round(tileStepX * scale))
+    tileStepY = Math.max(1, Math.round(tileStepY * scale))
+    tileCanvasSize = diagonal + tileStepX * 2
+    projected = estimateTileCount()
+  }
+
+  const phase = resolveTilePhase(settings.position, tileStepX, tileStepY)
   const rotation = -(Math.PI / 9)
 
   ctx.save()
@@ -427,10 +477,15 @@ function renderTiledWatermark(
   ctx.rotate(rotation)
   ctx.translate(-(tileCanvasSize / 2), -(tileCanvasSize / 2))
 
+  let drawn = 0
   for (let rowIndex = 0, tileY = -tileStepY - phase.y; tileY <= tileCanvasSize + tileStepY; tileY += tileStepY, rowIndex += 1) {
     const rowOffset = rowIndex % 2 === 0 ? 0 : Math.round(tileStepX / 2)
 
     for (let tileX = -tileStepX - phase.x + rowOffset; tileX <= tileCanvasSize + tileStepX; tileX += tileStepX) {
+      if (drawn >= MAX_TILES) {
+        ctx.restore()
+        return
+      }
       drawWatermarkBlock(
         ctx,
         layout,
@@ -438,6 +493,7 @@ function renderTiledWatermark(
         tileY + layout.paddingY,
         settings.position,
       )
+      drawn += 1
     }
   }
 

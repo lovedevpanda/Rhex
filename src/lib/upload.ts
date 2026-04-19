@@ -406,10 +406,12 @@ export async function createDownloadResponseFromStoredUpload(params: {
     storagePath: params.storagePath,
   })
 
-  return new Response(fileBuffer, {
+  const body = new Uint8Array(fileBuffer.buffer, fileBuffer.byteOffset, fileBuffer.byteLength)
+
+  return new Response(body, {
     headers: {
       "Content-Type": params.mimeType?.trim() || "application/octet-stream",
-      "Content-Length": String(params.fileSize ?? fileBuffer.byteLength),
+      "Content-Length": String(body.byteLength),
       "Content-Disposition": buildContentDisposition(params.fileName),
       "Cache-Control": "private, no-store",
     },

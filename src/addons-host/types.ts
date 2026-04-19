@@ -312,16 +312,66 @@ export const ADDON_ACTION_HOOK_NAMES = [
   "user.notification-settings.update.after",
   "addon.config.changed.before",
   "addon.config.changed.after",
+  // ─── 以下为 v2 扩展 hook（类型映射见 AddonActionHookPayloadMap） ───
+  // 认证
+  "auth.logout.before",
+  "auth.logout.after",
+  // 帖子
+  "post.update.before",
+  "post.update.after",
+  "post.delete.before",
+  "post.delete.after",
+  "post.status.changed.after",
+  "post.like.after",
+  "post.favorite.toggle.after",
+  // 评论
+  "comment.update.before",
+  "comment.update.after",
+  "comment.delete.before",
+  "comment.delete.after",
+  "comment.like.after",
+  // 用户关系
+  "user.follow.toggle.after",
+  // 通知
+  "notification.create.before",
+  "notification.create.after",
+  // 积分
+  "points.change.after",
+  // 上传
+  "upload.file.before",
+  "upload.file.after",
+  // addon 生命周期
+  "addon.installed.after",
+  "addon.uninstalled.after",
+  "addon.enabled.after",
+  "addon.disabled.after",
+  // 搜索
+  "search.query.after",
 ] as const
 
 export const ADDON_WATERFALL_HOOK_NAMES = [
   "post.slug.value",
+  // ─── v2 扩展 ───
+  "post.title.value",
+  "user.displayName.value",
+  "user.avatar.url.value",
+  "search.query.normalize",
+  "seo.meta.title",
+  "seo.meta.description",
+  "breadcrumb.items",
 ] as const
 
 export const ADDON_ASYNC_WATERFALL_HOOK_NAMES = [
   "navigation.primary.items",
   "home.sidebar.hot-topics.items",
   "settings.post-management.tabs",
+  // ─── v2 扩展 ───
+  "feed.posts.items",
+  "search.results.rerank",
+  "notification.dispatch.targets",
+  "sitemap.entries",
+  "post.related.items",
+  "post.content.render",
 ] as const
 
 export type AddonActionHookName = (typeof ADDON_ACTION_HOOK_NAMES)[number]
@@ -999,6 +1049,22 @@ export interface AddonExecutionContextBase extends AddonRuntimeDescriptor {
   permissions: string[]
   hasPermission: (permission: string) => boolean
   assertPermission: (permission: string, message?: string) => void
+  /**
+   * Server-only shadcn UI 组件集合（与 client.tsx 的 addonClientUi 同名清单，custom 字段除外）。
+   * 仅供 addon 在服务端 render（slot/page/surface）时通过 createElement 组合 UI；
+   * 客户端组件请直接 `import { addonClientUi } from "@/addons-host/sdk/client"`。
+   */
+  ui: import("./sdk/server-ui").AddonServerSdkUi
+  /** Server-only Lucide 图标集合，与 client.tsx 的 addonClientIcons 同清单。 */
+  icons: import("./sdk/server-ui").AddonServerSdkIcons
+  /** Tailwind class 合并工具（即 `@/lib/utils` 的 `cn`）。 */
+  cn: typeof import("@/lib/utils").cn
+  /**
+   * 将 React 元素渲染为静态 HTML 字符串（基于 react-dom/server `renderToStaticMarkup`）。
+   * 用于 slot/page/surface 等需返回 HTML 字符串的场景；不写入 hydration 标记，
+   * 客户端交互需 addon 自行提供 client-entry。
+   */
+  renderToHtml: (element: import("react").ReactNode) => string
   getCurrentUser: () => Promise<SessionActor | null>
   getSiteSettings: () => Promise<SiteSettingsData>
   getBoardSelectOptions: () => Promise<AddonBoardSelectGroup[]>
@@ -1089,9 +1155,215 @@ export interface AddonApiHandlerContext extends AddonExecutionContextBase {
   method: AddonHttpMethod
 }
 
+/**
+ * ───────────────────────────────────────────────────────────────────────────
+ * Hook 类型映射表（v2 引入）
+ *
+ * 设计说明：
+ * 1. 三张 Map 分别登记 Action / Waterfall / AsyncWaterfall 三类 hook 的
+ *    payload / value 类型；仅登记**新增的 v2 hook**，历史老 hook 不登记，
+ *    由查表 helper 回落为 `unknown`——这保证**现有插件代码 100% 向后兼容**。
+ * 2. 三张 Map 均为 `interface`，插件作者可通过
+ *    [declaration merging](https://www.typescriptlang.org/docs/handbook/declaration-merging.html)
+ *    在自己的 `*.d.ts` 中扩展未登记的 hook，以获得端到端类型安全。
+ * 3. `AddonActionHookContext` / `AddonWaterfallHookContext` 与
+ *    `AddonActionHookRegistration` / `AddonWaterfallHookRegistration` /
+ *    `AddonAsyncWaterfallHookRegistration` 的**第二个泛型参数**改为"按 hook 名
+ *    查表"：对已登记的 hook 精确推断 payload/value 类型，未登记则仍为 unknown。
+ * ───────────────────────────────────────────────────────────────────────────
+ */
+export interface AddonActionHookPayloadMap {
+  // ─── 认证 ───
+  "auth.logout.before": {
+    userId: string
+    username: string
+    sessionId?: string
+  }
+  "auth.logout.after": {
+    userId: string
+    username: string
+    sessionId?: string
+  }
+  // ─── 帖子 ───
+  "post.update.before": {
+    postId: string
+    editorId: string
+    changes: Record<string, unknown>
+  }
+  "post.update.after": {
+    postId: string
+    editorId: string
+    changes: Record<string, unknown>
+    post?: AddonPostRecord
+  }
+  "post.delete.before": {
+    postId: string
+    editorId: string
+    reason?: string
+  }
+  "post.delete.after": {
+    postId: string
+    editorId: string
+    reason?: string
+  }
+  "post.status.changed.after": {
+    postId: string
+    editorId: string
+    previousStatus: AddonReadablePostStatus
+    nextStatus: AddonReadablePostStatus
+  }
+  "post.like.after": {
+    postId: string
+    userId: string
+    liked: boolean
+    likeCount?: number
+  }
+  "post.favorite.toggle.after": {
+    postId: string
+    userId: string
+    favorited: boolean
+  }
+  // ─── 评论 ───
+  "comment.update.before": {
+    commentId: string
+    editorId: string
+    changes: Record<string, unknown>
+  }
+  "comment.update.after": {
+    commentId: string
+    editorId: string
+    changes: Record<string, unknown>
+    comment?: AddonCommentRecord
+  }
+  "comment.delete.before": {
+    commentId: string
+    editorId: string
+    reason?: string
+  }
+  "comment.delete.after": {
+    commentId: string
+    editorId: string
+    reason?: string
+  }
+  "comment.like.after": {
+    commentId: string
+    userId: string
+    liked: boolean
+    likeCount?: number
+  }
+  // ─── 用户关系 ───
+  "user.follow.toggle.after": {
+    followerId: string
+    followeeId: string
+    following: boolean
+  }
+  // ─── 通知 ───
+  "notification.create.before": {
+    recipientId: string
+    type: string
+    payload: Record<string, unknown>
+  }
+  "notification.create.after": {
+    notification?: AddonNotificationRecord
+  }
+  // ─── 积分 ───
+  "points.change.after": {
+    userId: string
+    delta: number
+    balance: number
+    reason: string
+  }
+  // ─── 上传 ───
+  "upload.file.before": {
+    uploaderId: string
+    filename: string
+    mime: string
+    size: number
+  }
+  "upload.file.after": {
+    uploaderId: string
+    fileId: string
+    filename: string
+    mime: string
+    size: number
+    url?: string
+  }
+  // ─── addon 生命周期 ───
+  "addon.installed.after": {
+    addonId: string
+    version: string
+  }
+  "addon.uninstalled.after": {
+    addonId: string
+    version: string
+  }
+  "addon.enabled.after": {
+    addonId: string
+    version: string
+  }
+  "addon.disabled.after": {
+    addonId: string
+    version: string
+  }
+  // ─── 搜索 ───
+  "search.query.after": {
+    userId?: string
+    query: string
+    scope: string
+    resultCount: number
+  }
+}
+
+export interface AddonWaterfallHookValueMap {
+  "post.title.value": string
+  "user.displayName.value": string
+  "user.avatar.url.value": string
+  "search.query.normalize": string
+  "seo.meta.title": string
+  "seo.meta.description": string
+  "breadcrumb.items": Array<{
+    label: string
+    href?: string
+  }>
+}
+
+export interface AddonAsyncWaterfallHookValueMap {
+  "feed.posts.items": AddonPostRecord[]
+  "search.results.rerank": Array<{
+    id: string
+    score: number
+    kind: "post" | "comment" | "user"
+    [key: string]: unknown
+  }>
+  "notification.dispatch.targets": Array<{
+    userId: string
+    channel: "inapp" | "email" | "webhook" | string
+  }>
+  "sitemap.entries": Array<{
+    loc: string
+    lastmod?: string
+    changefreq?: string
+    priority?: number
+  }>
+  "post.related.items": AddonPostRecord[]
+  "post.content.render": string
+}
+
+/** 按 hook 名查 payload 类型；未登记则回落 unknown（向后兼容）。 */
+export type LookupAddonActionHookPayload<H extends AddonActionHookName> =
+  H extends keyof AddonActionHookPayloadMap ? AddonActionHookPayloadMap[H] : unknown
+
+/** 按 hook 名查 waterfall value 类型；未登记则回落 unknown。 */
+export type LookupAddonWaterfallHookValue<H extends AddonWaterfallHookName> =
+  H extends keyof AddonWaterfallHookValueMap ? AddonWaterfallHookValueMap[H] : unknown
+
+/** 按 hook 名查 asyncWaterfall value 类型；未登记则回落 unknown。 */
+export type LookupAddonAsyncWaterfallHookValue<H extends AddonAsyncWaterfallHookName> =
+  H extends keyof AddonAsyncWaterfallHookValueMap ? AddonAsyncWaterfallHookValueMap[H] : unknown
+
 export interface AddonActionHookContext<
   THook extends AddonActionHookName = AddonActionHookName,
-  TPayload = unknown,
+  TPayload = LookupAddonActionHookPayload<THook>,
 > extends AddonExecutionContextBase {
   hook: THook
   payload: TPayload
@@ -1174,7 +1446,7 @@ export interface AddonProviderRegistration {
 
 export interface AddonActionHookRegistration<
   THook extends AddonActionHookName = AddonActionHookName,
-  TPayload = unknown,
+  TPayload = LookupAddonActionHookPayload<THook>,
 > {
   key: string
   hook: THook
@@ -1188,7 +1460,7 @@ export interface AddonActionHookRegistration<
 
 export interface AddonWaterfallHookRegistration<
   THook extends AddonWaterfallHookName = AddonWaterfallHookName,
-  TValue = unknown,
+  TValue = LookupAddonWaterfallHookValue<THook>,
 > {
   key: string
   hook: THook
@@ -1202,7 +1474,7 @@ export interface AddonWaterfallHookRegistration<
 
 export interface AddonAsyncWaterfallHookRegistration<
   THook extends AddonAsyncWaterfallHookName = AddonAsyncWaterfallHookName,
-  TValue = unknown,
+  TValue = LookupAddonAsyncWaterfallHookValue<THook>,
 > {
   key: string
   hook: THook

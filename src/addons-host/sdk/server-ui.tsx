@@ -1,8 +1,19 @@
-"use client"
+/**
+ * @file server-ui.tsx
+ * @responsibility 为 addon 服务端 render ctx 提供与客户端对等的 shadcn UI 组件、Lucide 图标、cn 与 renderToHtml 能力
+ * @scope 本文件**不带 "use client"**，可被服务端 import；内部组件的 "use client" 指令只影响 Next 的 bundling，
+ *        不影响 React.createElement 与 renderToStaticMarkup 在 Node/Edge 上的 SSR 行为。
+ * @notice 组件清单需与 client.tsx 的 addonClientUi / addonClientIcons 保持同步；
+ *         本轮不含 custom（user/vip/level 等）与 toast（sonner client-only）与 createRoot（react-dom/client）。
+ */
 
 import * as React from "react"
-import { createRoot } from "react-dom/client"
-import type { SiteSettingsData } from "@/lib/site-settings.types"
+// 注意：不要在顶层 `import { renderToStaticMarkup } from "react-dom/server"`。
+// 本文件会经 session.ts → proxy.ts 被中间件静态 import，Next 16 / Turbopack 一旦在
+// Server Component / App Route / Middleware 的 import 图里看到 react-dom/server 就会
+// 硬报错（防其泄漏到 client bundle；Edge 也不支持）。改为运行时惰性 require，
+// Turbopack 无法穿透 `new Function`，中间件不调用 renderToHtml 就不会真正加载。
+
 import {
   AlertCircle,
   ArrowRight,
@@ -55,7 +66,7 @@ import {
   Volume2,
   VolumeX,
   X,
-  Gamepad
+  Gamepad,
 } from "lucide-react"
 
 import {
@@ -73,8 +84,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Kbd } from "@/components/ui/kbd"
-
 import { Badge } from "@/components/ui/badge"
 import {
   Breadcrumb,
@@ -161,6 +170,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { Input } from "@/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
@@ -169,7 +179,11 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
-import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
+import {
+  FormModal,
+  Modal,
+} from "@/components/ui/modal"
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -188,10 +202,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import {
-  FormModal,
-  Modal,
-} from "@/components/ui/modal"
 import {
   Popover,
   PopoverContent,
@@ -264,144 +274,14 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/toast"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from "@/components/ui/tooltip"
-import { BoardSelectField } from "@/components/board/board-select-field"
-import { ForumPostStreamView } from "@/components/forum/forum-post-stream-view"
-import { LevelBadge } from "@/components/level-badge"
-import { LevelIcon } from "@/components/level-icon"
-import { UserAvatar } from "@/components/user/user-avatar"
-import { UserDisplayedBadges } from "@/components/user/user-displayed-badges"
-import { UserStatusBadge } from "@/components/user/user-status-badge"
-import { UserVerificationBadge } from "@/components/user/user-verification-badge"
-import { AvatarVipBadge } from "@/components/vip/avatar-vip-badge"
-import { VipDisplayName } from "@/components/vip/vip-display-name"
-import { VipLevelIcon } from "@/components/vip/vip-level-icon"
-import { VipNameTooltip } from "@/components/vip/vip-name-tooltip"
+
 import { cn } from "@/lib/utils"
 
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-function normalizeOptionalString(value: unknown, fallback = "") {
-  return typeof value === "string" ? value.trim() : fallback
-}
-
-const loadedScriptState = new Map<string, Promise<void>>()
-
-function loadScriptOnce(
-  src: string,
-  options?: {
-    async?: boolean
-    defer?: boolean
-    attributes?: Record<string, string>
-    timeoutMs?: number
-  },
-) {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("loadScriptOnce 仅能在浏览器环境调用"))
-  }
-
-  const normalizedSrc = normalizeOptionalString(src)
-  if (!normalizedSrc) {
-    return Promise.reject(new Error("loadScriptOnce 缺少有效的脚本地址"))
-  }
-
-  const existing = loadedScriptState.get(normalizedSrc)
-  if (existing) {
-    return existing
-  }
-
-  const promise = new Promise<void>((resolve, reject) => {
-    let script = document.querySelector<HTMLScriptElement>(
-      `script[src="${CSS.escape(normalizedSrc)}"]`,
-    )
-    let settled = false
-
-    const finish = (callback: () => void | ((reason?: unknown) => void), reason?: unknown) => {
-      if (settled) {
-        return
-      }
-
-      settled = true
-      window.clearTimeout(timer)
-      cleanup()
-
-      if (callback === reject) {
-        loadedScriptState.delete(normalizedSrc)
-        reject(reason)
-        return
-      }
-
-      resolve()
-    }
-
-    const handleLoad = () => finish(resolve)
-    const handleError = () =>
-      finish(reject, new Error(`脚本加载失败: ${normalizedSrc}`))
-
-    const cleanup = () => {
-      if (script) {
-        script.removeEventListener("load", handleLoad)
-        script.removeEventListener("error", handleError)
-      }
-    }
-
-    const timer = window.setTimeout(() => {
-      finish(reject, new Error(`脚本加载超时: ${normalizedSrc}`))
-    }, Math.max(1000, options?.timeoutMs ?? 15000))
-
-    if (!script) {
-      script = document.createElement("script")
-      script.src = normalizedSrc
-      script.async = options?.async ?? true
-      script.defer = options?.defer ?? true
-
-      for (const [key, value] of Object.entries(options?.attributes ?? {})) {
-        script.setAttribute(key, value)
-      }
-
-      document.head.appendChild(script)
-    }
-
-    script.addEventListener("load", handleLoad)
-    script.addEventListener("error", handleError)
-
-    const alreadyLoaded =
-      script instanceof HTMLScriptElement
-      && script.dataset.loaded === "true"
-    if (alreadyLoaded) {
-      handleLoad()
-      return
-    }
-
-    script.setAttribute("data-loaded", "false")
-  }).then(() => {
-    const script = document.querySelector(
-      `script[src="${CSS.escape(normalizedSrc)}"]`,
-    )
-    if (script instanceof HTMLScriptElement) {
-      script.dataset.loaded = "true"
-    }
-  })
-
-  loadedScriptState.set(normalizedSrc, promise)
-  return promise
-}
-
-const addonClientUi = Object.freeze({
+// 组件清单需与 client.tsx 中的 addonClientUi 保持字段一致（除 custom / toast / createRoot 外）。
+const addonServerUi = Object.freeze({
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -583,38 +463,13 @@ const addonClientUi = Object.freeze({
   TooltipRoot,
   TooltipTrigger,
   useSidebar,
-  Kbd
+  Kbd,
 })
 
-export type AddonClientSdkUi = typeof addonClientUi
+export type AddonServerSdkUi = typeof addonServerUi
 
-const addonClientUtils = Object.freeze({
-  escapeHtml,
-  isRecord,
-  loadScriptOnce,
-  normalizeOptionalString,
-})
-
-export type AddonClientSdkUtils = typeof addonClientUtils
-
-const addonClientCustom = Object.freeze({
-  AvatarVipBadge,
-  BoardSelectField,
-  ForumPostStreamView,
-  LevelBadge,
-  LevelIcon,
-  UserAvatar,
-  UserDisplayedBadges,
-  UserStatusBadge,
-  UserVerificationBadge,
-  VipDisplayName,
-  VipLevelIcon,
-  VipNameTooltip,
-})
-
-export type AddonClientSdkCustom = typeof addonClientCustom
-
-const addonClientIcons = Object.freeze({
+// 图标清单需与 client.tsx 的 addonClientIcons 保持一致。
+const addonServerIcons = Object.freeze({
   AlertCircle,
   ArrowRight,
   ArrowUpRight,
@@ -666,119 +521,33 @@ const addonClientIcons = Object.freeze({
   Volume2,
   VolumeX,
   X,
-  Gamepad
+  Gamepad,
 })
 
-export type AddonClientSdkIcons = typeof addonClientIcons
+export type AddonServerSdkIcons = typeof addonServerIcons
 
-export interface AddonClientSdk {
-  React: typeof React
-  createRoot: typeof createRoot
-  custom: AddonClientSdkCustom
-  icons: AddonClientSdkIcons
-  ui: AddonClientSdkUi
-  utils: AddonClientSdkUtils
-  toast: typeof toast
-  cn: typeof cn
-}
-
-export interface RhexClientSessionUser {
-  id: number
-  username: string
-  nickname: string | null
-  avatarPath: string | null
-  role: string
-  status: string
-  level: number
-  points: number
-  vipLevel: number | null
-  vipExpiresAt: string | null
-}
-
-export interface RhexClientSession {
-  isAuthenticated: boolean
-  user: RhexClientSessionUser | null
-}
-
-export type RhexClientSite = SiteSettingsData
-
-export interface RhexClientGlobal extends AddonClientSdk {
-  sdkVersion: 1
-  getSdk: () => AddonClientSdk
-  session: RhexClientSession
-  site: RhexClientSite | null
-}
-
-declare global {
-  interface Window {
-    _rhex?: RhexClientGlobal
+/**
+ * 将 React 元素渲染为纯静态 HTML 字符串。
+ * 基于 react-dom/server 的 renderToStaticMarkup：不插入 data-reactroot 等 hydration 标记，
+ * 生成的 HTML 是纯展示型片段；client 交互需 addon 自行提供 client-entry + hydrate。
+ *
+ * 实现备注：react-dom/server 必须惰性加载，见本文件顶部注释。用 `new Function`
+ * 构造的运行时 require，Turbopack / webpack 的静态分析均无法穿透；仅 Node 服务端
+ * 真正调用到此函数时才加载，Edge 中间件不会命中。
+ */
+let _renderToStaticMarkup:
+  | typeof import("react-dom/server").renderToStaticMarkup
+  | null = null
+function renderToHtml(element: React.ReactNode): string {
+  if (!_renderToStaticMarkup) {
+    const dynamicRequire = new Function("m", "return require(m)") as (
+      m: string,
+    ) => typeof import("react-dom/server")
+    _renderToStaticMarkup = dynamicRequire("react-dom/server").renderToStaticMarkup
   }
+  return _renderToStaticMarkup(
+    React.createElement(React.Fragment, null, element),
+  )
 }
 
-let addonClientSdkSingleton: AddonClientSdk | null = null
-let rhexClientGlobalSingleton: RhexClientGlobal | null = null
-
-function createDefaultRhexClientSession(): RhexClientSession {
-  return {
-    isAuthenticated: false,
-    user: null,
-  }
-}
-
-export type AddonClientComponentProps<TProps extends Record<string, unknown> = Record<string, unknown>> =
-  TProps & {
-    sdk: AddonClientSdk
-  }
-
-export type AddonClientComponent<TProps extends Record<string, unknown> = Record<string, unknown>> =
-  React.ComponentType<AddonClientComponentProps<TProps>>
-
-export type AddonClientComponentFactory<TProps extends Record<string, unknown> = Record<string, unknown>> =
-  (sdk: AddonClientSdk) => AddonClientComponent<TProps> | Promise<AddonClientComponent<TProps>>
-
-export function createAddonClientSdk(): AddonClientSdk {
-  if (!addonClientSdkSingleton) {
-    addonClientSdkSingleton = {
-      React,
-      createRoot,
-      custom: addonClientCustom,
-      icons: addonClientIcons,
-      ui: addonClientUi,
-      utils: addonClientUtils,
-      toast,
-      cn,
-    }
-  }
-
-  return addonClientSdkSingleton
-}
-
-export function getRhexClientGlobal(): RhexClientGlobal {
-  if (!rhexClientGlobalSingleton) {
-    const sdk = createAddonClientSdk()
-    rhexClientGlobalSingleton = {
-      ...sdk,
-      sdkVersion: 1,
-      getSdk: createAddonClientSdk,
-      session: createDefaultRhexClientSession(),
-      site: null,
-    }
-  }
-
-  return rhexClientGlobalSingleton
-}
-
-export function installRhexClientGlobal(input?: {
-  session?: RhexClientSession
-  site?: RhexClientSite | null
-}) {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  const globalSdk = getRhexClientGlobal()
-  globalSdk.session = input?.session ?? createDefaultRhexClientSession()
-  globalSdk.site = input?.site ?? null
-  window._rhex = globalSdk
-  return globalSdk
-}
+export { addonServerUi, addonServerIcons, renderToHtml, cn }

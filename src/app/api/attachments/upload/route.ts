@@ -7,6 +7,7 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { normalizeUploadExtension } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const settings = await getSiteSettings()
@@ -50,6 +51,15 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   }
 
   const preparedFile = await prepareBinaryUploadedFile(file)
+
+  const requestUrl = new URL(request.url)
+  const hookCtx = { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams }
+  await executeAddonActionHook("upload.file.before", {
+    uploaderId: currentUser.id,
+    filename: file.name,
+    mime: file.type,
+    size: file.size,
+  }, hookCtx)
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("attachments-upload", {
     request,
@@ -98,6 +108,14 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
         fileExt: upload.fileExt,
       },
     })
+
+    await executeAddonActionHook("upload.file.after", {
+      uploaderId: currentUser.id,
+      fileId: upload.id,
+      filename: upload.originalName,
+      mime: upload.mimeType,
+      size: upload.fileSize,
+    }, hookCtx)
 
     return apiSuccess({
       upload: {

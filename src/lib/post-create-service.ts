@@ -139,7 +139,13 @@ export async function createPostFlow(body: unknown, options: CreatePostFlowOptio
     apiError(400, "匿名发布暂不支持帖子红包")
   }
 
-  const titleSafety = await enforceSensitiveText({ scene: "post.title", text: title })
+  const titleHookResult = await executeAddonWaterfallHook("post.title.value", title, {
+    request: options.request,
+  })
+  const hookedTitle = typeof titleHookResult.value === "string" && titleHookResult.value.trim()
+    ? titleHookResult.value
+    : title
+  const titleSafety = await enforceSensitiveText({ scene: "post.title", text: hookedTitle })
   const contentSafety = await enforceSensitiveText({ scene: "post.content", text: content })
   const loginUnlockSafety = loginUnlockContent ? await enforceSensitiveText({ scene: "post.content", text: loginUnlockContent }) : null
   const replyUnlockSafety = replyUnlockContent ? await enforceSensitiveText({ scene: "post.content", text: replyUnlockContent }) : null

@@ -6,6 +6,7 @@ import { enqueueNotification } from "@/lib/notification-writes"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
@@ -40,6 +41,13 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
         content: `${currentUser.nickname ?? currentUser.username} 赞了你的评论：${result.commentPreview}`,
       })
     }
+
+    const requestUrl = new URL(request.url)
+    await executeAddonActionHook("comment.like.after", {
+      commentId,
+      userId: currentUser.id,
+      liked: result.liked,
+    }, { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams })
 
     return apiSuccess({ liked: result.liked }, result.liked ? "点赞成功" : "已取消点赞")
   })

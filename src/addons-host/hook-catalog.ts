@@ -319,16 +319,66 @@ const actionHookCatalog: readonly AddonExtensionPointCatalogEntry[] = [
   { name: "user.notification-settings.update.after", kind: "action", category: "user", scope: "service", summary: "用户通知设置更新后执行副作用逻辑。", returns: "void" },
   { name: "addon.config.changed.before", kind: "action", category: "system", scope: "service", summary: "插件配置写入前执行副作用或拦截逻辑。", returns: "void" },
   { name: "addon.config.changed.after", kind: "action", category: "system", scope: "service", summary: "插件配置变更后执行副作用逻辑。", returns: "void" },
+  // ─── v2 扩展 hook ───
+  // 认证
+  { name: "auth.logout.before", kind: "action", category: "auth", scope: "service", summary: "用户登出前执行副作用或拦截逻辑（payload: { userId, username, sessionId? }）。", returns: "void" },
+  { name: "auth.logout.after", kind: "action", category: "auth", scope: "service", summary: "用户登出成功后执行副作用逻辑。", returns: "void" },
+  // 帖子
+  { name: "post.update.before", kind: "action", category: "post", scope: "service", summary: "帖子更新前执行副作用或拦截逻辑（payload: { postId, editorId, changes }）。", returns: "void" },
+  { name: "post.update.after", kind: "action", category: "post", scope: "service", summary: "帖子更新成功后执行副作用逻辑（含最新 post 快照）。", returns: "void" },
+  { name: "post.delete.before", kind: "action", category: "post", scope: "service", summary: "帖子删除前执行副作用或拦截逻辑（payload: { postId, editorId, reason? }）。", returns: "void" },
+  { name: "post.delete.after", kind: "action", category: "post", scope: "service", summary: "帖子删除成功后执行副作用逻辑。", returns: "void" },
+  { name: "post.status.changed.after", kind: "action", category: "post", scope: "service", summary: "帖子可读状态变化后执行副作用逻辑（payload: { postId, editorId, previousStatus, nextStatus }）。", returns: "void" },
+  { name: "post.like.after", kind: "action", category: "post", scope: "service", summary: "帖子点赞状态变化后执行副作用逻辑（payload: { postId, userId, liked, likeCount }）。", returns: "void" },
+  { name: "post.favorite.toggle.after", kind: "action", category: "post", scope: "service", summary: "帖子收藏状态切换后执行副作用逻辑（payload: { postId, userId, favorited }）。", returns: "void" },
+  // 评论
+  { name: "comment.update.before", kind: "action", category: "comment", scope: "service", summary: "评论更新前执行副作用或拦截逻辑（payload: { commentId, editorId, changes }）。", returns: "void" },
+  { name: "comment.update.after", kind: "action", category: "comment", scope: "service", summary: "评论更新成功后执行副作用逻辑（含最新 comment 快照）。", returns: "void" },
+  { name: "comment.delete.before", kind: "action", category: "comment", scope: "service", summary: "评论删除前执行副作用或拦截逻辑（payload: { commentId, editorId, reason? }）。", returns: "void" },
+  { name: "comment.delete.after", kind: "action", category: "comment", scope: "service", summary: "评论删除成功后执行副作用逻辑。", returns: "void" },
+  { name: "comment.like.after", kind: "action", category: "comment", scope: "service", summary: "评论点赞状态变化后执行副作用逻辑（payload: { commentId, userId, liked, likeCount }）。", returns: "void" },
+  // 用户关系
+  { name: "user.follow.toggle.after", kind: "action", category: "user", scope: "service", summary: "关注 / 取关关系切换后执行副作用逻辑（payload: { followerId, followeeId, following }）。", returns: "void" },
+  // 通知
+  { name: "notification.create.before", kind: "action", category: "notification", scope: "service", summary: "通知写入前执行副作用或拦截逻辑（payload: { recipientId, type, payload }）。", returns: "void" },
+  { name: "notification.create.after", kind: "action", category: "notification", scope: "service", summary: "通知写入成功后执行副作用逻辑（含 notification 快照）。", returns: "void" },
+  // 积分
+  { name: "points.change.after", kind: "action", category: "points", scope: "service", summary: "积分余额变化后执行副作用逻辑（payload: { userId, delta, balance, reason }）。", returns: "void" },
+  // 上传
+  { name: "upload.file.before", kind: "action", category: "upload", scope: "service", summary: "文件上传落盘前执行副作用或拦截逻辑（payload: { uploaderId, filename, mime, size }）。", returns: "void" },
+  { name: "upload.file.after", kind: "action", category: "upload", scope: "service", summary: "文件上传完成后执行副作用逻辑（payload 含 fileId/url）。", returns: "void" },
+  // addon 生命周期
+  { name: "addon.installed.after", kind: "action", category: "system", scope: "service", summary: "插件安装完成后执行副作用逻辑（payload: { addonId, version }）。", returns: "void" },
+  { name: "addon.uninstalled.after", kind: "action", category: "system", scope: "service", summary: "插件卸载完成后执行副作用逻辑。", returns: "void" },
+  { name: "addon.enabled.after", kind: "action", category: "system", scope: "service", summary: "插件启用后执行副作用逻辑。", returns: "void" },
+  { name: "addon.disabled.after", kind: "action", category: "system", scope: "service", summary: "插件禁用后执行副作用逻辑。", returns: "void" },
+  // 搜索
+  { name: "search.query.after", kind: "action", category: "search", scope: "service", summary: "搜索查询执行后执行副作用逻辑（payload: { userId?, query, scope, resultCount }）。", returns: "void" },
 ] as const
 
 const waterfallHookCatalog: readonly AddonExtensionPointCatalogEntry[] = [
   { name: "post.slug.value", kind: "waterfall", category: "post", scope: "service", summary: "串行改写帖子最终 slug。", returns: "string" },
+  // ─── v2 扩展 hook ───
+  { name: "post.title.value", kind: "waterfall", category: "post", scope: "service", summary: "串行改写帖子标题（落库前；可用于敏感词替换、自动加标记等）。", returns: "string" },
+  { name: "user.displayName.value", kind: "waterfall", category: "user", scope: "service", summary: "串行改写用户展示名（用于列表/详情渲染前的显示加工）。", returns: "string" },
+  { name: "user.avatar.url.value", kind: "waterfall", category: "user", scope: "service", summary: "串行改写用户头像 URL（可插入 CDN 前缀、占位头像等）。", returns: "string" },
+  { name: "search.query.normalize", kind: "waterfall", category: "search", scope: "service", summary: "串行规范化搜索关键词（大小写、同义词、繁简转换等）。", returns: "string" },
+  { name: "seo.meta.title", kind: "waterfall", category: "seo", scope: "service", summary: "串行改写 SEO <title>。", returns: "string" },
+  { name: "seo.meta.description", kind: "waterfall", category: "seo", scope: "service", summary: "串行改写 SEO meta description。", returns: "string" },
+  { name: "breadcrumb.items", kind: "waterfall", category: "navigation", scope: "service", summary: "串行改写当前页面面包屑条目数组。", returns: "AddonBreadcrumbItem[]" },
 ] as const
 
 const asyncWaterfallHookCatalog: readonly AddonExtensionPointCatalogEntry[] = [
   { name: "navigation.primary.items", kind: "asyncWaterfall", category: "navigation", scope: "service", summary: "串行改写站点主导航项数组。", returns: "NavigationItem[]" },
   { name: "home.sidebar.hot-topics.items", kind: "asyncWaterfall", category: "home", scope: "service", summary: "串行改写首页右栏热点帖子列表。", returns: "HomeSidebarHotTopic[]" },
   { name: "settings.post-management.tabs", kind: "asyncWaterfall", category: "settings", scope: "service", summary: "串行扩展用户设置页“帖子管理”的插件 tab 列表。", returns: "AddonSettingsPostManagementTab[]" },
+  // ─── v2 扩展 hook ───
+  { name: "feed.posts.items", kind: "asyncWaterfall", category: "post", scope: "service", summary: "串行改写帖子流（首页 / 分类 / 搜索结果列表），可插入广告位、置顶项、重排序。", returns: "AddonPostRecord[]" },
+  { name: "search.results.rerank", kind: "asyncWaterfall", category: "search", scope: "service", summary: "串行对搜索结果重排序（含 query / scope 上下文）。", returns: "AddonSearchResultItem[]" },
+  { name: "notification.dispatch.targets", kind: "asyncWaterfall", category: "notification", scope: "service", summary: "串行改写单条通知的分发目标（站内 / 邮件 / 其他通道）。", returns: "AddonNotificationDispatchTarget[]" },
+  { name: "sitemap.entries", kind: "asyncWaterfall", category: "seo", scope: "service", summary: "串行扩展 sitemap.xml 条目列表。", returns: "AddonSitemapEntry[]" },
+  { name: "post.related.items", kind: "asyncWaterfall", category: "post", scope: "service", summary: "串行改写帖子详情页相关推荐列表。", returns: "AddonPostRecord[]" },
+  { name: "post.content.render", kind: "asyncWaterfall", category: "post", scope: "service", summary: "串行改写帖子正文渲染后的 HTML（代码高亮、LaTeX、Mermaid、表格美化等）。", returns: "string" },
 ] as const
 
 export const ADDON_EXTENSION_POINT_CATALOG: readonly AddonExtensionPointCatalogEntry[] = [

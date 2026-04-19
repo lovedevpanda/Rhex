@@ -31,6 +31,12 @@ import {
 } from "@/lib/background-job-scheduler"
 import { getSiteSettings as getPublicSiteSettings } from "@/lib/site-settings"
 import { createAddonLifecycleLog } from "@/db/addon-registry-queries"
+import {
+  addonServerUi,
+  addonServerIcons,
+  renderToHtml as renderAddonElementToHtml,
+  cn as addonServerCn,
+} from "@/addons-host/sdk/server-ui"
 import type {
   AddonBoardSelectGroup,
   AddonExecutionContextBase,
@@ -88,6 +94,10 @@ export function buildAddonExecutionContext(addon: LoadedAddonRuntime, input?: {
     permissions: [...addon.resolvedPermissions],
     hasPermission: (permission: string) => addonHasPermission(permissionSet, permission),
     assertPermission: assertRuntimePermission,
+    ui: addonServerUi,
+    icons: addonServerIcons,
+    cn: addonServerCn,
+    renderToHtml: renderAddonElementToHtml,
     getCurrentUser: () => {
       if (!currentUserPromise) {
         currentUserPromise = getSessionActorFromRequest(input?.request)

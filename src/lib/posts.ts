@@ -96,6 +96,10 @@ export interface SitePostItem {
 
   publishedAt: string
   publishedAtRaw?: string
+  lastRepliedAt?: string
+  lastRepliedAtRaw?: string
+  latestReplyAuthorName?: string | null
+  latestReplyExcerpt?: string | null
 
   excerpt: string
   coverImage?: string | null

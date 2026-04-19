@@ -1,3 +1,5 @@
+import { executeAddonWaterfallHook } from "@/addons-host/runtime/hooks"
+
 export function buildMetadataKeywords(siteKeywords: string[], ...keywordGroups: Array<Array<string | null | undefined> | string | null | undefined>) {
   const normalizedGroups = keywordGroups.flatMap((group) => {
     if (Array.isArray(group)) {
@@ -13,7 +15,7 @@ export function buildMetadataKeywords(siteKeywords: string[], ...keywordGroups: 
     .filter((item, index, items) => items.findIndex((candidate) => candidate.toLowerCase() === item.toLowerCase()) === index)
 }
 
-export function buildArticleJsonLd({
+export async function buildArticleJsonLd({
   title,
   description,
   publishedAt,
@@ -26,11 +28,16 @@ export function buildArticleJsonLd({
   author: string
   url: string
 }) {
+  const [titleResult, descriptionResult] = await Promise.all([
+    executeAddonWaterfallHook("seo.meta.title", title),
+    executeAddonWaterfallHook("seo.meta.description", description),
+  ])
+
   return {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: title,
-    description,
+    headline: titleResult.value,
+    description: descriptionResult.value,
     datePublished: publishedAt,
     author: {
       "@type": "Person",

@@ -8,6 +8,9 @@ import type {
   AddonAsyncWaterfallHookName,
   AddonWaterfallHookName,
   LoadedAddonRuntime,
+  LookupAddonActionHookPayload,
+  LookupAddonAsyncWaterfallHookValue,
+  LookupAddonWaterfallHookValue,
 } from "@/addons-host/types"
 
 /**
@@ -168,8 +171,11 @@ async function buildWaterfallHookCandidates<TValue>(
   return candidates
 }
 
-export async function executeAddonActionHook<TPayload = unknown>(
-  hook: AddonActionHookName,
+export async function executeAddonActionHook<
+  THook extends AddonActionHookName,
+  TPayload = LookupAddonActionHookPayload<THook>,
+>(
+  hook: THook,
   payload: TPayload,
   input?: AddonHookExecutionInput,
 ) {
@@ -197,8 +203,11 @@ export async function executeAddonActionHook<TPayload = unknown>(
   return results
 }
 
-export async function executeAddonWaterfallHook<TValue>(
-  hook: AddonWaterfallHookName,
+export async function executeAddonWaterfallHook<
+  THook extends AddonWaterfallHookName,
+  TValue = LookupAddonWaterfallHookValue<THook>,
+>(
+  hook: THook,
   initialValue: TValue,
   input?: AddonHookExecutionInput,
 ) {
@@ -236,8 +245,11 @@ export async function executeAddonWaterfallHook<TValue>(
   }
 }
 
-export async function executeAddonAsyncWaterfallHook<TValue>(
-  hook: AddonAsyncWaterfallHookName,
+export async function executeAddonAsyncWaterfallHook<
+  THook extends AddonAsyncWaterfallHookName,
+  TValue = LookupAddonAsyncWaterfallHookValue<THook>,
+>(
+  hook: THook,
   initialValue: TValue,
   input?: AddonHookExecutionInput,
 ) {

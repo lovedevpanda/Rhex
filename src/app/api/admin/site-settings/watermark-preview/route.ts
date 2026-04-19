@@ -1,5 +1,6 @@
 import { createAdminRouteHandler } from "@/lib/api-route"
 import { createWatermarkPreviewImageBuffer } from "@/lib/watermark-lib.server"
+import { WATERMARK_TEXT_MAX_LENGTH } from "@/lib/watermark-lib"
 import type { ImageWatermarkPosition } from "@/lib/site-settings-app-state"
 
 const WATERMARK_POSITIONS: ImageWatermarkPosition[] = ["TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT", "CENTER"]
@@ -30,9 +31,15 @@ function parsePosition(value: string | null, fallback: ImageWatermarkPosition) {
 
 export const GET = createAdminRouteHandler(async ({ request }) => {
   const searchParams = new URL(request.url).searchParams
+  const rawText = searchParams.get("text") ?? ""
+  // Defense in depth: cap text length at the route entry so a crafted URL
+  // cannot drive watermark layout into super-linear CPU work.
+  const boundedText = rawText.length > WATERMARK_TEXT_MAX_LENGTH
+    ? rawText.slice(0, WATERMARK_TEXT_MAX_LENGTH)
+    : rawText
   const pngBuffer = await createWatermarkPreviewImageBuffer({
     enabled: parseBoolean(searchParams.get("enabled"), true),
-    text: searchParams.get("text") ?? "",
+    text: boundedText,
     position: parsePosition(searchParams.get("position"), "BOTTOM_RIGHT"),
     tiled: parseBoolean(searchParams.get("tiled"), false),
     opacity: parseNumber(searchParams.get("opacity"), 22),

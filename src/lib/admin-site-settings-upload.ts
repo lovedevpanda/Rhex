@@ -6,6 +6,7 @@ import { normalizeNonNegativeInteger, normalizePositiveInteger } from "@/lib/sha
 import { mergeUploadStorageSensitiveConfig, resolveUploadStorageSensitiveConfig } from "@/lib/site-settings-sensitive-state"
 import { normalizeUploadLocalPath } from "@/lib/upload-path"
 import { normalizeUploadProvider } from "@/lib/upload-provider"
+import { WATERMARK_TEXT_MAX_LENGTH } from "@/lib/watermark-lib"
 
 export async function updateUploadSiteSettingsSection(existing: SiteSettingsRecord, body: JsonObject, section: string) {
   if (section !== "upload") {
@@ -119,6 +120,10 @@ export async function updateUploadSiteSettingsSection(existing: SiteSettingsReco
 
   if (imageWatermarkEnabled && !imageWatermarkText.trim()) {
     apiError(400, "启用图片水印时请填写水印文字")
+  }
+
+  if (imageWatermarkText.length > WATERMARK_TEXT_MAX_LENGTH) {
+    apiError(400, `水印文字长度不能超过 ${WATERMARK_TEXT_MAX_LENGTH} 个字符`)
   }
 
   const appStateWithMarkdownImageUpload = mergeMarkdownImageUploadSettings(existing.appStateJson, {

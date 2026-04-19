@@ -5,6 +5,7 @@ import { enforceSensitiveText } from "@/lib/content-safety"
 import { extractMentionTexts, findMentionUsers, resolveMentionsInText } from "@/lib/comment-mentions"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validateCommentPayload } from "@/lib/validators"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export async function updateCommentFlow(input: {
   body: unknown
@@ -60,6 +61,12 @@ export async function updateCommentFlow(input: {
   const mentionUsers = await findMentionUsers(mentionTexts)
   const resolvedComment = resolveMentionsInText(contentSafety.sanitizedText, mentionUsers)
 
+  await executeAddonActionHook("comment.update.before", {
+    commentId,
+    editorId: String(input.currentUser.id),
+    changes: { content: resolvedComment.content },
+  })
+
   const updated = await updateCommentContentById(commentId, {
     content: resolvedComment.content,
     reviewNote: null,
@@ -72,6 +79,12 @@ export async function updateCommentFlow(input: {
     content: resolvedComment.content,
     mentionUserIds: resolvedComment.mentions.map((item) => item.id),
     excludeUserIds: [updated.replyToUserId ?? 0],
+  })
+
+  await executeAddonActionHook("comment.update.after", {
+    commentId: updated.id,
+    editorId: String(input.currentUser.id),
+    changes: { content: resolvedComment.content },
   })
 
   return {

@@ -9,6 +9,7 @@ import {
   deleteAddonRegistryRecord,
   upsertAddonRegistryRecord,
 } from "@/db/addon-registry-queries"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import type { AddonInstallPreviewData } from "@/addons-host/admin-types"
 import {
   clearAddonsRuntimeCache,
@@ -342,6 +343,11 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
           nextVersion: installedAddon.manifest.version,
         },
       })
+
+      await executeAddonActionHook("addon.installed.after", {
+        addonId: installedAddon.manifest.id,
+        version: installedAddon.manifest.version,
+      })
     }
 
     return {
@@ -402,6 +408,11 @@ export async function removeInstalledAddon(addonId: string) {
   await cleanupAddonPersistentState(addonId)
   await deleteAddonRegistryRecord(addonId)
   clearAddonsRuntimeCache()
+
+  await executeAddonActionHook("addon.uninstalled.after", {
+    addonId,
+    version: addon.manifest.version,
+  })
 
   return {
     addonId,

@@ -3,6 +3,31 @@ import { buildHomeVisiblePostWhere } from "@/db/home-feed-visibility"
 import type { Prisma } from "@/db/types"
 import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
 
+const taxonomyPostInclude = {
+  board: true,
+  author: true,
+  redPacket: {
+    select: {
+      id: true,
+    },
+  },
+  _count: {
+    select: {
+      attachments: true,
+    },
+  },
+  comments: {
+    where: { status: "NORMAL" },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    include: {
+      user: {
+        select: { username: true, nickname: true },
+      },
+    },
+  },
+} satisfies Prisma.PostInclude
+
 export function findAllTags() {
   return prisma.tag.findMany({
     select: {
@@ -185,20 +210,7 @@ export function findGlobalPinnedPosts(options?: { pageSize?: number; homeVisible
       status: "NORMAL",
       pinScope: "GLOBAL",
     },
-    include: {
-      board: true,
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      _count: {
-        select: {
-          attachments: true,
-        },
-      },
-    },
+    include: taxonomyPostInclude,
     orderBy: getZonePinnedOrderBy(),
     take: normalizedPageSize,
   })
@@ -215,20 +227,7 @@ export function findZonePinnedPosts(boardIds: string[], pageSize?: number) {
         in: boardIds,
       },
     },
-    include: {
-      board: true,
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      _count: {
-        select: {
-          attachments: true,
-        },
-      },
-    },
+    include: taxonomyPostInclude,
     orderBy: getZonePinnedOrderBy(),
     take: normalizedPageSize,
   })
@@ -245,20 +244,7 @@ export function findZoneNormalPosts(boardIds: string[], excludedPostIds: string[
       },
       id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
     },
-    include: {
-      board: true,
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      _count: {
-        select: {
-          attachments: true,
-        },
-      },
-    },
+    include: taxonomyPostInclude,
     orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * normalizedPageSize,
     take: normalizedPageSize,
@@ -289,20 +275,7 @@ export function findBoardPinnedPosts(boardId: string, zoneBoardIds: string[], pa
         { pinScope: "BOARD", boardId },
       ],
     },
-    include: {
-      board: true,
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      _count: {
-        select: {
-          attachments: true,
-        },
-      },
-    },
+    include: taxonomyPostInclude,
     orderBy: getZonePinnedOrderBy(),
     take: normalizedPageSize,
   })
@@ -317,20 +290,7 @@ export function findBoardNormalPosts(boardId: string, excludedPostIds: string[],
       boardId,
       id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
     },
-    include: {
-      board: true,
-      author: true,
-      redPacket: {
-        select: {
-          id: true,
-        },
-      },
-      _count: {
-        select: {
-          attachments: true,
-        },
-      },
-    },
+    include: taxonomyPostInclude,
     orderBy: [{ activityAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * normalizedPageSize,
     take: normalizedPageSize,

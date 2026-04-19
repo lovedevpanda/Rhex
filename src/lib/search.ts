@@ -5,6 +5,11 @@ import { getPostPath } from "@/lib/post-links"
 import { getSiteSettings } from "@/lib/site-settings"
 
 import { mapListPost } from "@/lib/post-map"
+import {
+  executeAddonActionHook,
+  executeAddonAsyncWaterfallHook,
+  executeAddonWaterfallHook,
+} from "@/addons-host/runtime/hooks"
 
 
 
@@ -41,7 +46,11 @@ export async function searchPosts(
     postLinkDisplayMode?: "SLUG" | "ID"
   } = {},
 ): Promise<SearchResults> {
-  const normalizedKeyword = normalizeKeyword(keyword)
+  const baseKeyword = normalizeKeyword(keyword)
+  const { value: normalizedKeyword } = await executeAddonWaterfallHook(
+    "search.query.normalize",
+    baseKeyword,
+  )
 
   if (!normalizedKeyword) {
     return {
@@ -90,13 +99,36 @@ export async function searchPosts(
       getAnonymousMaskDisplayIdentity(),
     ] as const)
 
+    const baseItems = posts.map((post: (typeof posts)[number]) => ({
+      ...mapListPost(post, anonymousMaskIdentity),
+      href: getPostPath(post, { mode: postLinkDisplayMode }),
+    }))
+    type SearchItem = (typeof baseItems)[number]
+
+    const itemById = new Map<string, SearchItem>(baseItems.map((it) => [it.id, it]))
+    const rerankInput = baseItems.map((it, index) => ({
+      id: it.id,
+      score: baseItems.length - index,
+      kind: "post" as const,
+    }))
+    const { value: rerankedRefs } = await executeAddonAsyncWaterfallHook(
+      "search.results.rerank",
+      rerankInput,
+    )
+    const items: SearchItem[] = rerankedRefs
+      .map((ref) => itemById.get(ref.id))
+      .filter((it): it is SearchItem => it !== undefined)
+
+    await executeAddonActionHook("search.query.after", {
+      query: normalizedKeyword,
+      scope: "post",
+      resultCount: items.length,
+    })
+
     return {
       keyword: normalizedKeyword,
       total,
-      items: posts.map((post: (typeof posts)[number]) => ({
-        ...mapListPost(post, anonymousMaskIdentity),
-        href: getPostPath(post, { mode: postLinkDisplayMode }),
-      })),
+      items,
       hasPrevPage,
       hasNextPage,
       prevCursor: posts.length > 0 ? encodePinnedTimestampCursor({ id: posts[0].id, createdAt: posts[0].createdAt.toISOString(), isPinned: posts[0].isPinned }) : null,

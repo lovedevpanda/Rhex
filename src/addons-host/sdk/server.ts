@@ -139,3 +139,22 @@ export type {
   AddonUploadProviderRuntimeHooks,
   AddonUploadProviderSaveResult,
 } from "@/addons-host/upload-types"
+/**
+ * Server-only addon SDK：UI 组件 / 图标 / cn / renderToHtml。
+ * 这些值在 addon 的服务端 render（slot/page/surface）中也会通过 ctx.ui / ctx.icons / ctx.cn / ctx.renderToHtml 自动注入；
+ * 单独 export 用于：
+ *   1) 不在 ctx 作用域内的服务端工具函数；
+ *   2) 仅类型场景下的 typeof / 字段名提取。
+ *
+ * 客户端组件请改用 `import { addonClientUi, addonClientIcons } from "@/addons-host/sdk/client"`。
+ */
+export {
+  addonServerUi,
+  addonServerIcons,
+  renderToHtml,
+  cn,
+} from "@/addons-host/sdk/server-ui"
+export type {
+  AddonServerSdkUi,
+  AddonServerSdkIcons,
+} from "@/addons-host/sdk/server-ui"

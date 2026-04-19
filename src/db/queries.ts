@@ -41,6 +41,16 @@ export const postListInclude = {
       attachments: true,
     },
   },
+  comments: {
+    where: { status: "NORMAL" },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    include: {
+      user: {
+        select: { username: true, nickname: true },
+      },
+    },
+  },
 } satisfies Prisma.PostInclude
 
 

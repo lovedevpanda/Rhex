@@ -96,13 +96,26 @@ interface ListPostSource {
   tipTotalPoints?: number | null
   publishedAt?: Date | null
   createdAt: Date
+  lastCommentedAt?: Date | null
   board: ListPostBoard
   author: ListPostAuthor
+  comments?: Array<{
+    userId?: number | string | null
+    useAnonymousIdentity?: boolean | null
+    content?: string
+    user: { username: string; nickname: string | null } | null
+  }>
 }
 
 export function mapListPost(post: ListPostSource, anonymousMaskIdentity: AnonymousDisplayIdentity | null = null) {
   const publicContent = getPublicPostContentText(post.content)
   const rewardPoolConfig = post.redPacket ? parsePostRewardPoolConfigFromContent(post.content) : null
+  const latestReply = post.comments?.[0]
+  const latestReplyAuthorName = post.isAnonymous && latestReply && latestReply.userId === post.author.id && latestReply.useAnonymousIdentity
+    ? (anonymousMaskIdentity?.name ?? anonymousMaskIdentity?.username ?? "匿名用户")
+    : (latestReply ? (latestReply.user?.nickname ?? latestReply.user?.username ?? null) : null)
+  const latestReplyExcerpt = latestReply?.content ? latestReply.content.slice(0, 42) : null
+  const lastRepliedAtRaw = post.lastCommentedAt ?? post.publishedAt ?? post.createdAt
 
   return applyAnonymousIdentityToPost({
     id: post.id,
@@ -146,6 +159,10 @@ export function mapListPost(post: ListPostSource, anonymousMaskIdentity: Anonymo
       })),
     publishedAt: formatRelativeTime(post.publishedAt ?? post.createdAt),
     publishedAtRaw: (post.publishedAt ?? post.createdAt).toISOString(),
+    lastRepliedAt: formatRelativeTime(lastRepliedAtRaw),
+    lastRepliedAtRaw: lastRepliedAtRaw.toISOString(),
+    latestReplyAuthorName,
+    latestReplyExcerpt,
 
     excerpt: post.summary ?? publicContent.slice(0, 120),
     coverImage: resolvePostCoverImage(post.content, post.coverPath),

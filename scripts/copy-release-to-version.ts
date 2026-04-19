@@ -13,7 +13,7 @@ const includeEntries = [
   "write-guard.config.ts",
   "scripts",
   "package.json",
-  "package-lock.json",
+  "pnpm-lock.yaml",
   "components.json",
   "tsconfig.json",
   "next.config.mjs",

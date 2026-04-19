@@ -26,6 +26,7 @@ import {
 import { deleteAddonConfigValues } from "@/addons-host/runtime/config"
 import { deleteAddonDataStore } from "@/addons-host/runtime/data"
 import { deleteAddonSecretValues } from "@/addons-host/runtime/secrets"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 
 function buildAddonStateLabel(addon: LoadedAddonRuntime): AddonAdminItem["stateLabel"] {
@@ -367,6 +368,10 @@ export async function runAddonManagementAction(action: AddonManagementAction, ad
         message: `已启用插件 ${addon.manifest.name}`,
       })
       refreshAddonRuntime(resolvedAddonId)
+      await executeAddonActionHook("addon.enabled.after", {
+        addonId: resolvedAddonId,
+        version: addon.manifest.version,
+      })
       return {
         data: await getAddonsAdminData(),
         message: `已启用插件 ${addon.manifest.name}`,
@@ -384,6 +389,10 @@ export async function runAddonManagementAction(action: AddonManagementAction, ad
       if (addonMayUseBackgroundJobs(addon)) {
         await cleanupAddonBackgroundJobs(resolvedAddonId)
       }
+      await executeAddonActionHook("addon.disabled.after", {
+        addonId: resolvedAddonId,
+        version: addon.manifest.version,
+      })
       return {
         data: await getAddonsAdminData(),
         message: `已禁用插件 ${addon.manifest.name}`,

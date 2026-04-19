@@ -7,6 +7,7 @@ import { logRequestSucceeded } from "@/lib/request-log"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
@@ -60,6 +61,13 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     }, {
       liked: result.liked,
     })
+
+    const requestUrl = new URL(request.url)
+    await executeAddonActionHook("post.like.after", {
+      postId,
+      userId: currentUser.id,
+      liked: result.liked,
+    }, { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams })
 
     return apiSuccess({ liked: result.liked }, result.liked ? "点赞成功" : "已取消点赞")
   })

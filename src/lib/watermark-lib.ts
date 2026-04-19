@@ -33,10 +33,28 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function normalizeHexColorToRgb(hexColor: string): WatermarkRgbColor {
+  const fallback: WatermarkRgbColor = { red: 255, green: 255, blue: 255 }
+
+  if (typeof hexColor !== "string") {
+    return fallback
+  }
+
   const normalized = hexColor.trim().replace(/^#/, "")
-  const expanded = normalized.length === 3
-    ? normalized.split("").map((char) => `${char}${char}`).join("")
-    : normalized
+  let expanded: string
+
+  // Self-defensive: only accept canonical 3- or 6-digit hex. Previously any
+  // length ≥ 2 was silently accepted, which for 8-digit `#RRGGBBAA` input
+  // dropped the alpha channel, and for odd lengths (e.g. 5) could read a
+  // misaligned half-byte into the blue channel. Upstream
+  // `normalizeWatermarkHexColor` already collapses bad input to `#FFFFFF`,
+  // but this helper is exported and must not rely on the caller.
+  if (/^[0-9a-f]{3}$/i.test(normalized)) {
+    expanded = normalized.split("").map((char) => `${char}${char}`).join("")
+  } else if (/^[0-9a-f]{6}$/i.test(normalized)) {
+    expanded = normalized
+  } else {
+    return fallback
+  }
 
   const red = Number.parseInt(expanded.slice(0, 2), 16)
   const green = Number.parseInt(expanded.slice(2, 4), 16)
@@ -69,8 +87,20 @@ export function normalizeWatermarkHexColor(color: string) {
   return "#FFFFFF"
 }
 
+export const WATERMARK_TEXT_MAX_LENGTH = 400
+export const WATERMARK_TEXT_MAX_LINES = 6
+
 export function normalizeWatermarkText(value: string) {
-  return value
+  if (typeof value !== "string") {
+    return ""
+  }
+
+  // Hard cap BEFORE any heavy string processing to prevent O(n²) DoS in layout.
+  const bounded = value.length > WATERMARK_TEXT_MAX_LENGTH
+    ? value.slice(0, WATERMARK_TEXT_MAX_LENGTH)
+    : value
+
+  return bounded
     .replace(/\r\n/g, "\n")
     .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
@@ -82,7 +112,15 @@ export function normalizeWatermarkText(value: string) {
 export function normalizeWatermarkFontFamily(value: unknown) {
   return typeof value === "string"
     ? value
-      .replace(/[;\r\n\t]+/g, " ")
+      // Defense-in-depth: strip any character that could break out of the
+      // `${size}px ${fontFamily}` Canvas font shorthand or smuggle extra CSS
+      // tokens. In addition to the original `;\r\n\t`, we drop parentheses
+      // (would-be function calls such as `url(...)`), quotes (font-name
+      // quoting boundaries), braces/at-signs (block / at-rules) and
+      // backslashes (CSS escape sequences). @napi-rs/canvas (Skia) does not
+      // resolve `url()` today, so this is preventative rather than a fix for
+      // a known exploit.
+      .replace(/[;\r\n\t()"'{}\\@]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 240)

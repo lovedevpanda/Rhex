@@ -81,7 +81,7 @@ export function MessageBubbleContent({
   const blocks = splitMessageContentBlocks(content)
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex min-w-0 max-w-full flex-col gap-2.5">
       {blocks.map((block, index) => {
         if (block.type === "markdown") {
           return (
@@ -106,7 +106,7 @@ export function MessageBubbleContent({
             href={block.url}
             download={block.name}
             className={cn(
-              "flex items-center gap-3 rounded-[18px] border px-3.5 py-3 text-left transition-colors",
+              "flex w-72 max-w-full min-w-0 items-center gap-3 rounded-[18px] border px-3.5 py-3 text-left transition-colors",
               isMine
                 ? "border-white/15 bg-white/10 text-inherit hover:bg-white/15"
                 : "border-border/80 bg-background/80 text-foreground hover:bg-accent/80",

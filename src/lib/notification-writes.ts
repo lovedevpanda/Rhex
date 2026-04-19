@@ -7,6 +7,10 @@ import {
   type NotificationDraft,
   type NotificationWriteClient,
 } from "@/db/notification-write-queries"
+import {
+  executeAddonActionHook,
+  executeAddonAsyncWaterfallHook,
+} from "@/addons-host/runtime/hooks"
 import { enqueueBackgroundJob, registerBackgroundJobHandler } from "@/lib/background-jobs"
 import { logError, logInfo } from "@/lib/logger"
 import { notificationEventBus } from "@/lib/notification-event-bus"
@@ -221,11 +225,14 @@ async function publishNotificationCountEvents(userIds: number[], reason: "create
 }
 
 export async function createNotification(params: NotificationDraft & { client?: NotificationWriteClient }) {
+  const { client: _client, ...draft } = params
+  await fireNotificationCreateBefore(draft)
   const notification = await createNotificationEntry(params)
   revalidateUserSurfaceCache(notification.userId)
   if (!params.client) {
     await publishNotificationCountEvents([notification.userId], "created", new Map([[notification.userId, notification.id]]))
   }
+  await fireNotificationCreateAfter(draft, notification)
   return notification
 }
 
@@ -233,9 +240,19 @@ export async function createNotifications(params: {
   notifications: NotificationDraft[]
   client?: NotificationWriteClient
 }) {
-  const result = await createNotificationsEntry(params)
+  const expandedNotifications = await expandNotificationTargets(params.notifications)
+  for (const draft of expandedNotifications) {
+    await fireNotificationCreateBefore(draft)
+  }
+  const result = await createNotificationsEntry({
+    notifications: expandedNotifications,
+    client: params.client,
+  })
+  for (const draft of expandedNotifications) {
+    await fireNotificationCreateAfter(draft, null)
+  }
 
-  const userIds = [...new Set(params.notifications.map((item) => item.userId))]
+  const userIds = [...new Set(expandedNotifications.map((item) => item.userId))]
   for (const userId of userIds) {
     revalidateUserSurfaceCache(userId)
   }
@@ -382,4 +399,59 @@ export function createReportResultNotification(params: {
     title: params.title,
     content: params.content,
   })
+}
+async function fireNotificationCreateBefore(draft: NotificationDraft) {
+  try {
+    await executeAddonActionHook("notification.create.before", {
+      recipientId: String(draft.userId),
+      type: String(draft.type),
+      payload: {
+        senderId: draft.senderId ?? null,
+        relatedType: draft.relatedType,
+        relatedId: draft.relatedId,
+        title: draft.title,
+        content: draft.content,
+      },
+    })
+  } catch (error) {
+    logError({ scope: "addons", action: "notification.create.before" }, error)
+  }
+}
+
+async function fireNotificationCreateAfter(
+  _draft: NotificationDraft,
+  _record: { id: string; createdAt: Date } | null,
+) {
+  try {
+    await executeAddonActionHook("notification.create.after", {})
+  } catch (error) {
+    logError({ scope: "addons", action: "notification.create.after" }, error)
+  }
+}
+
+async function expandNotificationTargets(drafts: NotificationDraft[]): Promise<NotificationDraft[]> {
+  const expanded: NotificationDraft[] = []
+  for (const draft of drafts) {
+    expanded.push(draft)
+    let targets: Array<{ userId: string; channel: string }> = []
+    try {
+      const result = await executeAddonAsyncWaterfallHook(
+        "notification.dispatch.targets",
+        [{ userId: String(draft.userId), channel: "inapp" }],
+      )
+      targets = result.value
+    } catch (error) {
+      logError({ scope: "addons", action: "notification.dispatch.targets" }, error)
+      continue
+    }
+    const seen = new Set<number>([draft.userId])
+    for (const target of targets) {
+      if (target.channel !== "inapp") continue
+      const uid = Number(target.userId)
+      if (!Number.isFinite(uid) || seen.has(uid)) continue
+      seen.add(uid)
+      expanded.push({ ...draft, userId: uid })
+    }
+  }
+  return expanded
 }

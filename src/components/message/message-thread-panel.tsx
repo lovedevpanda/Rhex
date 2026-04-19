@@ -406,10 +406,10 @@ function MessageThreadPanelContent({
         {conversation.messages.map((message) => (
           <div key={message.id} className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
             {!message.isMine ? <UserAvatar name={message.senderName} avatarPath={message.senderAvatarPath} size="sm" /> : null}
-            <div className={cn("max-w-[76%]", message.isMine ? "items-end" : "items-start")}>
+            <div className={cn("min-w-0 max-w-[86%] sm:max-w-[76%]", message.isMine ? "items-end" : "items-start")}>
               <div
                 className={cn(
-                  "inline-block rounded-[20px] px-3.5 py-2 text-sm leading-6 shadow-xs",
+                  "inline-block max-w-full min-w-0 rounded-[20px] px-3.5 py-2 text-sm leading-6 shadow-xs",
                   message.isMine
                     ? "rounded-br-md bg-foreground text-background dark:bg-primary dark:text-primary-foreground"
                     : "rounded-bl-md border border-border bg-card text-foreground dark:bg-secondary/70 dark:text-foreground",

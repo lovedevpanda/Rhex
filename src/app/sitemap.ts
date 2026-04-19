@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 
+import { executeAddonAsyncWaterfallHook } from "@/addons-host/runtime/hooks"
 import { getBoards } from "@/lib/boards"
 import { getPostPath } from "@/lib/post-links"
 import { getHomepagePosts } from "@/lib/posts"
@@ -31,7 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   })))
 
 
-  return [
+  const entries: MetadataRoute.Sitemap = [
     {
       url: await toAbsoluteSiteUrl("/"),
       changeFrequency: "daily",
@@ -42,5 +43,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...boardUrls,
     ...postUrls,
   ]
+
+  const hookInput = entries.map((entry) => ({
+    loc: entry.url,
+    lastmod:
+      entry.lastModified instanceof Date
+        ? entry.lastModified.toISOString()
+        : typeof entry.lastModified === "string"
+          ? entry.lastModified
+          : undefined,
+    changefreq: entry.changeFrequency,
+    priority: entry.priority,
+  }))
+
+  const { value: hookedEntries } = await executeAddonAsyncWaterfallHook("sitemap.entries", hookInput)
+
+  return hookedEntries.map((entry) => ({
+    url: entry.loc,
+    lastModified: entry.lastmod,
+    changeFrequency: entry.changefreq as MetadataRoute.Sitemap[number]["changeFrequency"],
+    priority: entry.priority,
+  }))
 }
 

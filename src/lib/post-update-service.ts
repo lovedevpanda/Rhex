@@ -10,6 +10,7 @@ import { buildPostContentDocument, getAllPostContentText, getPostContentMeta, se
 import { normalizeManualTags, syncPostTaxonomy } from "@/lib/post-editor"
 import { getSiteSettings } from "@/lib/site-settings"
 import { validatePostPayload } from "@/lib/validators"
+import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 
 const APPEND_INTERVAL_MS = 60 * 60 * 1000
 
@@ -116,6 +117,25 @@ export async function updatePostFlow(input: {
     let finalContent = serializedContent
     let mentionUserIds = [] as number[]
 
+    await executeAddonActionHook("post.update.before", {
+      postId: input.postId,
+      editorId: String(input.currentUser.id),
+      changes: {
+        title: titleSafety.sanitizedText,
+        content: contentSafety.sanitizedText,
+        coverPath,
+        loginUnlockContent,
+        replyUnlockContent,
+        replyThreshold: normalizedReplyThreshold,
+        purchaseUnlockContent,
+        purchasePrice: normalizedPurchasePrice,
+        commentsVisibleToAuthorOnly,
+        minViewLevel,
+        minViewVipLevel,
+        manualTags: sanitizedManualTags,
+      },
+    })
+
     await runPostUpdateTransaction(async (tx) => {
       const activityAt = new Date()
       let nextContent = serializedContent
@@ -157,6 +177,21 @@ export async function updatePostFlow(input: {
 
     await syncPostTaxonomy(input.postId, titleSafety.sanitizedText, finalContent, sanitizedManualTags)
 
+    await executeAddonActionHook("post.update.after", {
+      postId: input.postId,
+      editorId: String(input.currentUser.id),
+      changes: {
+        title: titleSafety.sanitizedText,
+        content: finalContent,
+        coverPath,
+        summary: extractSummaryFromContent(getAllPostContentText(stripPostContentUserLinks(finalContent))),
+        commentsVisibleToAuthorOnly,
+        minViewLevel,
+        minViewVipLevel,
+        manualTags: sanitizedManualTags,
+      },
+    })
+
     return {
       post,
       mode: "edit" as const,
@@ -179,6 +214,12 @@ export async function updatePostFlow(input: {
   const appendSafety = await enforceSensitiveText({ scene: "post.content", text: appendedContent })
   const nextSortOrder = (post.appendices[0]?.sortOrder ?? -1) + 1
   let mentionUserIds = [] as number[]
+
+  await executeAddonActionHook("post.update.before", {
+    postId: input.postId,
+    editorId: String(input.currentUser.id),
+    changes: { appendedContent: appendSafety.sanitizedText, mode: "append" },
+  })
 
   await runPostUpdateTransaction(async (tx) => {
     const activityAt = new Date()
@@ -210,6 +251,12 @@ export async function updatePostFlow(input: {
         },
       },
     })
+  })
+
+  await executeAddonActionHook("post.update.after", {
+    postId: input.postId,
+    editorId: String(input.currentUser.id),
+    changes: { appendedContent: appendSafety.sanitizedText, mode: "append" },
   })
 
   return {
