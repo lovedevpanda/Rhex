@@ -3,11 +3,13 @@
 import Link from "next/link"
 import { useState, useTransition } from "react"
 
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
 import { formatNumber } from "@/lib/formatters"
 
-const REDEEM_PRIMARY_BUTTON_CLASS = "bg-foreground text-background hover:bg-foreground/90"
+const REDEEM_PRIMARY_BUTTON_CLASS = "h-11 rounded-2xl bg-foreground px-5 text-background hover:bg-foreground/90"
+const REDEEM_INPUT_GROUP_CLASS = "h-11 rounded-2xl bg-background/80"
 
 interface RedeemCodeCardProps {
   pointName: string
@@ -28,7 +30,7 @@ export function RedeemCodeCard({ pointName, currentPoints, helpLinkEnabled = fal
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-semibold">兑换码兑换</h3>
           {showHelpLink ? (
@@ -48,7 +50,7 @@ export function RedeemCodeCard({ pointName, currentPoints, helpLinkEnabled = fal
         当前账户余额：<span className="font-semibold text-foreground">{formatNumber(currentPoints)}</span> {pointName}
       </div>
       <form
-        className="mt-4 flex flex-col gap-3 md:flex-row"
+        className="mt-4 flex flex-col gap-3 sm:flex-row"
         onSubmit={(event) => {
           event.preventDefault()
           startTransition(async () => {
@@ -68,13 +70,15 @@ export function RedeemCodeCard({ pointName, currentPoints, helpLinkEnabled = fal
         }}
 
       >
-        <input
-          value={code}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
-          placeholder="请输入兑换码"
-          className="h-11 flex-1 rounded-full border border-border bg-background px-4 text-sm uppercase tracking-[0.2em] outline-hidden"
-        />
-        <Button className={REDEEM_PRIMARY_BUTTON_CLASS} disabled={isPending || !code.trim()}>{isPending ? "兑换中..." : `兑换${pointName}`}</Button>
+        <InputGroup className={`${REDEEM_INPUT_GROUP_CLASS} flex-1`}>
+          <InputGroupInput
+            value={code}
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            placeholder="请输入兑换码"
+            className="uppercase tracking-[0.2em]"
+          />
+        </InputGroup>
+        <Button size="lg" className={`w-full sm:w-auto ${REDEEM_PRIMARY_BUTTON_CLASS}`} disabled={isPending || !code.trim()}>{isPending ? "兑换中..." : `兑换${pointName}`}</Button>
       </form>
 
     </div>

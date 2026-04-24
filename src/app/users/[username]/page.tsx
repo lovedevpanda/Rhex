@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { Crown, Flag, MessageCircleMore, ShieldCheck } from "lucide-react"
+import type { CSSProperties } from "react"
 
 import { AddonSlotRenderer } from "@/addons-host"
 import { AccessDeniedCard } from "@/components/access-denied-card"
@@ -56,7 +57,10 @@ const identityTagClassNames = {
 const userActivityTabKeys = ["introduction", "posts", "collections", "replies"] as const
 
 type UserActivityTabKey = typeof userActivityTabKeys[number]
-const profileNameBadgeClassName = "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-none backdrop-blur-sm"
+type ProfileVipBadgeStyle = CSSProperties & Record<`--profile-vip-badge-${string}`, string>
+
+const profileNameBadgeClassName = "inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.75 text-[10px] font-semibold leading-none backdrop-blur-sm sm:gap-1 sm:px-2.5 sm:py-1 sm:text-[11px]"
+const profileVipBadgeClassName = `${profileNameBadgeClassName} border-[color:var(--profile-vip-badge-border)] bg-[image:var(--profile-vip-badge-background)] text-[color:var(--profile-vip-badge-foreground)] shadow-[var(--profile-vip-badge-shadow)] dark:border-[color:var(--profile-vip-badge-border-dark)] dark:bg-[image:var(--profile-vip-badge-background-dark)] dark:text-[color:var(--profile-vip-badge-foreground-dark)] dark:shadow-[var(--profile-vip-badge-shadow-dark)]`
 
 function getProfileRoleBadgeConfig(role: "USER" | "MODERATOR" | "ADMIN" | null) {
   if (role === "ADMIN") {
@@ -78,7 +82,7 @@ function getProfileRoleBadgeConfig(role: "USER" | "MODERATOR" | "ADMIN" | null) 
   return null
 }
 
-function getProfileVipBadgeStyle(level: number) {
+function getProfileVipBadgeStyle(level: number): ProfileVipBadgeStyle {
   const colorVariableName = level >= 3
     ? "--vip-name-color-vip3"
     : level === 2
@@ -86,10 +90,14 @@ function getProfileVipBadgeStyle(level: number) {
       : "--vip-name-color-vip1"
 
   return {
-    color: `var(${colorVariableName})`,
-    borderColor: `color-mix(in srgb, var(${colorVariableName}) 36%, transparent)`,
-    background: `linear-gradient(180deg, color-mix(in srgb, var(${colorVariableName}) 16%, white), color-mix(in srgb, var(${colorVariableName}) 10%, transparent))`,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
+    "--profile-vip-badge-border": `color-mix(in srgb, var(${colorVariableName}) 36%, transparent)`,
+    "--profile-vip-badge-background": `linear-gradient(180deg, color-mix(in srgb, var(${colorVariableName}) 16%, white), color-mix(in srgb, var(${colorVariableName}) 10%, transparent))`,
+    "--profile-vip-badge-foreground": `var(${colorVariableName})`,
+    "--profile-vip-badge-shadow": "inset 0 1px 0 rgba(255,255,255,0.65)",
+    "--profile-vip-badge-border-dark": `color-mix(in srgb, var(${colorVariableName}) 68%, transparent)`,
+    "--profile-vip-badge-background-dark": `linear-gradient(180deg, color-mix(in srgb, var(${colorVariableName}) 38%, rgb(12 14 18 / 0.96)), color-mix(in srgb, var(${colorVariableName}) 24%, rgb(12 14 18 / 0.72)))`,
+    "--profile-vip-badge-foreground-dark": `color-mix(in srgb, white 84%, var(${colorVariableName}) 16%)`,
+    "--profile-vip-badge-shadow-dark": "0 0 0 1px rgba(255,255,255,0.03) inset",
   }
 }
 
@@ -290,15 +298,19 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
     ? (
       <>
         {hasIdentityIcons ? (
-          <span className="inline-flex items-center gap-1.5">
-            {user.verification ? <UserVerificationBadge verification={user.verification} appearance="plain" compact className="h-[22px] min-w-[22px]" iconClassName="h-[22px] min-w-[22px] text-[22px]" /> : null}
+          <span className="inline-flex shrink-0 items-center gap-1">
+            {user.verification ? <UserVerificationBadge verification={user.verification} appearance="plain" compact className="h-5 min-w-5 sm:h-[22px] sm:min-w-[22px]" iconClassName="h-5 min-w-5 text-[20px] sm:h-[22px] sm:min-w-[22px] sm:text-[22px]" /> : null}
             {isAnonymousMaskUser ? <AnonymousUserIndicator /> : null}
             {isAiAgentUser ? <AiAgentIndicator /> : null}
             {restrictionLabel ? <UserStatusBadge status={user.status} compact /> : null}
           </span>
         ) : null}
-        {hasIdentityIcons && hasDisplayedBadges ? <span className="text-border">|</span> : null}
-        {hasDisplayedBadges ? <UserDisplayedBadges badges={displayedBadgeItems} appearance="plain" spacing="tight" itemClassName="h-[22px]" iconClassName="h-[22px] min-w-[22px] text-[22px]" /> : null}
+        {hasIdentityIcons && hasDisplayedBadges ? <span className="shrink-0 text-border">|</span> : null}
+        {hasDisplayedBadges ? (
+          <div className="shrink-0">
+            <UserDisplayedBadges badges={displayedBadgeItems} appearance="plain" spacing="tight" itemClassName="h-5 sm:h-[22px]" iconClassName="h-5 min-w-5 text-[20px] sm:h-[22px] sm:min-w-[22px] sm:text-[22px]" />
+          </div>
+        ) : null}
       </>
     )
     : null
@@ -327,8 +339,8 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                     />
                   )}
                   displayName={(
-                    <h1 className="flex min-w-0 flex-wrap items-center gap-1.5 text-[1rem] font-semibold leading-6 tracking-tight sm:gap-2 sm:text-[clamp(1.22rem,2.1vw,1.6rem)] sm:leading-7">
-                      <span className="min-w-0 max-w-full truncate">
+                    <h1 className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden text-[1rem] font-semibold leading-6 tracking-tight sm:gap-2 sm:text-[clamp(1.22rem,2.1vw,1.6rem)] sm:leading-7">
+                      <span className="min-w-0 flex-1 truncate">
                         <VipDisplayName
                           name={user.displayName || user.username}
                           isVip={vipActive}
@@ -338,20 +350,29 @@ export default async function UserPage(props: PageProps<"/users/[username]">) {
                         />
                       </span>
                       {vipActive ? (
-                        <span className={profileNameBadgeClassName} style={getProfileVipBadgeStyle(vipLevel)}>
+                        <span
+                          className={profileVipBadgeClassName}
+                          style={getProfileVipBadgeStyle(vipLevel)}
+                          title={`VIP${vipLevel}`}
+                          aria-label={`VIP${vipLevel}`}
+                        >
                           <VipLevelIcon
                             level={vipLevel}
                             className="size-3.5"
                             iconClassName="[&>svg]:size-full"
                             title={`VIP${vipLevel}`}
                           />
-                          <span>VIP{vipLevel}</span>
+                          <span className="hidden sm:inline">VIP{vipLevel}</span>
                         </span>
                       ) : null}
                       {roleBadge ? (
-                        <span className={cn(profileNameBadgeClassName, roleBadge.className)}>
+                        <span
+                          className={cn(profileNameBadgeClassName, roleBadge.className)}
+                          title={roleBadge.label}
+                          aria-label={roleBadge.label}
+                        >
                           {roleBadge.icon}
-                          {roleBadge.label}
+                          <span className="hidden sm:inline">{roleBadge.label}</span>
                         </span>
                       ) : null}
                     </h1>

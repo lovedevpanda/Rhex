@@ -59,6 +59,7 @@ export function createUserVerificationApplication(input: {
   userId: number
   verificationTypeId: string
   content: string
+  customIconText: string | null
   customDescription: string | null
   formResponseJson: string | null
 }) {
@@ -67,6 +68,7 @@ export function createUserVerificationApplication(input: {
       userId: input.userId,
       typeId: input.verificationTypeId,
       content: input.content,
+      customIconText: input.customIconText,
       customDescription: input.customDescription,
       formResponseJson: input.formResponseJson,
       status: "PENDING",

@@ -58,6 +58,7 @@ export type AdminVerificationApplicationItem = {
   id: string
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   content: string
+  customIconText?: string | null
   customDescription?: string | null
   formResponseJson?: string | null
   note?: string | null
@@ -159,7 +160,7 @@ export function AdminVerificationManager({ initialTypes, initialApplications, mo
       if (!keyword) {
         return true
       }
-      return [item.user.displayName, item.user.username, item.type.name, item.content, item.customDescription ?? ""]
+      return [item.user.displayName, item.user.username, item.type.name, item.content, item.customIconText ?? "", item.customDescription ?? ""]
         .some((value) => value.toLowerCase().includes(keyword))
     })
   }, [applicationKeyword, applicationStatusFilter, applications])
@@ -493,7 +494,7 @@ export function AdminVerificationManager({ initialTypes, initialApplications, mo
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-base font-semibold">认证审核</h4>
-                  <p className="mt-1 text-sm text-muted-foreground">审核通过后，用户会在帖子详情和评论作者名前展示认证图标。</p>
+                  <p className="mt-1 text-sm text-muted-foreground">审核通过后，用户会在帖子详情和评论作者名前展示认证图标，也会同步生效自定义图标与介绍。</p>
                 </div>
                 <span className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">待审 {pendingApplications.length}</span>
               </div>
@@ -528,6 +529,17 @@ export function AdminVerificationManager({ initialTypes, initialApplications, mo
                       ) : (
                         <div className="mt-3 rounded-[18px] bg-secondary/30 p-3 text-sm leading-7 text-foreground/90">{item.content}</div>
                       )}
+                      {item.customIconText ? (
+                        <div className="mt-3 rounded-[18px] bg-secondary/30 p-3 text-sm">
+                          <p className="text-xs text-muted-foreground">自定义图标</p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl" style={{ backgroundColor: `${item.type.color}18`, color: item.type.color }}>
+                              <LevelIcon icon={item.customIconText} color={item.type.color} className="h-5 w-5 text-[20px]" emojiClassName="text-inherit" svgClassName="[&>svg]:block" />
+                            </div>
+                            <p className="text-xs leading-6 text-muted-foreground break-all">{item.customIconText}</p>
+                          </div>
+                        </div>
+                      ) : null}
                       {item.customDescription ? (
                         <div className="mt-3 rounded-[18px] bg-secondary/30 p-3 text-sm">
                           <p className="text-xs text-muted-foreground">个性描述</p>

@@ -16,6 +16,7 @@ export type VerificationBadgeView = {
   id: string
   name: string
   iconText: string
+  customIconText?: string | null
   color: string
   description?: string | null
   customDescription?: string | null
@@ -29,6 +30,7 @@ export type UserVerificationView = {
   rejectReason?: string | null
   note?: string | null
   content?: string | null
+  customIconText?: string | null
   customDescription?: string | null
   formResponse?: Record<string, string>
   type: VerificationBadgeView
@@ -68,6 +70,49 @@ function parseFormResponseJson(input?: string | null) {
   }
 }
 
+const CUSTOM_VERIFICATION_ICON_MAX_LENGTH = 24
+const CUSTOM_VERIFICATION_ICON_URL_MAX_LENGTH = 2048
+const REMOTE_ICON_URL_PATTERN = /^https?:\/\/\S+$/i
+const LOCAL_ICON_PATH_PATTERN = /^(\/|\.\/|\.\.\/)\S+$/
+const INLINE_SVG_PATTERN = /^<svg[\s\S]*<\/svg>$/i
+
+function hasNonEmptyFormResponse(input: Record<string, string>) {
+  return Object.values(input).some((value) => value.trim().length > 0)
+}
+
+function normalizeCustomVerificationIconText(input?: string | null) {
+  const normalized = String(input ?? "").trim()
+
+  if (!normalized) {
+    return ""
+  }
+
+  if (INLINE_SVG_PATTERN.test(normalized)) {
+    throw new Error("请上传 SVG 文件或填写 SVG 链接，暂不支持直接粘贴 SVG 源码")
+  }
+
+  if (/^data:/i.test(normalized) || /^blob:/i.test(normalized)) {
+    throw new Error("自定义图标不支持 data/blob 地址，请改用图片链接或上传文件")
+  }
+
+  if (REMOTE_ICON_URL_PATTERN.test(normalized) || LOCAL_ICON_PATH_PATTERN.test(normalized)) {
+    if (normalized.length > CUSTOM_VERIFICATION_ICON_URL_MAX_LENGTH) {
+      throw new Error("自定义图标链接过长，请缩短后再提交")
+    }
+    return normalized
+  }
+
+  if (/[<>]/.test(normalized) || /[\r\n]/.test(normalized)) {
+    throw new Error("自定义图标格式不正确")
+  }
+
+  if (normalized.length > CUSTOM_VERIFICATION_ICON_MAX_LENGTH) {
+    throw new Error(`自定义图标不能超过 ${CUSTOM_VERIFICATION_ICON_MAX_LENGTH} 个字符`)
+  }
+
+  return normalized
+}
+
 function mapVerificationType(type: {
   id: string
   name: string
@@ -104,6 +149,7 @@ function mapApplication(application: {
   rejectReason: string | null
   note: string | null
   content: string | null
+  customIconText: string | null
   customDescription: string | null
   formResponseJson?: string | null
   type: {
@@ -122,6 +168,7 @@ function mapApplication(application: {
     rejectReason: application.rejectReason,
     note: application.note,
     content: application.content,
+    customIconText: application.customIconText,
     customDescription: application.customDescription,
     formResponse: parseFormResponseJson(application.formResponseJson),
     type: {
@@ -166,6 +213,7 @@ export async function getCurrentUserVerificationData(): Promise<CurrentUserVerif
           id: approvedVerification.type.id,
           name: approvedVerification.type.name,
           iconText: approvedVerification.type.iconText?.trim() || "✔️",
+          customIconText: approvedVerification.customIconText,
           color: approvedVerification.type.color,
           description: approvedVerification.type.description,
           customDescription: approvedVerification.customDescription,
@@ -189,6 +237,7 @@ export async function submitVerificationApplication(input: {
   userId: number
   verificationTypeId: string
   content?: string
+  customIconText?: string
   customDescription?: string
   formResponse?: Record<string, string>
 }) {
@@ -199,8 +248,11 @@ export async function submitVerificationApplication(input: {
   }
 
   const existingApproved = await findApprovedUserVerification(input.userId)
+  const approvedSameTypeApplication = existingApproved?.typeId === input.verificationTypeId
+    ? existingApproved
+    : null
 
-  if (existingApproved && existingApproved.typeId !== input.verificationTypeId) {
+  if (existingApproved && !approvedSameTypeApplication) {
     throw new Error(`你已通过 ${existingApproved.type.name}，暂不支持重复申请其它认证`)
   }
 
@@ -210,26 +262,41 @@ export async function submitVerificationApplication(input: {
     throw new Error("该认证已在审核中，请等待后台审核")
   }
 
-  if (latestApplication?.status === "APPROVED") {
+  if (latestApplication?.status === "APPROVED" && !approvedSameTypeApplication) {
     throw new Error("你已通过该认证，无需重复申请")
   }
 
-  if (latestApplication?.status === "REJECTED" && !verificationType.allowResubmitAfterReject) {
+  if (latestApplication?.status === "REJECTED" && !verificationType.allowResubmitAfterReject && !approvedSameTypeApplication) {
     throw new Error("该认证当前不允许被拒后再次提交，请联系管理员")
   }
 
   const formFields = parseVerificationFormSchema(verificationType.formSchemaJson)
   const rawFormResponse = input.formResponse ?? {}
   const normalizedFormResponse = Object.fromEntries(Object.entries(rawFormResponse).map(([key, value]) => [key, String(value ?? "").trim()]))
+  const approvedFormResponse = approvedSameTypeApplication
+    ? parseFormResponseJson(approvedSameTypeApplication.formResponseJson)
+    : {}
+  const effectiveRawFormResponse = approvedSameTypeApplication && !hasNonEmptyFormResponse(normalizedFormResponse)
+    ? approvedFormResponse
+    : normalizedFormResponse
+  const customIconText = normalizeCustomVerificationIconText(input.customIconText)
   const customDescription = String(input.customDescription ?? "").trim()
+  const hasManualCustomizationChange = approvedSameTypeApplication
+    ? customIconText !== (approvedSameTypeApplication.customIconText?.trim() ?? "")
+      || customDescription !== (approvedSameTypeApplication.customDescription?.trim() ?? "")
+    : false
+
+  if (approvedSameTypeApplication && !hasManualCustomizationChange) {
+    throw new Error("请先修改自定义图标或个性描述，再提交审核")
+  }
 
   for (const field of formFields) {
-    if (field.required && !normalizedFormResponse[field.id]) {
+    if (field.required && !effectiveRawFormResponse[field.id]) {
       throw new Error(`请填写${field.label}`)
     }
   }
 
-  const sanitizedFormResponse = Object.fromEntries(await Promise.all(Object.entries(normalizedFormResponse).map(async ([key, value]) => {
+  const sanitizedFormResponse = Object.fromEntries(await Promise.all(Object.entries(effectiveRawFormResponse).map(async ([key, value]) => {
     if (!value) {
       return [key, ""] as const
     }
@@ -237,8 +304,11 @@ export async function submitVerificationApplication(input: {
     const safety = await enforceSensitiveText({ scene: "verification.content", text: value })
     return [key, safety.sanitizedText] as const
   })))
-  const contentSafety = formFields.length === 0 && input.content?.trim()
-    ? await enforceSensitiveText({ scene: "verification.content", text: String(input.content).trim() })
+  const rawContent = approvedSameTypeApplication
+    ? approvedSameTypeApplication.content
+    : String(input.content ?? "").trim()
+  const contentSafety = formFields.length === 0 && rawContent
+    ? await enforceSensitiveText({ scene: "verification.content", text: rawContent })
     : null
   const customDescriptionSafety = customDescription
     ? await enforceSensitiveText({ scene: "verification.customDescription", text: customDescription })
@@ -255,6 +325,7 @@ export async function submitVerificationApplication(input: {
     userId: input.userId,
     verificationTypeId: input.verificationTypeId,
     content,
+    customIconText: customIconText || null,
     customDescription: customDescriptionSafety?.sanitizedText || null,
     formResponseJson: formFields.length > 0 ? JSON.stringify(sanitizedFormResponse) : null,
   })
@@ -264,7 +335,7 @@ export async function submitVerificationApplication(input: {
     contentAdjusted: Boolean(
       contentSafety?.wasReplaced
       || customDescriptionSafety?.wasReplaced
-      || Object.keys(normalizedFormResponse).some((key) => sanitizedFormResponse[key] !== normalizedFormResponse[key]),
+      || Object.keys(effectiveRawFormResponse).some((key) => sanitizedFormResponse[key] !== effectiveRawFormResponse[key]),
     ),
   }
 }
@@ -298,6 +369,7 @@ export async function getUserApprovedVerificationBadge(userId: number | null | u
     id: application.type.id,
     name: application.type.name,
     iconText: application.type.iconText?.trim() || "✔️",
+    customIconText: application.customIconText,
     color: application.type.color,
     description: application.type.description,
     customDescription: application.customDescription,

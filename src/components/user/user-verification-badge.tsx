@@ -7,6 +7,7 @@ export interface UserVerificationBadgeItem {
   name: string
   color: string
   iconText?: string | null
+  customIconText?: string | null
   description?: string | null
   customDescription?: string | null
 }
@@ -24,6 +25,7 @@ export function UserVerificationBadge({ verification, compact = false, className
     return null
   }
 
+  const effectiveIcon = verification.customIconText?.trim() || verification.iconText
   const tooltipContent = verification.customDescription?.trim()
     ? `${verification.customDescription.trim()}`
     : verification.description?.trim() || verification.name
@@ -49,7 +51,7 @@ export function UserVerificationBadge({ verification, compact = false, className
             }}
       >
         <LevelIcon
-          icon={verification.iconText}
+          icon={effectiveIcon}
           color={verification.color}
           className={cn(compact ? "h-3 min-w-3 text-[12px]" : "h-3.5 min-w-3.5 text-[14px]", iconClassName)}
           emojiClassName="text-inherit"

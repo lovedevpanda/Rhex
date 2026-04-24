@@ -1428,6 +1428,7 @@ model UserVerification {
   typeId            String
   status            UserVerificationStatus @default(PENDING)
   content           String
+  customIconText    String?
   customDescription String?
   formResponseJson  String?
   note              String?

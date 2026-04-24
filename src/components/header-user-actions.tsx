@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/rbutton"
 import { UserAvatar } from "@/components/user/user-avatar"
+import { cn } from "@/lib/utils"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 interface HeaderUserActionsProps {
@@ -30,6 +31,8 @@ interface HeaderUserActionsProps {
     canAccessAdmin?: boolean
   } | null
 }
+
+type UserMenuSettingsTab = "level" | "points" | "badges"
 
 function formatUnreadBadge(count: number) {
   if (count <= 0) {
@@ -46,8 +49,16 @@ function HeaderUnreadBadge({ count, className }: { count: number; className?: st
     return null
   }
 
+  const isOverflowLabel = label.length > 2
+
   return (
-    <span className={`absolute flex min-h-4 min-w-4 items-center justify-center rounded-full border border-background bg-rose-500 px-1.5 text-[10px] font-semibold leading-none text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-background dark:bg-rose-300 dark:text-rose-950 dark:shadow-none ${className ?? ""}`}>
+    <span
+      className={cn(
+        "absolute flex min-h-4 min-w-4 items-center justify-center whitespace-nowrap rounded-full border border-background bg-rose-500 px-1.5 text-[10px] font-semibold leading-none tabular-nums text-white shadow-[0_4px_12px_rgba(244,63,94,0.22)] dark:border-background dark:bg-rose-300 dark:text-rose-950 dark:shadow-none",
+        className,
+        isOverflowLabel && "min-w-6 translate-x-1",
+      )}
+    >
       {label}
     </span>
   )
@@ -58,6 +69,7 @@ function UserMenuContent({
   showIdentity,
   includeVip,
   includeAdminEntry,
+  buildSettingsHref,
   onLogout,
   className,
 }: {
@@ -65,10 +77,12 @@ function UserMenuContent({
   showIdentity?: boolean
   includeVip?: boolean
   includeAdminEntry?: boolean
+  buildSettingsHref?: (tab?: UserMenuSettingsTab) => string
   onLogout: () => Promise<void>
   className?: string
 }) {
   const userDisplayName = user.nickname ?? user.username
+  const resolveSettingsHref = buildSettingsHref ?? ((tab?: UserMenuSettingsTab) => (tab ? `/settings?tab=${tab}` : "/settings"))
 
   return (
     <DropdownMenuContent align="end" className={className}>
@@ -90,20 +104,20 @@ function UserMenuContent({
           <User />
           个人主页
         </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href="/settings?tab=level" />}>
-            <TrendingUp />
-            我的等级
-          </DropdownMenuItem>
-      
-          <DropdownMenuItem render={<Link href="/settings?tab=points" />}>
-            <Wallet />
-            积分明细
-            <DropdownMenuShortcut>账单</DropdownMenuShortcut>
-          </DropdownMenuItem>
+        <DropdownMenuItem render={<Link href={resolveSettingsHref("level")} />}>
+          <TrendingUp />
+          我的等级
+        </DropdownMenuItem>
+
+        <DropdownMenuItem render={<Link href={resolveSettingsHref("points")} />}>
+          <Wallet />
+          积分明细
+          <DropdownMenuShortcut>账单</DropdownMenuShortcut>
+        </DropdownMenuItem>
       </DropdownMenuGroup>
       <DropdownMenuSeparator />
       <DropdownMenuGroup>
-        <DropdownMenuItem render={<Link href="/settings" />}>
+        <DropdownMenuItem render={<Link href={resolveSettingsHref()} />}>
           <Settings />
           设置
         </DropdownMenuItem>
@@ -113,7 +127,7 @@ function UserMenuContent({
             VIP
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem render={<Link href="/settings?tab=badges" />}>
+        <DropdownMenuItem render={<Link href={resolveSettingsHref("badges")} />}>
           <Medal />
           勋章
         </DropdownMenuItem>
@@ -143,6 +157,9 @@ function UserMenuContent({
 export function HeaderUserActions({ user }: HeaderUserActionsProps) {
   const router = useRouter()
   const { unreadMessageCount, unreadNotificationCount } = useInboxRealtime()
+  const buildMobileSettingsHref = (tab?: UserMenuSettingsTab) => (
+    tab ? `/settings?tab=${tab}&mobile=detail` : "/settings"
+  )
 
   async function handleLogout() {
     await fetch("/api/auth/logout", {
@@ -182,14 +199,14 @@ export function HeaderUserActions({ user }: HeaderUserActionsProps) {
           <Button variant="ghost" size="icon" className="size-8 rounded-md">
             <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
-          <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
+          <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5" />
         </Link>
 
         <Link href="/messages" className="relative">
           <Button variant="ghost" size="icon" className="size-8 rounded-md">
             <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
-          <HeaderUnreadBadge count={unreadMessageCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
+          <HeaderUnreadBadge count={unreadMessageCount} className="right-0.5 top-0.5" />
         </Link>
 
         <DropdownMenu>
@@ -202,6 +219,7 @@ export function HeaderUserActions({ user }: HeaderUserActionsProps) {
             user={user}
             includeVip
             includeAdminEntry={canAccessAdmin}
+            buildSettingsHref={buildMobileSettingsHref}
             onLogout={handleLogout}
             className="w-48"
           />
@@ -213,14 +231,14 @@ export function HeaderUserActions({ user }: HeaderUserActionsProps) {
           <Button variant="ghost" size="icon" className="size-8 rounded-md">
             <Bell className={unreadNotificationCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
-          <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5 min-h-4 min-w-4" />
+          <HeaderUnreadBadge count={unreadNotificationCount} className="right-0.5 top-0.5" />
         </Link>
 
         <Link href="/messages" className="relative">
           <Button variant="ghost" className="h-8 rounded-md px-3 gap-1.5">
             <MessageSquareMore className={unreadMessageCount > 0 ? "h-4 w-4 text-rose-600 dark:text-rose-300" : "h-4 w-4"} />
           </Button>
-          <HeaderUnreadBadge count={unreadMessageCount} className="right-1 top-0.5 min-h-4 min-w-4" />
+          <HeaderUnreadBadge count={unreadMessageCount} className="right-1 top-0.5" />
         </Link>
 
   

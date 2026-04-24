@@ -29,6 +29,7 @@ export function CoverConfigModal({
       open={open}
       onClose={onClose}
       title="设置封面图"
+      hideHeaderCloseButtonOnMobile
       description="画廊模式默认提取正文第一张图片，也可以在这里手动上传或填写封面地址。"
       size="lg"
       footer={(

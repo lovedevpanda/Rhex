@@ -43,6 +43,7 @@ export interface SiteCommentReplyItem {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null
@@ -95,6 +96,7 @@ export interface SiteCommentItem {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null
@@ -168,6 +170,7 @@ interface CommentQueryUser {
     }
   }>
   verificationApplications?: Array<{
+    customIconText?: string | null
     customDescription?: string | null
     type: {
       id: string
@@ -215,6 +218,7 @@ function mapVerification(user: CommentQueryUser) {
     name: item.type.name,
     color: item.type.color,
     iconText: item.type.iconText,
+    customIconText: item.customIconText,
     description: item.type.description,
     customDescription: item.customDescription,
   }

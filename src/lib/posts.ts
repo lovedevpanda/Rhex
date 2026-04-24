@@ -82,6 +82,7 @@ export interface SitePostItem {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null

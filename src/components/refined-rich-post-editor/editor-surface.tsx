@@ -60,7 +60,7 @@ export function EditorHeader({
         </div>
       ) : null}
       <div className="border-b border-border px-5">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex min-h-10 items-center justify-between gap-4">
           <div className="flex gap-4">
             <button
               type="button"
@@ -84,7 +84,7 @@ export function EditorHeader({
               预览
             </button>
           </div>
-          <div className="flex items-center gap-3 pb-2">
+          <div className="flex shrink-0 items-center gap-3">
             <p className="text-xs text-muted-foreground">{valueLength} 字符{uploading ? " · 上传中" : ""}</p>
             {!disabled && !isFullscreen ? (
               <button

@@ -70,7 +70,7 @@ export function UserRecentActivityPanel({
         <div className={cn("flex flex-col gap-4", showSummary ? "pt-4" : "")}>
           <div className={cn(
             compact
-              ? "flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-border px-5"
+              ? "flex flex-nowrap items-center gap-6 overflow-x-auto border-b border-border px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:gap-x-8 sm:gap-y-2 sm:overflow-visible"
               : "grid grid-cols-4 gap-1.5 sm:gap-2",
           )}>
             {tabs.map((tab) => {
@@ -84,7 +84,7 @@ export function UserRecentActivityPanel({
                   scroll={false}
                   className={cn(
                     compact
-                      ? "inline-flex items-center gap-1.5 border-b-[3px] px-0 pb-3 text-[15px] font-medium transition-colors"
+                      ? "inline-flex shrink-0 items-center gap-1.5 border-b-[3px] px-0 pb-3 text-[15px] font-medium transition-colors"
                       : "inline-flex w-full items-center justify-center gap-1 rounded-full border px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:text-sm",
                     compact
                       ? active

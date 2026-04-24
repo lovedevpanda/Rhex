@@ -25,6 +25,10 @@ export function isVipActive(source: VipStateSource | null | undefined) {
 }
 
 export function getVipLevel(source: VipStateSource | null | undefined) {
+  if (!isVipActive(source)) {
+    return 0
+  }
+
   return Math.max(1, source?.vipLevel ?? 1)
 }
 

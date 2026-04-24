@@ -19,13 +19,12 @@ import { UserDisplayedBadges } from "@/components/user/user-displayed-badges"
 import { UserProfilePreviewCardTrigger } from "@/components/user/user-profile-preview-card-trigger"
 import { UserStatusBadge } from "@/components/user/user-status-badge"
 import { UserVerificationBadge } from "@/components/user/user-verification-badge"
-import { VipNameTooltip } from "@/components/vip/vip-name-tooltip"
+import { VipDisplayName } from "@/components/vip/vip-display-name"
 import { Button } from "@/components/ui/rbutton"
 import type { SiteCommentItem, SiteCommentReplyItem } from "@/lib/comments"
 import type { CommentReplyTarget } from "@/lib/comment-reply-box-events"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { cn } from "@/lib/utils"
-import { getVipNameClass } from "@/lib/vip-status"
 
 type ThreadEntry = SiteCommentItem | SiteCommentReplyItem
 export type CommentThreadReplyLayout = "tree" | "flat"
@@ -91,10 +90,6 @@ interface CommentThreadReplyItemProps {
   onJumpToParentComment?: (commentId: string, href?: string) => void
 }
 
-function getRegularAuthorNameClassName(className: string) {
-  return className.replace(/\bfont-medium\b/g, "").replace(/\s+/g, " ").trim()
-}
-
 interface CommentAuthorSurfaceProps<TEntry extends ThreadEntry = ThreadEntry> {
   entryType: CommentThreadEntryType
   entry: TEntry
@@ -140,15 +135,19 @@ function CommentAuthorNameContent({
   authorNameClassName,
 }: CommentAuthorSurfaceProps) {
   return (
-    <VipNameTooltip isVip={entry.authorIsVip} level={entry.authorVipLevel}>
-      <span className="inline-flex items-center gap-1">
-        <Link href={authorHref} className={authorNameClassName}>
-          {entry.author}
-        </Link>
-        {entry.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
-        {entry.authorIsAiAgent ? <AiAgentIndicator /> : null}
-      </span>
-    </VipNameTooltip>
+    <span className="inline-flex items-center gap-1">
+      <Link href={authorHref} className={authorNameClassName} title={entry.author}>
+        <VipDisplayName
+          name={entry.author}
+          isVip={entry.authorIsVip}
+          vipLevel={entry.authorVipLevel}
+          emphasize={Boolean(entry.authorIsVip)}
+          interactive={false}
+        />
+      </Link>
+      {entry.authorIsAnonymous ? <AnonymousUserIndicator /> : null}
+      {entry.authorIsAiAgent ? <AiAgentIndicator /> : null}
+    </span>
   )
 }
 
@@ -424,9 +423,7 @@ export function CommentThreadReplyItem({
   const shouldDimRestrictedReplyAuthor = !isAdmin && isRestrictedReplyAuthor
   const isHiddenReplyForViewer = !isAdmin && reply.status === "HIDDEN"
   const isFlatLayout = layout === "flat"
-  const replyAuthorNameClassName = reply.authorIsVip
-    ? getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true })
-    : getRegularAuthorNameClassName(getVipNameClass(reply.authorIsVip, reply.authorVipLevel, { medium: true }))
+  const replyAuthorNameClassName = "truncate hover:underline"
   const replyAuthorHref = `/users/${reply.authorUsername}`
   const replyUnavailableMessage = getCommentUnavailableMessage({
     isAdmin,
@@ -612,9 +609,7 @@ export function CommentThreadCommentItem({
   const isRestrictedCommentAuthor = comment.authorStatus === "BANNED" || comment.authorStatus === "MUTED"
   const shouldDimRestrictedCommentAuthor = !isAdmin && isRestrictedCommentAuthor
   const isHiddenCommentForViewer = !isAdmin && comment.status === "HIDDEN"
-  const commentAuthorNameClassName = comment.authorIsVip
-    ? getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true })
-    : getRegularAuthorNameClassName(getVipNameClass(comment.authorIsVip, comment.authorVipLevel, { medium: true }))
+  const commentAuthorNameClassName = "truncate hover:underline"
   const commentAuthorHref = `/users/${comment.authorUsername}`
   const commentUnavailableMessage = getCommentUnavailableMessage({
     isAdmin,

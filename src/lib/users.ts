@@ -46,6 +46,7 @@ export interface SiteUserProfile {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null
@@ -108,6 +109,7 @@ export async function getUserProfile(username: string): Promise<SiteUserProfile 
             name: approvedVerification.type.name,
             color: approvedVerification.type.color,
             iconText: approvedVerification.type.iconText,
+            customIconText: approvedVerification.customIconText,
             description: approvedVerification.type.description,
             customDescription: approvedVerification.customDescription,
           }

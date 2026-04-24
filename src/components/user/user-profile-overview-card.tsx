@@ -96,12 +96,15 @@ export function UserProfileOverviewCard({
             </div>
             <div className="min-w-0">
               <div className="flex flex-col gap-1">
-                <div className="flex min-w-0 flex-nowrap items-center gap-x-2">
-                  <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-2 overflow-hidden">
-                    <div className="min-w-0 max-w-full flex-1">
-                      {displayName}
+                <div className="flex min-w-0 items-start gap-x-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-nowrap items-center gap-x-2 overflow-hidden">
+                      <div className="min-w-0 max-w-full flex-1">
+                        {displayName}
+                      </div>
+                      {pointsBadge ? <div className="hidden shrink-0 sm:block">{pointsBadge}</div> : null}
                     </div>
-                    {pointsBadge ? <div className="shrink-0">{pointsBadge}</div> : null}
+                    {pointsBadge ? <div className="mt-1 sm:hidden">{pointsBadge}</div> : null}
                   </div>
                   {mobileSidePanel ? (
                     <button
@@ -117,7 +120,7 @@ export function UserProfileOverviewCard({
                 </div>
 
                 {identityRow ? (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px] leading-5 text-muted-foreground">
+                  <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto text-[13px] leading-5 text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:gap-2 sm:overflow-visible">
                     {identityRow}
                   </div>
                 ) : null}
@@ -183,7 +186,7 @@ export function UserProfileOverviewCard({
                   </div>
                 ) : null}
 
-                <p className="truncate text-[13px] leading-5 text-muted-foreground">
+                <p className="break-words whitespace-pre-wrap text-[13px] leading-5 text-muted-foreground">
                   {bio}
                 </p>
 

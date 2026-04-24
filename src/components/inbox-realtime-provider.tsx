@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 
+import { applyInboxStreamEvent, shouldPlayInboxPrompt, type InboxUnreadCounts } from "@/lib/inbox-prompt"
 import type { InboxStreamEvent } from "@/lib/message-types"
 
 type InboxConnectionStatus = "connecting" | "connected" | "closed"
@@ -63,7 +64,14 @@ export function InboxRealtimeProvider({
   const streamCursorRef = useRef<string | null>(null)
   const listenersRef = useRef(new Set<(event: InboxStreamEvent) => void>())
   const currentUserIdRef = useRef<number | null>(currentUserId)
+  const unreadCountsRef = useRef<InboxUnreadCounts>({
+    unreadMessageCount: initialUnreadMessageCount,
+    unreadNotificationCount: initialUnreadNotificationCount,
+  })
   const messagePromptAudioRef = useRef<HTMLAudioElement | null>(null)
+  const messagePromptAudioUnlockedRef = useRef(false)
+  const messagePromptAudioContextRef = useRef<AudioContext | null>(null)
+  const messagePromptAudioBufferRef = useRef<AudioBuffer | null>(null)
   const attentionTitleRef = useRef("")
   const baseTitleRef = useRef("")
   const [connectionStatus, setConnectionStatus] = useState<InboxConnectionStatus>(currentUserId ? "connecting" : "closed")
@@ -73,6 +81,13 @@ export function InboxRealtimeProvider({
   useEffect(() => {
     currentUserIdRef.current = currentUserId
   }, [currentUserId])
+
+  useEffect(() => {
+    unreadCountsRef.current = {
+      unreadMessageCount,
+      unreadNotificationCount,
+    }
+  }, [unreadMessageCount, unreadNotificationCount])
 
   const notifyListeners = useCallback((event: InboxStreamEvent) => {
     for (const listener of listenersRef.current) {
@@ -138,38 +153,150 @@ export function InboxRealtimeProvider({
   }, [])
 
   useEffect(() => {
-    const audio = new Audio("/apps/messages/prompt.mp3")
-    audio.preload = "auto"
-    messagePromptAudioRef.current = audio
+    const browserWindow = window as Window & typeof globalThis & {
+      webkitAudioContext?: typeof AudioContext
+    }
+    const AudioContextConstructor = browserWindow.AudioContext ?? browserWindow.webkitAudioContext
+    const audioElement = new Audio("/apps/messages/prompt.mp3")
+    const abortController = new AbortController()
+    const audioContext = AudioContextConstructor ? new AudioContextConstructor() : null
 
-    const unlockAudio = () => {
-      const target = messagePromptAudioRef.current
-      if (!target) {
+    audioElement.preload = "auto"
+    audioElement.setAttribute("playsinline", "true")
+    messagePromptAudioRef.current = audioElement
+    messagePromptAudioContextRef.current = audioContext
+
+    void fetch("/apps/messages/prompt.mp3", {
+      cache: "force-cache",
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`failed to load prompt audio: ${response.status}`)
+        }
+
+        return response.arrayBuffer()
+      })
+      .then((arrayBuffer) => audioContext ? audioContext.decodeAudioData(arrayBuffer.slice(0)) : null)
+      .then((buffer) => {
+        if (buffer && messagePromptAudioContextRef.current === audioContext) {
+          messagePromptAudioBufferRef.current = buffer
+        }
+      })
+      .catch(() => undefined)
+
+    const unlockAudioContext = () => {
+      if (audioContext && audioContext.state !== "closed" && audioContext.state !== "running") {
+        void audioContext.resume()
+          .then(() => {
+            const oscillator = audioContext.createOscillator()
+            const gain = audioContext.createGain()
+
+            gain.gain.value = 0
+            oscillator.connect(gain)
+            gain.connect(audioContext.destination)
+            oscillator.start()
+            oscillator.stop(audioContext.currentTime + 0.01)
+          })
+          .catch(() => undefined)
+      }
+    }
+
+    const unlockPromptAudioElement = () => {
+      if (messagePromptAudioUnlockedRef.current) {
         return
       }
 
-      target.muted = true
-      target.currentTime = 0
-      void target.play()
+      messagePromptAudioUnlockedRef.current = true
+      audioElement.volume = 0
+      audioElement.currentTime = 0
+      void audioElement.play()
         .then(() => {
-          target.pause()
-          target.currentTime = 0
-          target.muted = false
+          audioElement.pause()
+          audioElement.currentTime = 0
+          audioElement.volume = 1
         })
         .catch(() => {
-          target.muted = false
+          messagePromptAudioUnlockedRef.current = false
+          audioElement.volume = 1
         })
     }
 
-    window.addEventListener("pointerdown", unlockAudio, { passive: true })
-    window.addEventListener("keydown", unlockAudio)
+    const unlockPromptAudio = () => {
+      unlockAudioContext()
+      unlockPromptAudioElement()
+    }
+
+    window.addEventListener("pointerdown", unlockPromptAudio, { passive: true })
+    window.addEventListener("keydown", unlockPromptAudio)
 
     return () => {
-      window.removeEventListener("pointerdown", unlockAudio)
-      window.removeEventListener("keydown", unlockAudio)
-      audio.pause()
+      abortController.abort()
+      window.removeEventListener("pointerdown", unlockPromptAudio)
+      window.removeEventListener("keydown", unlockPromptAudio)
+      messagePromptAudioBufferRef.current = null
+      messagePromptAudioUnlockedRef.current = false
+      audioElement.pause()
       messagePromptAudioRef.current = null
+
+      if (messagePromptAudioContextRef.current === audioContext) {
+        messagePromptAudioContextRef.current = null
+      }
+
+      if (audioContext && audioContext.state !== "closed") {
+        void audioContext.close().catch(() => undefined)
+      }
     }
+  }, [])
+
+  const playPromptAudio = useCallback(() => {
+    const audioContext = messagePromptAudioContextRef.current
+    const audioBuffer = messagePromptAudioBufferRef.current
+    const fallbackAudio = messagePromptAudioRef.current
+
+    const playFallbackAudio = () => {
+      if (!fallbackAudio) {
+        return
+      }
+
+      fallbackAudio.currentTime = 0
+      void fallbackAudio.play().catch(() => undefined)
+    }
+
+    const playBufferAudio = () => {
+      if (!audioContext || !audioBuffer || audioContext.state !== "running") {
+        playFallbackAudio()
+        return
+      }
+
+      const source = audioContext.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(audioContext.destination)
+      source.start(0)
+    }
+
+    if (!audioContext || !audioBuffer) {
+      playFallbackAudio()
+      return
+    }
+
+    if (audioContext.state === "running") {
+      playBufferAudio()
+      return
+    }
+
+    if (audioContext.state === "suspended") {
+      void audioContext.resume()
+        .then(() => {
+          playBufferAudio()
+        })
+        .catch(() => {
+          playFallbackAudio()
+        })
+      return
+    }
+
+    playFallbackAudio()
   }, [])
 
   useEffect(() => {
@@ -227,32 +354,20 @@ export function InboxRealtimeProvider({
     }
 
     const applyEventState = (event: InboxStreamEvent) => {
-      const activeUserId = currentUserIdRef.current
+      const previousCounts = unreadCountsRef.current
+      const nextCounts = applyInboxStreamEvent(previousCounts, event, currentUserIdRef.current)
 
-      switch (event.type) {
-        case "inbox.snapshot":
-          setUnreadMessageCount(event.unreadMessageCount)
-          setUnreadNotificationCount(event.unreadNotificationCount)
-          return
-        case "message.created":
-          if (activeUserId && event.recipientId === activeUserId && typeof event.recipientUnreadMessageCount === "number") {
-            setUnreadMessageCount(event.recipientUnreadMessageCount)
-          }
-          return
-        case "conversation.read":
-        case "conversation.deleted":
-          if (activeUserId && event.userId === activeUserId) {
-            setUnreadMessageCount(event.unreadMessageCount)
-          }
-          return
-        case "notification.count":
-          if (activeUserId && event.userId === activeUserId) {
-            setUnreadNotificationCount(event.unreadNotificationCount)
-          }
-          return
-        case "heartbeat":
-          return
+      unreadCountsRef.current = nextCounts
+
+      if (nextCounts.unreadMessageCount !== previousCounts.unreadMessageCount) {
+        setUnreadMessageCount(nextCounts.unreadMessageCount)
       }
+
+      if (nextCounts.unreadNotificationCount !== previousCounts.unreadNotificationCount) {
+        setUnreadNotificationCount(nextCounts.unreadNotificationCount)
+      }
+
+      return previousCounts
     }
 
     const handleStreamMessage = (event: MessageEvent<string>) => {
@@ -264,20 +379,10 @@ export function InboxRealtimeProvider({
         return
       }
 
-      applyEventState(payload)
+      const previousCounts = applyEventState(payload)
 
-      if (
-        payload.type === "message.created"
-        && payload.recipientId === currentUserIdRef.current
-        && payload.senderId !== currentUserIdRef.current
-        && document.visibilityState === "visible"
-        && document.hasFocus()
-      ) {
-        const audio = messagePromptAudioRef.current
-        if (audio) {
-          audio.currentTime = 0
-          void audio.play().catch(() => undefined)
-        }
+      if (shouldPlayInboxPrompt(payload, currentUserIdRef.current, previousCounts)) {
+        playPromptAudio()
       }
 
       if (payload.type !== "heartbeat") {
@@ -340,7 +445,7 @@ export function InboxRealtimeProvider({
       setConnectionStatus("closed")
       eventSource?.close()
     }
-  }, [currentUserId, notifyListeners, restoreDocumentTitle])
+  }, [currentUserId, notifyListeners, playPromptAudio, restoreDocumentTitle])
 
   const value = useMemo<InboxRealtimeContextValue>(() => ({
     currentUserId,

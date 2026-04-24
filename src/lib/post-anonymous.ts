@@ -18,6 +18,7 @@ export interface AnonymousDisplayIdentity {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null
@@ -41,14 +42,15 @@ function mapAnonymousIdentity(user: AnonymousMaskUserRecord): AnonymousDisplayId
     authorIsVip: isVipActive(user),
     authorVipLevel: getVipLevel(user),
     authorVerification: user.verificationApplications?.[0]
-      ? {
-          id: user.verificationApplications[0].type.id,
-          name: user.verificationApplications[0].type.name,
-          color: user.verificationApplications[0].type.color,
-          iconText: user.verificationApplications[0].type.iconText,
-          description: user.verificationApplications[0].type.description,
-          customDescription: user.verificationApplications[0].customDescription,
-        }
+        ? {
+            id: user.verificationApplications[0].type.id,
+            name: user.verificationApplications[0].type.name,
+            color: user.verificationApplications[0].type.color,
+            iconText: user.verificationApplications[0].type.iconText,
+            customIconText: user.verificationApplications[0].customIconText,
+            description: user.verificationApplications[0].type.description,
+            customDescription: user.verificationApplications[0].customDescription,
+          }
       : null,
     authorDisplayedBadges: (user.userBadges ?? [])
       .filter((item) => Boolean(item.isDisplayed) && item.badge.status)
@@ -88,6 +90,7 @@ export function applyAnonymousIdentityToPost<T extends {
     name: string
     color: string
     iconText?: string | null
+    customIconText?: string | null
     description?: string | null
     customDescription?: string | null
   } | null

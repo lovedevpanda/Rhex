@@ -7,6 +7,12 @@ import { useRouter } from "next/navigation"
 import QRCode from "qrcode"
 
 import { Modal } from "@/components/ui/modal"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group"
 import { Button } from "@/components/ui/rbutton"
 import { toast } from "@/components/ui/toast"
 import { formatNumber } from "@/lib/formatters"
@@ -43,7 +49,8 @@ interface PendingTopupOrderState {
 }
 
 type WebRuntimeClientType = Extract<PaymentGatewayClientType, "WEB_DESKTOP" | "WEB_MOBILE">
-const TOPUP_PRIMARY_BUTTON_CLASS = "bg-foreground text-background hover:bg-foreground/90"
+const TOPUP_PRIMARY_BUTTON_CLASS = "h-11 rounded-2xl bg-foreground px-5 text-background hover:bg-foreground/90"
+const TOPUP_INPUT_GROUP_CLASS = "h-11 rounded-2xl bg-background/80"
 
 function submitCheckoutForm(html: string) {
   const container = document.createElement("div")
@@ -396,7 +403,7 @@ export function PointsTopupCard({
 
   return (
     <>
-      <div className="rounded-xl px-4 py-4 space-y-4">
+      <div className="flex flex-col gap-4 rounded-xl px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="font-medium">{heading}</p>
@@ -467,6 +474,7 @@ export function PointsTopupCard({
                   <p className="mt-4 text-sm text-muted-foreground">支付金额 {formatAmountFen(item.amountFen)}</p>
                   <Button
                     type="button"
+                    size="lg"
                     className={`mt-4 w-full ${TOPUP_PRIMARY_BUTTON_CLASS}`}
                     disabled={loadingId !== "" || !selectedPaymentMethod}
                     onClick={() => void handlePackageTopup(item)}
@@ -493,17 +501,22 @@ export function PointsTopupCard({
               ) : null}
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 md:flex-row">
-              <input
-                value={customAmountInput}
-                onChange={(event) => setCustomAmountInput(event.target.value)}
-                placeholder="输入充值金额，如 68 或 128.50"
-                className="h-11 flex-1 rounded-full border border-border bg-background px-4 text-sm outline-hidden"
-                inputMode="decimal"
-              />
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <InputGroup className={`${TOPUP_INPUT_GROUP_CLASS} flex-1`}>
+                <InputGroupAddon>
+                  <InputGroupText>¥</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput
+                  value={customAmountInput}
+                  onChange={(event) => setCustomAmountInput(event.target.value)}
+                  placeholder="输入充值金额，如 68 或 128.50"
+                  inputMode="decimal"
+                />
+              </InputGroup>
               <Button
                 type="button"
-                className={TOPUP_PRIMARY_BUTTON_CLASS}
+                size="lg"
+                className={`w-full sm:w-auto ${TOPUP_PRIMARY_BUTTON_CLASS}`}
                 disabled={loadingId !== "" || customAmountFen === null || Boolean(customAmountError) || customPoints <= 0 || !selectedPaymentMethod}
                 onClick={() => void handleCustomTopup()}
               >
@@ -528,7 +541,7 @@ export function PointsTopupCard({
         )}
       >
         {pendingOrder ? (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <div className="rounded-xl border border-border bg-background px-4 py-4 text-center">
               <p className="text-sm font-medium">{pendingOrder.packageTitle}</p>
               <p className="mt-2 text-xs text-muted-foreground">订单号 {pendingOrder.merchantOrderNo}</p>

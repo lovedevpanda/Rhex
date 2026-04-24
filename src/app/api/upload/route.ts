@@ -23,7 +23,10 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   }
 
   const extension = normalizeUploadExtension(file.name)
-  const allowedExtensions = settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean)
+  const allowedExtensions = Array.from(new Set([
+    ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
+    ...(folder === "icon" ? ["svg"] : []),
+  ]))
   const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
   const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
   const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024

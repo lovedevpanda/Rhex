@@ -34,6 +34,7 @@ interface ListPostAuthor extends VipStateSource {
     }
   }>
   verificationApplications?: Array<{
+    customIconText?: string | null
     customDescription?: string | null
     type: {
       id: string
@@ -145,6 +146,7 @@ export function mapListPost(post: ListPostSource, anonymousMaskIdentity: Anonymo
           name: post.author.verificationApplications[0].type.name,
           color: post.author.verificationApplications[0].type.color,
           iconText: post.author.verificationApplications[0].type.iconText,
+          customIconText: post.author.verificationApplications[0].customIconText,
           description: post.author.verificationApplications[0].type.description,
           customDescription: post.author.verificationApplications[0].customDescription,
         }

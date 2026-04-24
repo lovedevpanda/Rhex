@@ -286,6 +286,26 @@ function PreviewDisplayName({
   )
 }
 
+function PreviewInlineStat({
+  value,
+  label,
+}: {
+  value: number
+  label: string
+}) {
+  const formattedValue = formatNumber(value)
+
+  return (
+    <span
+      title={`${formattedValue} ${label}`}
+      className="inline-flex min-w-0 items-baseline gap-1 overflow-hidden whitespace-nowrap"
+    >
+      <span className="truncate font-semibold tabular-nums text-foreground">{formattedValue}</span>
+      <span className="shrink-0">{label}</span>
+    </span>
+  )
+}
+
 function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) {
   const user = data.user
   const [followerCount, setFollowerCount] = useState(user?.followerCount ?? 0)
@@ -379,9 +399,11 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
                 vipActive={user.vipActive}
                 vipLevel={user.vipLevel}
               />
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
-                <span><span className="font-semibold text-foreground">{formatNumber(user.likeReceivedCount)}</span> 获赞</span>
-                <span><span className="font-semibold text-foreground">{formatNumber(followerCount)}</span> 粉丝</span>
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-1">
+                  <PreviewInlineStat value={user.likeReceivedCount} label="获赞" />
+                  <PreviewInlineStat value={followerCount} label="粉丝" />
+                </div>
                 {data.follow?.canFollow ? (
                   <FollowToggleButton
                     targetType="user"
@@ -390,7 +412,7 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
                     activeLabel="取关"
                     inactiveLabel="关注"
                     showLabel
-                    className="h-6 rounded-full px-2.5 text-[10px]"
+                    className="h-6 shrink-0 whitespace-nowrap gap-1 rounded-full px-2 text-[10px]"
                     onFollowStateChange={({ followed, changed }) => {
                       if (!changed) {
                         return
