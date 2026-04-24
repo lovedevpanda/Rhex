@@ -87,7 +87,7 @@ export function LevelIcon({ icon, color, className, svgClassName, emojiClassName
       >
         <span
           aria-hidden={title ? undefined : true}
-          className={cn("inline-flex h-full w-full items-center justify-center [&>svg]:h-full [&>svg]:w-full", svgClassName)}
+          className={cn("inline-flex h-full w-auto max-w-none flex-none items-center justify-center [&>svg]:block [&>svg]:h-full [&>svg]:w-auto [&>svg]:max-w-none", svgClassName)}
           dangerouslySetInnerHTML={{ __html: buildSvgMarkup(normalizedIcon, color) }}
         />
       </span>
@@ -107,7 +107,7 @@ export function LevelIcon({ icon, color, className, svgClassName, emojiClassName
           src={normalizedIcon}
           alt={title ?? ""}
           aria-hidden={title ? undefined : true}
-          className={cn("h-full w-full object-contain", svgClassName)}
+          className={cn("h-full w-auto max-w-none flex-none object-contain", svgClassName)}
         />
       </span>
     )
