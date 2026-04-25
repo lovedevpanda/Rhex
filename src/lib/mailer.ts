@@ -220,6 +220,23 @@ export async function sendPaymentGatewayOrderSuccessEmail(input: {
   })
 }
 
+export async function sendUserNotificationEmail(input: {
+  to: string
+  subject: string
+  text: string
+  html: string
+}) {
+  const { settings, transporter } = await createMailerContext()
+
+  await transporter.sendMail({
+    from: settings.smtpFrom,
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+    html: input.html,
+  })
+}
+
 export async function sendSmtpTestEmail(input: {
   to: string
   siteName?: string | null

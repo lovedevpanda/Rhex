@@ -20,6 +20,7 @@ export async function registerDefaultBackgroundJobHandlers() {
     import("@/lib/interaction-side-effects"),
     import("@/lib/level-system"),
     import("@/lib/notification-writes"),
+    import("@/lib/user-notification-delivery"),
     import("@/lib/post-auctions"),
     import("@/lib/payment-gateway-email-notifications"),
   ])

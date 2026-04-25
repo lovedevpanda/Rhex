@@ -335,7 +335,6 @@ export async function getUserAccountSettings(userId: number) {
     ...settings,
     activityVisibility: profileSettings.activityVisibility,
     introductionVisibility: profileSettings.introductionVisibility,
-    externalNotificationEnabled: profileSettings.externalNotificationEnabled,
-    notificationWebhookUrl: profileSettings.notificationWebhookUrl,
+    notificationPreferences: profileSettings.notificationPreferences,
   }
 }

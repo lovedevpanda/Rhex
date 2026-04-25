@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
-import { sendSystemNotificationWebhookTest } from "@/lib/notification-writes"
+import { sendUserNotificationWebhookTest } from "@/lib/user-notification-delivery"
 import { validateNotificationSettingsPayload } from "@/lib/validators"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
@@ -17,18 +17,19 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   }
 
   const payload = validated.data
+  const webhookUrl = payload.notificationPreferences.webhook.url
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("profile-notification-webhook-test", {
     request,
     userId: currentUser.id,
     input: {
-      notificationWebhookUrl: payload.notificationWebhookUrl,
+      notificationWebhookUrl: webhookUrl,
     },
   }), async () => {
     try {
-      await sendSystemNotificationWebhookTest({
+      await sendUserNotificationWebhookTest({
         userId: currentUser.id,
-        webhookUrl: payload.notificationWebhookUrl,
+        webhookUrl,
       })
     } catch (error) {
       apiError(502, error instanceof Error ? `Webhook 测试失败：${error.message}` : "Webhook 测试失败")
@@ -42,7 +43,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       targetId: String(currentUser.id),
       extra: {
         hasNotificationWebhookUrl: true,
-        externalNotificationEnabled: payload.externalNotificationEnabled,
+        webhookEnabled: payload.notificationPreferences.webhook.enabled,
       },
     })
 

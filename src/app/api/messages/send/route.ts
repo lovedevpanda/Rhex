@@ -14,6 +14,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       id: currentUser.id,
       username: currentUser.username,
       nickname: currentUser.nickname,
+      avatarPath: currentUser.avatarPath,
       status: currentUser.status,
     },
     log: {

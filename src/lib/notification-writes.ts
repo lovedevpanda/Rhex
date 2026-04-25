@@ -3,7 +3,6 @@ import { countUnreadNotificationsByUserIds } from "@/db/notification-read-querie
 import {
   createNotification as createNotificationEntry,
   createNotifications as createNotificationsEntry,
-  findNotificationWebhookRecipientSignature,
   type NotificationDraft,
   type NotificationWriteClient,
 } from "@/db/notification-write-queries"
@@ -12,200 +11,10 @@ import {
   executeAddonAsyncWaterfallHook,
 } from "@/addons-host/runtime/hooks"
 import { enqueueBackgroundJob, registerBackgroundJobHandler } from "@/lib/background-jobs"
-import { logError, logInfo } from "@/lib/logger"
+import { logError } from "@/lib/logger"
 import { notificationEventBus } from "@/lib/notification-event-bus"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
-import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
-
-interface SystemNotificationWebhookPayload {
-  event: "system.notification.created"
-  notification: {
-    id: string
-    type: "SYSTEM"
-    title: string
-    content: string
-    relatedType: RelatedType
-    relatedId: string
-    createdAt: string
-    inboxPath: string
-  }
-  recipient: {
-    userId: number
-  }
-}
-
-const DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_TIMEOUT_MS = 5_000
-const DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_MAX_ATTEMPTS = 4
-const DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_RETRY_BASE_MS = 15_000
-const DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_RETRY_MAX_MS = 5 * 60 * 1_000
-
-function parseIntegerConfig(rawValue: string | undefined, fallback: number, min: number, max: number) {
-  const parsed = Number.parseInt(String(rawValue ?? ""), 10)
-
-  if (!Number.isFinite(parsed)) {
-    return fallback
-  }
-
-  return Math.min(max, Math.max(min, parsed))
-}
-
-function getSystemNotificationWebhookTimeoutMs() {
-  return parseIntegerConfig(
-    process.env.SYSTEM_NOTIFICATION_WEBHOOK_TIMEOUT_MS,
-    DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_TIMEOUT_MS,
-    1_000,
-    60_000,
-  )
-}
-
-function getSystemNotificationWebhookMaxAttempts() {
-  return parseIntegerConfig(
-    process.env.SYSTEM_NOTIFICATION_WEBHOOK_MAX_ATTEMPTS,
-    DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_MAX_ATTEMPTS,
-    1,
-    10,
-  )
-}
-
-function getSystemNotificationWebhookRetryBaseMs() {
-  return parseIntegerConfig(
-    process.env.SYSTEM_NOTIFICATION_WEBHOOK_RETRY_BASE_MS,
-    DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_RETRY_BASE_MS,
-    1_000,
-    60 * 60 * 1_000,
-  )
-}
-
-function getSystemNotificationWebhookRetryMaxMs() {
-  return parseIntegerConfig(
-    process.env.SYSTEM_NOTIFICATION_WEBHOOK_RETRY_MAX_MS,
-    DEFAULT_SYSTEM_NOTIFICATION_WEBHOOK_RETRY_MAX_MS,
-    5_000,
-    24 * 60 * 60 * 1_000,
-  )
-}
-
-function resolveSystemNotificationWebhookRetryDelayMs(attempt: number) {
-  const baseDelayMs = getSystemNotificationWebhookRetryBaseMs()
-  const retryDelayMs = baseDelayMs * Math.max(1, 2 ** Math.max(0, attempt - 1))
-  return Math.min(getSystemNotificationWebhookRetryMaxMs(), retryDelayMs)
-}
-
-function buildSystemNotificationWebhookPayload(input: {
-  id: string
-  userId: number
-  title: string
-  content: string
-  relatedType: RelatedType
-  relatedId: string
-  createdAt: Date
-}): SystemNotificationWebhookPayload {
-  return {
-    event: "system.notification.created",
-    notification: {
-      id: input.id,
-      type: "SYSTEM",
-      title: input.title,
-      content: input.content,
-      relatedType: input.relatedType,
-      relatedId: input.relatedId,
-      createdAt: input.createdAt.toISOString(),
-      inboxPath: "/notifications",
-    },
-    recipient: {
-      userId: input.userId,
-    },
-  }
-}
-
-async function postSystemNotificationWebhook(webhookUrl: string, payload: SystemNotificationWebhookPayload) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), getSystemNotificationWebhookTimeoutMs())
-
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      throw new Error(`Webhook responded with ${response.status}`)
-    }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-async function deliverSystemNotificationWebhook(input: {
-  id: string
-  userId: number
-  title: string
-  content: string
-  relatedType: RelatedType
-  relatedId: string
-  createdAt: Date
-}) {
-  const recipient = await findNotificationWebhookRecipientSignature(input.userId)
-
-  if (!recipient) {
-    return false
-  }
-
-  const profileSettings = resolveUserProfileSettings(recipient.signature)
-  const webhookUrl = profileSettings.notificationWebhookUrl.trim()
-
-  if (!profileSettings.externalNotificationEnabled || !webhookUrl) {
-    return false
-  }
-
-  await postSystemNotificationWebhook(webhookUrl, buildSystemNotificationWebhookPayload(input))
-
-  return true
-}
-
-function enqueueSystemNotificationWebhookDelivery(params: {
-  id: string
-  userId: number
-  title: string
-  content: string
-  relatedType: RelatedType
-  relatedId: string
-  createdAt: Date
-  attempt?: number
-  delayMs?: number
-}) {
-  return enqueueBackgroundJob("notification.dispatch-system-webhook", {
-    id: params.id,
-    userId: params.userId,
-    title: params.title,
-    content: params.content,
-    relatedType: params.relatedType,
-    relatedId: params.relatedId,
-    createdAt: params.createdAt.toISOString(),
-    attempt: Math.max(1, params.attempt ?? 1),
-  }, {
-    delayMs: Math.max(0, params.delayMs ?? 0),
-  })
-}
-
-export async function sendSystemNotificationWebhookTest(params: {
-  userId: number
-  webhookUrl: string
-}) {
-    await postSystemNotificationWebhook(params.webhookUrl, buildSystemNotificationWebhookPayload({
-      id: `test-${Date.now()}`,
-    userId: params.userId,
-    title: "系统通知 Webhook 测试",
-    content: "这是一条测试通知，说明你的站外通知 Webhook 已经可以正常接收系统消息。",
-    relatedType: "ANNOUNCEMENT",
-    relatedId: "webhook-test",
-    createdAt: new Date(),
-  }))
-}
+import { enqueueUserNotificationDeliveries } from "@/lib/user-notification-delivery"
 
 export type { NotificationDraft, NotificationWriteClient }
 
@@ -275,62 +84,6 @@ registerBackgroundJobHandler("notification.create-many", async (payload) => {
   })
 })
 
-registerBackgroundJobHandler("notification.dispatch-system-webhook", async (payload) => {
-  try {
-    const delivered = await deliverSystemNotificationWebhook({
-      id: payload.id,
-      userId: payload.userId,
-      title: payload.title,
-      content: payload.content,
-      relatedType: payload.relatedType,
-      relatedId: payload.relatedId,
-      createdAt: new Date(payload.createdAt),
-    })
-
-    if (delivered) {
-      logInfo({
-        scope: "notification-webhook",
-        action: "deliver",
-        userId: payload.userId,
-        targetId: payload.id,
-        metadata: {
-          attempt: payload.attempt,
-        },
-      })
-    }
-  } catch (error) {
-    const maxAttempts = getSystemNotificationWebhookMaxAttempts()
-    const nextAttempt = payload.attempt + 1
-
-    logError({
-      scope: "notification-webhook",
-      action: "deliver",
-      userId: payload.userId,
-      targetId: payload.id,
-      metadata: {
-        attempt: payload.attempt,
-        maxAttempts,
-      },
-    }, error)
-
-    if (nextAttempt > maxAttempts) {
-      return
-    }
-
-    await enqueueSystemNotificationWebhookDelivery({
-      id: payload.id,
-      userId: payload.userId,
-      title: payload.title,
-      content: payload.content,
-      relatedType: payload.relatedType,
-      relatedId: payload.relatedId,
-      createdAt: new Date(payload.createdAt),
-      attempt: nextAttempt,
-      delayMs: resolveSystemNotificationWebhookRetryDelayMs(payload.attempt),
-    })
-  }
-})
-
 export function enqueueNotification(params: NotificationDraft) {
   return enqueueBackgroundJob("notification.create", params)
 }
@@ -361,17 +114,23 @@ export async function createSystemNotification(params: {
     content: params.content,
   })
 
-  void enqueueSystemNotificationWebhookDelivery({
-    id: notification.id,
+  void enqueueUserNotificationDeliveries({
     userId: notification.userId,
-    title: notification.title,
-    content: notification.content,
-    relatedType: notification.relatedType,
-    relatedId: notification.relatedId,
-    createdAt: notification.createdAt,
+    event: {
+      type: "systemNotification",
+      notification: {
+        id: notification.id,
+        title: notification.title,
+        content: notification.content,
+        relatedType: notification.relatedType,
+        relatedId: notification.relatedId,
+        createdAt: notification.createdAt.toISOString(),
+        inboxPath: "/notifications",
+      },
+    },
   }).catch((error) => {
     logError({
-      scope: "notification-webhook",
+      scope: "user-notification-delivery",
       action: "enqueue",
       userId: notification.userId,
       targetId: notification.id,

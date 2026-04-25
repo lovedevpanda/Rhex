@@ -17,6 +17,7 @@ import {
   matchesBackgroundJob,
 } from "@/lib/background-job-helpers"
 import type { NotificationType, RelatedType } from "@/db/types"
+import type { UserNotificationDeliveryJobPayload } from "@/lib/user-notification-delivery"
 import { logError, logInfo } from "@/lib/logger"
 
 export {
@@ -52,16 +53,8 @@ export interface BackgroundJobPayloadMap {
       content: string
     }>
   }
-  "notification.dispatch-system-webhook": {
-    id: string
-    userId: number
-    title: string
-    content: string
-    relatedType: RelatedType
-    relatedId: string
-    createdAt: string
-    attempt: number
-  }
+  "notification.dispatch-webhook": UserNotificationDeliveryJobPayload
+  "notification.dispatch-email": UserNotificationDeliveryJobPayload
   "follow.notify-new-post": {
     postId: string
   }

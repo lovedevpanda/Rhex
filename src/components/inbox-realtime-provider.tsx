@@ -153,6 +153,10 @@ export function InboxRealtimeProvider({
   }, [])
 
   useEffect(() => {
+    if (!currentUserId) {
+      return
+    }
+
     const browserWindow = window as Window & typeof globalThis & {
       webkitAudioContext?: typeof AudioContext
     }
@@ -202,29 +206,11 @@ export function InboxRealtimeProvider({
       }
     }
 
-    const unlockPromptAudioElement = () => {
-      if (messagePromptAudioUnlockedRef.current) {
-        return
-      }
-
-      messagePromptAudioUnlockedRef.current = true
-      audioElement.volume = 0
-      audioElement.currentTime = 0
-      void audioElement.play()
-        .then(() => {
-          audioElement.pause()
-          audioElement.currentTime = 0
-          audioElement.volume = 1
-        })
-        .catch(() => {
-          messagePromptAudioUnlockedRef.current = false
-          audioElement.volume = 1
-        })
-    }
-
     const unlockPromptAudio = () => {
+      // Avoid pre-playing the real prompt clip here. Mobile Safari can leak
+      // an audible burst even when volume is set to zero.
+      messagePromptAudioUnlockedRef.current = true
       unlockAudioContext()
-      unlockPromptAudioElement()
     }
 
     window.addEventListener("pointerdown", unlockPromptAudio, { passive: true })
@@ -247,7 +233,7 @@ export function InboxRealtimeProvider({
         void audioContext.close().catch(() => undefined)
       }
     }
-  }, [])
+  }, [currentUserId])
 
   const playPromptAudio = useCallback(() => {
     const audioContext = messagePromptAudioContextRef.current
@@ -255,7 +241,7 @@ export function InboxRealtimeProvider({
     const fallbackAudio = messagePromptAudioRef.current
 
     const playFallbackAudio = () => {
-      if (!fallbackAudio) {
+      if (!fallbackAudio || !messagePromptAudioUnlockedRef.current) {
         return
       }
 

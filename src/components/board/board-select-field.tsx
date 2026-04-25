@@ -6,6 +6,7 @@ import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 export interface BoardSelectItem {
@@ -44,6 +45,10 @@ export function BoardSelectField({
     () => boardOptions.flatMap((group) => group.items.map((item) => ({ ...item, zone: group.zone }))),
     [boardOptions],
   )
+  const selectedBoard = value
+    ? allBoards.find((item) => item.value === value) ?? null
+    : null
+  const [activeZone, setActiveZone] = useState(selectedBoard?.zone ?? boardOptions[0]?.zone ?? "")
 
   const normalizedQuery = query.trim().toLowerCase()
   const filteredGroups = useMemo(
@@ -62,14 +67,17 @@ export function BoardSelectField({
       .filter((group) => group.items.length > 0),
     [boardOptions, normalizedQuery],
   )
-
-  const selectedBoard = value
-    ? allBoards.find((item) => item.value === value) ?? null
-    : null
+  const activeGroup = filteredGroups.find((group) => group.zone === activeZone) ?? filteredGroups[0] ?? null
+  const visibleBoards = activeGroup?.items ?? []
 
   function closeDialog() {
     setOpen(false)
     setQuery("")
+  }
+
+  function openDialog() {
+    setActiveZone(selectedBoard?.zone ?? boardOptions[0]?.zone ?? "")
+    setOpen(true)
   }
 
   function handleSelect(nextValue: string) {
@@ -83,7 +91,7 @@ export function BoardSelectField({
         type="button"
         onClick={() => {
           if (!disabled) {
-            setOpen(true)
+            openDialog()
           }
         }}
         disabled={disabled}
@@ -114,7 +122,7 @@ export function BoardSelectField({
           </div>
         )}
       >
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <label className="flex items-center gap-2 rounded-full border border-border bg-background px-3">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
@@ -126,48 +134,82 @@ export function BoardSelectField({
             />
           </label>
 
-          <div className="min-h-0 max-h-[min(65dvh,36rem)] space-y-4 overflow-y-auto pr-1">
-            {filteredGroups.length > 0 ? filteredGroups.map((group) => (
-              <section key={group.zone} className="space-y-2">
-                <div className="sticky top-0 z-10 bg-background/95 py-1 text-xs font-medium tracking-wide text-muted-foreground backdrop-blur-sm">
-                  {group.zone}
+          {filteredGroups.length > 0 ? (
+            <div className="grid min-h-[min(65dvh,34rem)] grid-cols-[9.5rem_minmax(0,1fr)] gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+              <div className="flex min-h-0 flex-col rounded-2xl border border-border bg-card/60">
+                <div className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground">
+                  分区
                 </div>
-                <div className="space-y-2">
-                  {group.items.map((item) => {
-                    const active = item.value === value
-                    return (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => handleSelect(item.value)}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
-                          active ? "border-foreground/20 bg-accent" : "border-border bg-card hover:bg-accent/50",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{item.label}</p>
-                          <p className="truncate text-xs leading-6 text-muted-foreground">{item.value}</p>
-                        </div>
-                        <span
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="flex flex-col gap-1 p-2">
+                    {filteredGroups.map((group) => {
+                      const zoneActive = group.zone === activeGroup?.zone
+
+                      return (
+                        <Button
+                          key={group.zone}
+                          type="button"
+                          variant={zoneActive ? "secondary" : "ghost"}
+                          onClick={() => setActiveZone(group.zone)}
+                          className="h-auto justify-start rounded-xl px-3 py-2 text-left"
+                        >
+                          <span className="truncate">{group.zone}</span>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <div className="flex min-h-0 flex-col rounded-2xl border border-border bg-card/40">
+                <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{activeGroup?.zone ?? "节点"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {visibleBoards.length} 个可选节点
+                    </p>
+                  </div>
+                </div>
+
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="flex flex-col gap-2 p-3">
+                    {visibleBoards.map((item) => {
+                      const active = item.value === value
+
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => handleSelect(item.value)}
                           className={cn(
-                            "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                            active ? "border-foreground bg-foreground text-background" : "border-border text-transparent",
+                            "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                            active ? "border-foreground/20 bg-accent" : "border-border bg-card hover:bg-accent/50",
                           )}
                         >
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            )) : (
-              <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-                没有找到匹配的节点，请换个关键词试试。
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">{item.label}</p>
+                            <p className="truncate text-xs leading-6 text-muted-foreground">{item.value}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              "inline-flex size-6 shrink-0 items-center justify-center rounded-full border",
+                              active ? "border-foreground bg-foreground text-background" : "border-border text-transparent",
+                            )}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
+              没有找到匹配的节点，请换个关键词试试。
+            </div>
+          )}
         </div>
       </Modal>
     </>

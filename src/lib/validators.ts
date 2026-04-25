@@ -2,6 +2,7 @@ import { normalizePostAuctionMode, normalizePostAuctionPricingRule, type LocalPo
 import { normalizePostType, type LocalPostType } from "@/lib/post-types"
 import { normalizeEmailAddress } from "@/lib/email"
 import { nicknameContainsWhitespace, normalizeNickname } from "@/lib/nickname"
+import { resolveUserNotificationPreferences, type UserNotificationPreferences } from "@/lib/user-notification-preferences"
 import { parseNonNegativeSafeInteger, parsePositiveSafeInteger } from "@/lib/shared/safe-integer"
 import { isHttpUrl } from "@/lib/shared/url"
 
@@ -440,18 +441,17 @@ export function validateNotificationSettingsPayload(body: unknown, options?: {
   requireUrlWhenEnabled?: boolean
   requireUrl?: boolean
 }): ValidationResult<{
-  externalNotificationEnabled: boolean
-  notificationWebhookUrl: string
+  notificationPreferences: UserNotificationPreferences
 }> {
-  const externalNotificationEnabled = Boolean(getField(body, "externalNotificationEnabled"))
-  const notificationWebhookUrl = normalizeString(getField(body, "notificationWebhookUrl"))
+  const notificationPreferences = resolveUserNotificationPreferences(body)
+  const notificationWebhookUrl = notificationPreferences.webhook.url
   const webhookUrlError = validateNotificationWebhookUrl(notificationWebhookUrl)
 
   if (webhookUrlError) {
     return { success: false, message: webhookUrlError }
   }
 
-  if ((options?.requireUrlWhenEnabled ?? true) && externalNotificationEnabled && !notificationWebhookUrl) {
+  if ((options?.requireUrlWhenEnabled ?? true) && notificationPreferences.webhook.enabled && !notificationWebhookUrl) {
     return { success: false, message: "开启站外通知前请先填写 Webhook URL" }
   }
 
@@ -462,8 +462,7 @@ export function validateNotificationSettingsPayload(body: unknown, options?: {
   return {
     success: true,
     data: {
-      externalNotificationEnabled,
-      notificationWebhookUrl,
+      notificationPreferences,
     },
   }
 }

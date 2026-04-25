@@ -45,10 +45,14 @@ export function createNotifications(params: {
   })
 }
 
-export function findNotificationWebhookRecipientSignature(userId: number) {
+export function findUserNotificationDeliveryRecipient(userId: number) {
   return prisma.user.findUnique({
     where: { id: userId },
     select: {
+      username: true,
+      nickname: true,
+      email: true,
+      emailVerifiedAt: true,
       signature: true,
     },
   })

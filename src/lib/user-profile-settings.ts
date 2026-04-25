@@ -1,3 +1,11 @@
+import {
+  createDefaultUserNotificationPreferences,
+  mergeUserNotificationPreferences,
+  resolveUserNotificationPreferences,
+  type UserNotificationPreferences,
+  type UserNotificationPreferencesInput,
+} from "@/lib/user-notification-preferences"
+
 const PROFILE_SETTINGS_KEY = "__profileSettings"
 const RAW_SIGNATURE_KEY = "__rawSignatureText"
 
@@ -9,24 +17,25 @@ export interface UserProfileSettings {
   activityVisibility: UserProfileVisibility
   introductionVisibility: UserProfileVisibility
   introduction: string
-  externalNotificationEnabled: boolean
-  notificationWebhookUrl: string
+  notificationPreferences: UserNotificationPreferences
 }
 
 interface UserProfileSettingsInput {
   activityVisibility?: UserProfileVisibility
   introductionVisibility?: UserProfileVisibility
   introduction?: string
-  externalNotificationEnabled?: boolean
-  notificationWebhookUrl?: string
+  notificationPreferences?: UserNotificationPreferencesInput
 }
 
-const defaultUserProfileSettings: UserProfileSettings = {
-  activityVisibility: "PUBLIC",
-  introductionVisibility: "PUBLIC",
-  introduction: "",
-  externalNotificationEnabled: false,
-  notificationWebhookUrl: "",
+function createDefaultUserProfileSettings(): UserProfileSettings {
+  const notificationPreferences = createDefaultUserNotificationPreferences()
+
+  return {
+    activityVisibility: "PUBLIC",
+    introductionVisibility: "PUBLIC",
+    introduction: "",
+    notificationPreferences,
+  }
 }
 
 export function isUserProfileVisibility(value: unknown): value is UserProfileVisibility {
@@ -87,13 +96,16 @@ function readSignatureEnvelope(signature: string | null | undefined) {
 export function resolveUserProfileSettings(signature: string | null | undefined): UserProfileSettings {
   const { envelope, rawSignatureText } = readSignatureEnvelope(signature)
   const rawSettings = envelope[PROFILE_SETTINGS_KEY]
+  const defaults = createDefaultUserProfileSettings()
 
   if (!isPlainObject(rawSettings)) {
     return {
-      ...defaultUserProfileSettings,
+      ...defaults,
       introduction: rawSignatureText,
     }
   }
+
+  const notificationPreferences = resolveUserNotificationPreferences(rawSettings)
 
   return {
     activityVisibility:
@@ -101,44 +113,39 @@ export function resolveUserProfileSettings(signature: string | null | undefined)
         ? rawSettings.activityVisibility
         : typeof rawSettings.activityVisibilityPublic === "boolean"
           ? mapLegacyVisibilityBoolean(rawSettings.activityVisibilityPublic)
-          : defaultUserProfileSettings.activityVisibility,
+          : defaults.activityVisibility,
     introductionVisibility:
       isUserProfileVisibility(rawSettings.introductionVisibility)
         ? rawSettings.introductionVisibility
-        : defaultUserProfileSettings.introductionVisibility,
+        : defaults.introductionVisibility,
     introduction:
       typeof rawSettings.introduction === "string"
         ? rawSettings.introduction
         : rawSignatureText,
-    externalNotificationEnabled:
-      typeof rawSettings.externalNotificationEnabled === "boolean"
-        ? rawSettings.externalNotificationEnabled
-        : defaultUserProfileSettings.externalNotificationEnabled,
-    notificationWebhookUrl:
-      typeof rawSettings.notificationWebhookUrl === "string"
-        ? rawSettings.notificationWebhookUrl.trim()
-        : defaultUserProfileSettings.notificationWebhookUrl,
+    notificationPreferences,
   }
 }
 
 export function mergeUserProfileSettings(signature: string | null | undefined, input: UserProfileSettingsInput) {
   const { envelope, rawSignatureText } = readSignatureEnvelope(signature)
   const current = resolveUserProfileSettings(signature)
+  const nextNotificationPreferences = mergeUserNotificationPreferences(current.notificationPreferences, input.notificationPreferences)
 
   const nextSettings: UserProfileSettings = {
     activityVisibility: input.activityVisibility ?? current.activityVisibility,
     introductionVisibility: input.introductionVisibility ?? current.introductionVisibility,
     introduction: typeof input.introduction === "string" ? input.introduction.trim() : current.introduction,
-    externalNotificationEnabled: input.externalNotificationEnabled ?? current.externalNotificationEnabled,
-    notificationWebhookUrl:
-      typeof input.notificationWebhookUrl === "string"
-        ? input.notificationWebhookUrl.trim()
-        : current.notificationWebhookUrl,
+    notificationPreferences: nextNotificationPreferences,
   }
 
   return JSON.stringify({
     ...envelope,
     ...(rawSignatureText ? { [RAW_SIGNATURE_KEY]: rawSignatureText } : {}),
-    [PROFILE_SETTINGS_KEY]: nextSettings,
+    [PROFILE_SETTINGS_KEY]: {
+      activityVisibility: nextSettings.activityVisibility,
+      introductionVisibility: nextSettings.introductionVisibility,
+      introduction: nextSettings.introduction,
+      notificationPreferences: nextSettings.notificationPreferences,
+    },
   })
 }

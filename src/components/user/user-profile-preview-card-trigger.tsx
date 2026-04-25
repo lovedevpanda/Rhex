@@ -38,6 +38,11 @@ interface UserProfilePreviewCardTriggerProps {
 
 const previewDataCache = new Map<string, UserPreviewCardData>()
 
+function getInitialPreviewState(username: string): PreviewFetchState {
+  const cached = previewDataCache.get(username)
+  return cached ? { username, status: "loaded", data: cached } : { username, status: "idle" }
+}
+
 export function UserProfilePreviewCardTrigger({
   username,
   displayName,
@@ -51,17 +56,18 @@ export function UserProfilePreviewCardTrigger({
   side = "bottom",
 }: UserProfilePreviewCardTriggerProps) {
   const [open, setOpen] = useState(false)
-  const [state, setState] = useState<PreviewFetchState>(() => {
-    const cached = previewDataCache.get(username)
-    return cached ? { username, status: "loaded", data: cached } : { username, status: "idle" }
-  })
+  const [state, setState] = useState<PreviewFetchState>(() => getInitialPreviewState(username))
   const inflightUsernameRef = useRef<string | null>(null)
   const cachedPreview = previewDataCache.get(username)
-  const resolvedState = state.username === username
-    ? state
-    : cachedPreview
-      ? { username, status: "loaded" as const, data: cachedPreview }
+  const resolvedState = cachedPreview
+    ? { username, status: "loaded" as const, data: cachedPreview }
+    : state.username === username
+      ? state
       : { username, status: "idle" as const }
+
+  useEffect(() => {
+    setState(getInitialPreviewState(username))
+  }, [username])
 
   useEffect(() => {
     if (!open || cachedPreview || inflightUsernameRef.current === username) {
@@ -146,7 +152,7 @@ export function UserProfilePreviewCardTrigger({
         side={side}
         align={align}
         sideOffset={6}
-        className={cn("w-[min(16.64rem,calc(100vw-1rem))] gap-0 overflow-hidden rounded-[14px] p-0", className)}
+        className={cn("w-[min(18.3rem,calc(100vw-0.5rem))] gap-0 overflow-hidden rounded-[14px] p-0", className)}
       >
         {resolvedState.status === "loaded" ? (
           <UserProfilePreviewCardContent data={resolvedState.data} />
@@ -163,8 +169,8 @@ export function UserProfilePreviewCardTrigger({
 function UserProfilePreviewCardSkeleton({ displayName }: { displayName: string }) {
   return (
     <div className="flex flex-col gap-2.5 p-2.5">
-      <div className="grid grid-cols-[76px_minmax(0,1fr)] items-start gap-2">
-        <div className="flex w-[76px] flex-col items-start gap-1.5">
+      <div className="grid grid-cols-[68px_minmax(0,1fr)] items-start gap-1.5">
+        <div className="flex w-[68px] flex-col items-start gap-1.5">
           <Skeleton className="size-16 rounded-xl" />
           <div className="flex w-full flex-wrap items-center justify-start gap-1">
             <Skeleton className="size-5 rounded-full" />
@@ -178,7 +184,7 @@ function UserProfilePreviewCardSkeleton({ displayName }: { displayName: string }
             <div className="mt-1.5 flex items-center gap-1.5">
               <Skeleton className="h-3.5 w-14" />
               <Skeleton className="h-3.5 w-14" />
-              <Skeleton className="h-6 w-12 rounded-full" />
+              <Skeleton className="size-6 rounded-full" />
             </div>
             <div className="mt-1.5 flex items-center gap-1.5">
               <Skeleton className="h-3.5 w-24" />
@@ -300,8 +306,8 @@ function PreviewInlineStat({
       title={`${formattedValue} ${label}`}
       className="inline-flex min-w-0 items-baseline gap-1 overflow-hidden whitespace-nowrap"
     >
-      <span className="truncate font-semibold tabular-nums text-foreground">{formattedValue}</span>
-      <span className="shrink-0">{label}</span>
+      <span className="shrink-0 font-semibold tabular-nums text-foreground">{formattedValue}</span>
+      <span className="min-w-0 truncate">{label}</span>
     </span>
   )
 }
@@ -348,8 +354,8 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
 
   return (
     <div className="flex flex-col gap-2.5 p-2.5">
-      <div className="grid grid-cols-[76px_minmax(0,1fr)] items-start gap-2">
-        <div className="flex w-[76px] flex-col items-start gap-1.5">
+      <div className="grid grid-cols-[68px_minmax(0,1fr)] items-start gap-1.5">
+        <div className="flex w-[68px] flex-col items-start gap-1.5">
           <UserAvatar
             name={user.displayName}
             avatarPath={user.avatarPath}
@@ -411,8 +417,7 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
                     initialFollowed={data.follow.initialFollowed}
                     activeLabel="取关"
                     inactiveLabel="关注"
-                    showLabel
-                    className="h-6 shrink-0 whitespace-nowrap gap-1 rounded-full px-2 text-[10px]"
+                    className="size-6 shrink-0 justify-center rounded-full p-0"
                     onFollowStateChange={({ followed, changed }) => {
                       if (!changed) {
                         return
@@ -423,7 +428,7 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
                   />
                 ) : null}
               </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="mt-1.5 flex flex-nowrap items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
                 <span>Lv.{user.level}</span>
                 {user.levelName ? <span>{user.levelName}</span> : null}
                 <span>#{formatNumber(user.id)}</span>

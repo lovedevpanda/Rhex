@@ -1,13 +1,17 @@
 import type { CurrentUserRecord } from "@/db/current-user"
 
 import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
+import { logError } from "@/lib/logger"
+import { summarizeMessagePreview } from "@/lib/message-media"
 import { sendDirectMessage } from "@/lib/messages"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
+import { enqueueUserNotificationDeliveries } from "@/lib/user-notification-delivery"
+import { getUserDisplayName } from "@/lib/user-display"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { withRequestWriteGuard, withWriteGuard } from "@/lib/write-guard"
 import { createRequestWriteGuardOptions, createWriteGuardOptions } from "@/lib/write-guard-policies"
 
-type MessageExecutionActor = Pick<CurrentUserRecord, "id" | "username" | "nickname" | "status">
+type MessageExecutionActor = Pick<CurrentUserRecord, "id" | "username" | "nickname" | "avatarPath" | "status">
 
 interface ExecuteDirectMessageSendInput {
   recipientId: number
@@ -106,6 +110,38 @@ export async function executeDirectMessageSend(
 
     revalidateUserSurfaceCache(options.sender.id)
     revalidateUserSurfaceCache(input.recipientId)
+
+    void enqueueUserNotificationDeliveries({
+      userId: input.recipientId,
+      event: {
+        type: "privateMessage",
+        message: {
+          id: data.id,
+          conversationId: data.conversationId,
+          content: data.content,
+          preview: summarizeMessagePreview(data.content),
+          createdAt: data.occurredAt,
+          inboxPath: `/messages?conversation=${encodeURIComponent(data.conversationId)}`,
+        },
+        sender: {
+          id: options.sender.id,
+          username: options.sender.username,
+          displayName: getUserDisplayName(options.sender, options.sender.username),
+          avatarPath: options.sender.avatarPath ?? null,
+        },
+      },
+    }).catch((error) => {
+      logError({
+        scope: "user-notification-delivery",
+        action: "enqueue-private-message",
+        userId: options.sender.id,
+        targetId: data.id,
+        metadata: {
+          recipientId: input.recipientId,
+          conversationId: data.conversationId,
+        },
+      }, error)
+    })
 
     if (options.log) {
       logRouteWriteSuccess({

@@ -1,10 +1,11 @@
 "use client"
 
 import { Heart } from "lucide-react"
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 
 import { toast } from "@/components/ui/toast"
 import type { FollowTargetType } from "@/lib/follows"
+import { cn } from "@/lib/utils"
 
 interface FollowToggleButtonProps {
   targetType: FollowTargetType
@@ -30,16 +31,28 @@ export function FollowToggleButton({
   const [followed, setFollowed] = useState(initialFollowed)
   const [isPending, startTransition] = useTransition()
 
+  useEffect(() => {
+    setFollowed(initialFollowed)
+  }, [initialFollowed])
+
   return (
     <button
       type="button"
       disabled={isPending}
       title={followed ? activeLabel : inactiveLabel}
       aria-label={followed ? activeLabel : inactiveLabel}
-      className={`${followed
-        ? "inline-flex items-center gap-1.5 rounded-full border border-border bg-accent px-3 py-1.5 text-xs font-medium text-foreground transition-colors"
-        : "inline-flex items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"
-      } ${isPending ? "cursor-not-allowed opacity-70" : ""} ${className}`.trim()}
+      aria-pressed={followed}
+      className={cn(
+        "inline-flex items-center rounded-full border font-medium transition-colors",
+        showLabel ? "gap-1.5 px-3 py-1.5 text-xs" : "size-8 justify-center p-0",
+        followed
+          ? "border-border bg-accent text-foreground"
+          : showLabel
+            ? "border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-accent hover:text-foreground"
+            : "border-border/70 bg-secondary/40 text-foreground hover:border-border hover:bg-accent hover:text-foreground",
+        isPending && "cursor-not-allowed opacity-70",
+        className,
+      )}
       onClick={() => {
         const desiredFollowed = !followed
 

@@ -6,6 +6,7 @@ import { SettingsTabs } from "@/components/settings/settings-tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { profileTabs } from "@/app/settings/settings-page-loader"
 import type { ProfileTabKey, SettingsPageData } from "@/app/settings/settings-page-loader"
+import { createDefaultUserNotificationPreferences } from "@/lib/user-notification-preferences"
 
 const profileSectionCopy: Record<ProfileTabKey, { title: string; description: string }> = {
   basic: {
@@ -18,7 +19,7 @@ const profileSectionCopy: Record<ProfileTabKey, { title: string; description: st
   },
   notifications: {
     title: "通知设置",
-    description: "在这里配置站外通知开关、Webhook 地址与测试投递。",
+    description: "在这里配置 webhook / 邮箱两个通知渠道，以及不同通知事件的投递偏好。",
   },
   accounts: {
     title: "账号绑定",
@@ -77,8 +78,10 @@ export function ProfileSettingsSection({ data }: { data: SettingsPageData }) {
 
         {route.currentProfileTab === "notifications" ? (
           <ProfileNotificationSettings
-            initialExternalNotificationEnabled={dbUser?.externalNotificationEnabled ?? false}
-            initialNotificationWebhookUrl={dbUser?.notificationWebhookUrl ?? ""}
+            initialNotificationPreferences={dbUser?.notificationPreferences ?? createDefaultUserNotificationPreferences()}
+            initialEmail={dbUser?.email ?? null}
+            initialEmailVerified={Boolean(dbUser?.emailVerifiedAt)}
+            emailDeliveryEnabled={settings.smtpEnabled}
           />
         ) : null}
 
