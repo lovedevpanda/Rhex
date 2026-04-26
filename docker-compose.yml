@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bbs}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bbs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-bookworm
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  setup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rhex-app:local
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./addons:/app/addons
+    command: ["pnpm", "run", "setup:prod"]
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rhex-app:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - .env
+    environment:
+      HOSTNAME: ${HOSTNAME:-0.0.0.0}
+      PORT: ${PORT:-3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./addons:/app/addons
+    command: ["pnpm", "run", "start"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rhex-app:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./uploads:/app/uploads
+      - ./addons:/app/addons
+    command: ["pnpm", "run", "worker"]
+
+volumes:
+  postgres_data:
+  redis_data:

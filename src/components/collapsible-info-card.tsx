@@ -17,7 +17,7 @@ interface CategoryPill {
 
 interface CollapsibleInfoCardProps {
   badge: string
-  title: string
+  title?: string
   icon: string
   description: string
   summary: string
@@ -128,7 +128,7 @@ export function CollapsibleInfoCard({
                   <span className="truncate">{summary}</span>
                 </span>
               </div>
-              <h1 className="text-base font-semibold leading-tight text-foreground sm:text-lg">{title}</h1>
+              {title ? <h1 className="text-base font-semibold leading-tight text-foreground sm:text-lg">{title}</h1> : null}
               <p className="min-w-0 text-sm leading-6 text-muted-foreground">{description}</p>
             </div>
           </div>

@@ -12,6 +12,11 @@ const includeEntries = [
   "docs",
   "public",
   "prisma",
+  "docker-compose.yml",
+  
+  ".env.docker.example",
+  "Dockerfile",
+
   "write-guard.config.ts",
   "scripts",
   "package.json",

@@ -184,8 +184,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
               <AddonSlotRenderer slot="board.hero.before" />
               <AddonSurfaceRenderer surface="board.hero" props={{ board, isFollowingBoard, settings }}>
                 <CollapsibleInfoCard
-                  badge="兴趣节点"
-                  title={board.name}
+                  badge={board.name}
                   icon={board.icon}
                   description={board.description}
                   summary={`当前共收录 ${board.count} 篇内容`}
