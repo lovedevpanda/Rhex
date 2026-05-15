@@ -189,7 +189,7 @@ export const adminUserActionHandlers: Record<string, AdminActionDefinition> = {
     const nextNickname = nicknameSafety.sanitizedText
 
     if (currentNickname !== nextNickname) {
-      const matchedNicknameSensitiveWord = findUsernameSensitiveWord(nextNickname, settings)
+      const matchedNicknameSensitiveWord = findUsernameSensitiveWord(validated.data.nickname, settings)
       if (matchedNicknameSensitiveWord) {
         apiError(400, `昵称包含敏感词：${matchedNicknameSensitiveWord}`)
       }

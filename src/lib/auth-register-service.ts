@@ -87,11 +87,19 @@ function isSameUsername(left: string, right: string) {
   return left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
 }
 
-function verifyUsernameSafety(context: RegisterContext) {
-  const matchedWord = findUsernameSensitiveWord(context.payload.username, context.settings)
+function verifyRegistrationSafety(context: RegisterContext) {
+  const { payload, settings } = context
 
-  if (matchedWord) {
-    apiError(400, `用户名包含敏感词：${matchedWord}`)
+  const matchedUsernameWord = findUsernameSensitiveWord(payload.username, settings)
+  if (matchedUsernameWord) {
+    apiError(400, `用户名包含敏感词：${matchedUsernameWord}`)
+  }
+
+  if (payload.nickname) {
+    const matchedNicknameWord = findUsernameSensitiveWord(payload.nickname, settings)
+    if (matchedNicknameWord) {
+      apiError(400, `昵称包含敏感词：${matchedNicknameWord}`)
+    }
   }
 }
 
@@ -277,7 +285,7 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
   }
 
   verifyRequiredRegisterFields(context)
-  verifyUsernameSafety(context)
+  verifyRegistrationSafety(context)
   await verifyRegisterCaptcha(context)
   await ensureRegisterTargetsAvailable(context)
   await verifyRegisterContactCodes(context)

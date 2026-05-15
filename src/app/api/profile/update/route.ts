@@ -215,7 +215,7 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   const nicknameChanged = currentNickname !== nextNickname
 
   if (nicknameChanged) {
-    const matchedNicknameSensitiveWord = findUsernameSensitiveWord(nextNickname, settings)
+    const matchedNicknameSensitiveWord = findUsernameSensitiveWord(hookedNickname, settings)
     if (matchedNicknameSensitiveWord) {
       apiError(400, `昵称包含敏感词：${matchedNicknameSensitiveWord}`)
     }
