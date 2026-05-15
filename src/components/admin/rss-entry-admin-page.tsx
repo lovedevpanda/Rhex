@@ -312,7 +312,7 @@ export function RssEntryAdminPage({ initialData }: RssEntryAdminPageProps) {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground pr-16 sm:pr-20">
           <div className="flex flex-wrap items-center gap-3">
             <span>第 {initialData.pagination.page} / {initialData.pagination.totalPages} 页</span>
             <span>每页 {initialData.pagination.pageSize} 条</span>

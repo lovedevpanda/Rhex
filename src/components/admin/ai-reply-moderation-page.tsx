@@ -210,7 +210,7 @@ export function AiReplyModerationPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between pt-2 pr-16 sm:pr-20">
           <Button
             variant="outline"
             size="sm"

@@ -319,7 +319,7 @@ export function AdminUserList({ data }: AdminUserListProps) {
             </Table>
           )}
         </CardContent>
-        <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+        <CardFooter className="flex flex-wrap items-center justify-between gap-3 pr-16 sm:pr-20">
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>第 {data.pagination.page} / {data.pagination.totalPages} 页</span>
             <span>每页 {data.pagination.pageSize} 条</span>

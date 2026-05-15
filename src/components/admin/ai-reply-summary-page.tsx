@@ -292,7 +292,7 @@ export function AiReplySummaryPage() {
           )}
 
           {pagination.totalPages > 1 ? (
-            <div className="mt-4 flex items-center justify-between text-sm">
+            <div className="mt-4 flex items-center justify-between text-sm pr-16 sm:pr-20">
               <span>
                 第 {pagination.page} / {pagination.totalPages} 页（共 {pagination.total} 条）
               </span>

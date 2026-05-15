@@ -68,33 +68,16 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
 export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
   const requestIp = getRequestIp(request)
   const body = await readJsonBody(request)
-  const ids = Array.isArray(body.ids) ? body.ids : [requireStringField(body, "id", "缺少规则ID")]
+  const id = requireStringField(body, "id", "缺少规则ID")
 
-  if (ids.length === 0) {
-    apiError(400, "未选择任何规则")
-  }
-
-  const updateData: any = {}
-  if (body.status !== undefined) updateData.status = Boolean(body.status)
-  if (body.actionType !== undefined) updateData.actionType = normalizeSensitiveActionType(String(body.actionType).toUpperCase())
-  if (body.replacement !== undefined) updateData.replacement = String(body.replacement)
-
-  await prisma.sensitiveWord.updateMany({
-    where: { id: { in: ids } },
-    data: updateData,
+  await prisma.sensitiveWord.update({
+    where: { id },
+    data: { status: Boolean(body.status) },
   })
-
   invalidateSensitiveWordRulesCache()
-  await writeAdminLog(
-    adminUser.id,
-    "sensitiveWord.update",
-    "CONFIG",
-    ids.length === 1 ? ids[0] : "batch",
-    `批量更新 ${ids.length} 条敏感词规则`,
-    requestIp
-  )
+  await writeAdminLog(adminUser.id, "sensitiveWord.toggle", "CONFIG", id, `切换敏感词规则状态为 ${Boolean(body.status) ? "启用" : "停用"}`, requestIp)
 
-  return apiSuccess(undefined, "规则已更新")
+  return apiSuccess(undefined, "规则状态已更新")
 }, {
   errorMessage: "更新敏感词规则失败",
   logPrefix: "[api/admin/sensitive-words:PUT] unexpected error",
@@ -103,24 +86,11 @@ export const PUT = createAdminRouteHandler(async ({ request, adminUser }) => {
 
 export const DELETE = createAdminRouteHandler(async ({ request, adminUser }) => {
   const body = await readJsonBody(request)
-  const ids = Array.isArray(body.ids) ? body.ids : [requireStringField(body, "id", "缺少规则ID")]
+  const id = requireStringField(body, "id", "缺少规则ID")
 
-  if (ids.length === 0) {
-    apiError(400, "未选择任何规则")
-  }
-
-  await prisma.sensitiveWord.deleteMany({
-    where: { id: { in: ids } },
-  })
-
+  await prisma.sensitiveWord.delete({ where: { id } })
   invalidateSensitiveWordRulesCache()
-  await writeAdminLog(
-    adminUser.id,
-    "sensitiveWord.delete",
-    "CONFIG",
-    ids.length === 1 ? ids[0] : "batch",
-    `批量删除 ${ids.length} 条敏感词规则`
-  )
+  await writeAdminLog(adminUser.id, "sensitiveWord.delete", "CONFIG", id, "删除敏感词规则")
   return apiSuccess(undefined, "规则已删除")
 }, {
   errorMessage: "删除敏感词规则失败",

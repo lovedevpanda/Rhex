@@ -211,13 +211,13 @@ export function AdminReportCenter({ data }: { data: AdminReportListResult }) {
             </Table>
           )}
         </CardContent>
-        <CardFooter className="flex flex-col items-center justify-center gap-4 py-6">
-          <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
+        <CardFooter className="flex flex-wrap items-center justify-between gap-3 pr-16 sm:pr-20">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>第 {data.pagination.page} / {data.pagination.totalPages} 页</span>
             <span>每页 {data.pagination.pageSize} 条</span>
-            <span>共 {data.pagination.total} 个举报</span>
+            <span>共 {data.pagination.total} 条举报</span>
           </div>
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center gap-2">
             <PaginationLink href={data.pagination.hasPrevPage ? buildPageHref(data.pagination.page - 1) : "#"} disabled={!data.pagination.hasPrevPage}>上一页</PaginationLink>
             <Badge variant="secondary" className="h-8 rounded-full px-3 text-sm">{data.pagination.page}</Badge>
             <PaginationLink href={data.pagination.hasNextPage ? buildPageHref(data.pagination.page + 1) : "#"} disabled={!data.pagination.hasNextPage}>下一页</PaginationLink>
