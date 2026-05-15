@@ -601,44 +601,39 @@ export async function ensureSiteSettings(): Promise<SiteSettingsData> {
 }
 
 function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
-  const {
-    githubClientId,
-    githubClientSecret,
-    googleClientId,
-    googleClientSecret,
-    passkeyRpId,
-    passkeyRpName,
-    passkeyOrigin,
-    turnstileSecretKey,
-    uploadS3AccessKeyId,
-    uploadS3SecretAccessKey,
-    smtpHost,
-    smtpPort,
-    smtpUser,
-    smtpPass,
-    smtpFrom,
-    smtpSecure,
-    usernameSensitiveWords,
-    ...rest
-  } = data
-  void githubClientId
-  void githubClientSecret
-  void googleClientId
-  void googleClientSecret
-  void passkeyRpId
-  void passkeyRpName
-  void passkeyOrigin
-  void turnstileSecretKey
-  void uploadS3AccessKeyId
-  void uploadS3SecretAccessKey
-  void smtpHost
-  void smtpPort
-  void smtpUser
-  void smtpPass
-  void smtpFrom
-  void smtpSecure
-  void usernameSensitiveWords
-  return rest
+  const result = { ...data } as any
+
+  // 明确排除所有敏感字段，防止序列化到前端
+  const sensitiveFields = [
+    "githubClientId",
+    "githubClientSecret",
+    "googleClientId",
+    "googleClientSecret",
+    "passkeyRpId",
+    "passkeyRpName",
+    "passkeyOrigin",
+    "turnstileSecretKey",
+    "uploadS3AccessKeyId",
+    "uploadS3SecretAccessKey",
+    "smtpHost",
+    "smtpPort",
+    "smtpUser",
+    "smtpPass",
+    "smtpFrom",
+    "smtpSecure",
+    "usernameSensitiveWords",
+    "appStateJson",
+    "sensitiveStateJson",
+    "markdownEmojiMapJson",
+    "headerAppLinksJson",
+    "footerLinksJson",
+  ]
+
+  for (const field of sensitiveFields) {
+    delete result[field]
+  }
+
+  return result as SiteSettingsData
 }
 
 const getPersistentSiteSettings = unstable_cache(
