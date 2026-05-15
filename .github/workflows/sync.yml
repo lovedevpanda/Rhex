@@ -2,6 +2,7 @@ name: Upstream Sync
 
 permissions:
     contents: write
+    workflows: write
 
 on:
     schedule:
@@ -17,18 +18,44 @@ jobs:
         steps:
             - name: Checkout target repo
               uses: actions/checkout@v3
+              with:
+                  fetch-depth: 0
 
             - name: Sync Upstream
-              uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
-              with:
-                  target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-                  upstream_sync_repo: lovedevpanda/Rhex
-                  upstream_sync_branch: main
-                  target_sync_branch: main
-                  test_mode: false
-
-            - name: Check for Failure
-              if: failure()
               run: |
-                  echo "[Error] Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork."
-                  exit 1
+                  git config --global user.name 'GitHub Actions'
+                  git config --global user.email 'actions@github.com'
+                  
+                  # 添加上游仓库并获取数据
+                  git remote add upstream https://github.com/lovedevpanda/Rhex.git
+                  git fetch upstream main
+                  
+                  # 记录当前提交，用于后续恢复文件
+                  PRE_SYNC_HASH=$(git rev-parse HEAD)
+                  
+                  # 尝试合并上游分支，强制创建合并提交以便排除文件
+                  if ! git merge upstream/main --no-edit --no-ff; then
+                      echo "[Error] 合并冲突。由于上游仓库的更改与本地更改冲突，自动同步已暂停。请手动处理冲突并同步您的 fork。"
+                      exit 1
+                  fi
+                  
+                  # 检查 HEAD 是否发生变化（即是否有新内容同步过来）
+                  if [ "$(git rev-parse HEAD)" != "$PRE_SYNC_HASH" ]; then
+                      echo "同步成功，正在排除 publish-image.yml ..."
+                      
+                      # 从同步前的提交中恢复 publish-image.yml
+                      git checkout $PRE_SYNC_HASH -- .github/workflows/publish-image.yml || echo "publish-image.yml 不存在，跳过排除。"
+                      
+                      # 如果恢复操作导致了索引变化，则更新合并提交（或创建新提交）
+                      if ! git diff --quiet --cached; then
+                          git commit --amend --no-edit
+                          echo "已成功排除 publish-image.yml 的更改。"
+                      else
+                          echo "publish-image.yml 未发生变化，无需排除。"
+                      fi
+                  else
+                      echo "已经是最新状态，无需同步。"
+                  fi
+                  
+                  # 推送到远程
+                  git push origin main
