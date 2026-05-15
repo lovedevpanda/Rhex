@@ -298,7 +298,7 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         {tab === "reports" ? <AdminReportCenter data={reports!} /> : null}
         {tab === "attachments" ? <AdminAttachmentManager data={attachments!} /> : null}
         {tab === "logs" ? <AdminLogCenter data={logCenter!} /> : null}
-        {tab === "security" ? <AdminSensitiveWordManager data={sensitiveWordResult!} /> : null}
+        {tab === "security" ? <AdminSensitiveWordManager data={sensitiveWordResult!} initialSettings={settings} /> : null}
       </div>
     </AdminShell>
   )
