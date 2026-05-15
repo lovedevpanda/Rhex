@@ -618,6 +618,7 @@ function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
     smtpPass,
     smtpFrom,
     smtpSecure,
+    usernameSensitiveWords,
     ...rest
   } = data
   void githubClientId
@@ -636,6 +637,7 @@ function toPublicSiteSettings(data: ServerSiteSettingsData): SiteSettingsData {
   void smtpPass
   void smtpFrom
   void smtpSecure
+  void usernameSensitiveWords
   return rest
 }
 
