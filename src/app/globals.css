@@ -4,6 +4,7 @@
 
 @import 'tailwindcss' source(none);
 
+
 /* 只扫源码扩展名；禁用自动发现，避免 uploads/ 等二进制被 Oxide scanner 吞入 */
 @source '../**/*.{ts,tsx,js,jsx,mjs,cjs,mdx,md}';
 @source '../../addons/**/*.{ts,tsx,js,jsx,mjs,cjs,mdx,md,html}';
@@ -1474,7 +1475,7 @@
   }
 
   html.theme-switching::view-transition-group(root) {
-    animation-duration: 0.64s;
+    animation-duration: 0.8s;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -1484,7 +1485,7 @@
 
   html.theme-switching::view-transition-old(root),
   html.theme-switching::view-transition-new(root) {
-    animation-duration: 0.64s;
+    animation-duration: 0.8s;
     animation-fill-mode: both;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
     mix-blend-mode: normal;
@@ -1495,11 +1496,11 @@
   }
 
   html.theme-switching-to-dark::view-transition-new(root) {
-    animation-name: theme-switch-reveal-left-to-right;
+    animation-name: theme-switch-reveal-top-to-bottom;
   }
 
   html.theme-switching-to-light::view-transition-new(root) {
-    animation-name: theme-switch-reveal-right-to-left;
+    animation-name: theme-switch-reveal-bottom-to-top;
   }
 
   html.theme-switching::view-transition-old(root) {
@@ -1517,31 +1518,35 @@
     }
   }
 
-  @keyframes theme-switch-reveal-left-to-right {
+  @keyframes theme-switch-reveal-top-to-bottom {
     from {
-      clip-path: inset(0 100% 0 0);
+      clip-path: inset(0 0 100% 0);
+      opacity: 0;
     }
 
     to {
       clip-path: inset(0);
+      opacity: 1;
     }
   }
 
-  @keyframes theme-switch-reveal-right-to-left {
+  @keyframes theme-switch-reveal-bottom-to-top {
     from {
-      clip-path: inset(0 0 0 100%);
+      clip-path: inset(100% 0 0 0);
+      opacity: 0;
     }
 
     to {
       clip-path: inset(0);
+      opacity: 1;
     }
   }
 
   html.theme-switching-fallback,
   html.theme-switching-fallback body {
     transition:
-      background-color 0.42s ease,
-      color 0.42s ease !important;
+      background-color 0.8s ease,
+      color 0.8s ease !important;
   }
 
   @media (prefers-reduced-motion: reduce) {

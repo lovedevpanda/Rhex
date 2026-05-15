@@ -9,7 +9,7 @@ const THEME_SWITCH_TRANSITION_CLASS_NAME = "theme-switching"
 const THEME_SWITCH_TO_DARK_CLASS_NAME = "theme-switching-to-dark"
 const THEME_SWITCH_TO_LIGHT_CLASS_NAME = "theme-switching-to-light"
 const THEME_SWITCH_FALLBACK_CLASS_NAME = "theme-switching-fallback"
-const THEME_SWITCH_TRANSITION_DURATION_MS = 640
+const THEME_SWITCH_TRANSITION_DURATION_MS = 800
 const THEME_SWITCH_MOBILE_BREAKPOINT_PX = 768
 export const DEFAULT_THEME_FONT_FAMILY = "\"Microsoft YaHei\", \"PingFang SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
 export const DEFAULT_THEME_FONT_SIZE = "16px"
@@ -28,7 +28,7 @@ type ThemeViewTransition = {
 type ThemeViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => ThemeViewTransition
 }
-type ThemeSwitchTransitionDirection = "left-to-right" | "right-to-left"
+type ThemeSwitchTransitionDirection = "top-to-bottom" | "bottom-to-top"
 
 interface CustomThemeModeConfig {
   primary: string
@@ -656,7 +656,7 @@ function finishThemeSwitchTransition(token: number, className: string) {
 }
 
 function getThemeSwitchTransitionClassName(direction: ThemeSwitchTransitionDirection) {
-  return direction === "left-to-right" ? THEME_SWITCH_TO_DARK_CLASS_NAME : THEME_SWITCH_TO_LIGHT_CLASS_NAME
+  return direction === "top-to-bottom" ? THEME_SWITCH_TO_DARK_CLASS_NAME : THEME_SWITCH_TO_LIGHT_CLASS_NAME
 }
 
 function shouldSkipThemeSwitchTransition() {
@@ -769,7 +769,7 @@ function writeThemeSetting(storageKey: string, value: string) {
   const currentMode = resolveThemeMode(currentSnapshot.preference)
   const nextPreference = storageKey === THEME_STORAGE_KEY ? resolveStoredThemePreference(value) : currentSnapshot.preference
   const nextMode = resolveThemeMode(nextPreference)
-  const transitionDirection: ThemeSwitchTransitionDirection = nextMode === "dark" ? "left-to-right" : "right-to-left"
+  const transitionDirection: ThemeSwitchTransitionDirection = nextMode === "dark" ? "top-to-bottom" : "bottom-to-top"
   const applyChange = () => {
     window.localStorage.setItem(storageKey, value)
     writeThemeCookie(storageKey, value)
