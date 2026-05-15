@@ -1,5 +1,6 @@
 import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { triggerAiMention } from "@/lib/ai/mention-trigger"
+import { revalidatePostDetailCache } from "@/lib/post-detail-cache"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { updatePostFlow } from "@/lib/post-update-service"
 
@@ -18,6 +19,8 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       vipExpiresAt: currentUser.vipExpiresAt,
     },
   })
+
+  revalidatePostDetailCache({ postId: result.post.id, slug: result.post.slug })
 
   logRouteWriteSuccess({
     scope: "posts-update",

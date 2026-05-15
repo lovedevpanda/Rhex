@@ -11,6 +11,7 @@ import {
 import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { apiError } from "@/lib/api-route"
 import { defineAdminAction, writeAdminActionLog, type AdminActionDefinition } from "@/lib/admin-action-types"
+import { revalidateContentListCaches } from "@/lib/content-list-cache"
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { ensureCanEditBoard, ensureCanManageComment } from "@/lib/moderator-permissions"
 import { createSystemNotification } from "@/lib/notification-writes"
@@ -27,6 +28,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
       reviewedById: context.adminUserId,
       reviewedAt: new Date(),
     })
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
 
     if (comment.userId !== context.adminUserId) {
@@ -59,6 +61,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
       throwOnError: true,
     })
     await deleteCommentPermanently(context.targetId)
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
 
     if (comment.userId !== context.adminUserId) {
@@ -93,6 +96,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
       reviewedById: context.adminUserId,
       reviewedAt: new Date(),
     })
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
 
     if (comment.userId !== context.adminUserId) {
@@ -122,6 +126,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
       reviewedById: context.adminUserId,
       reviewedAt: new Date(),
     })
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
 
     if (comment.userId !== context.adminUserId) {
@@ -160,6 +165,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
       reviewedById: context.adminUserId,
       reviewedAt: new Date(),
     })
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
 
     if (comment.userId !== context.adminUserId) {
@@ -186,6 +192,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
     const board = await findBoardPostingState(context.targetId)
     if (!board) apiError(404, "版块不存在")
     await updateBoardPostingState(context.targetId, !board.allowPost)
+    revalidateContentListCaches()
     expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminModerationActionHandlers["board.togglePosting"].metadata)
     return { message: board.allowPost ? "已关闭发帖" : "已开放发帖" }
@@ -196,6 +203,7 @@ export const adminModerationActionHandlers: Record<string, AdminActionDefinition
     if (!board) apiError(404, "版块不存在")
     const nextStatus = board.status === BoardStatus.HIDDEN ? BoardStatus.ACTIVE : BoardStatus.HIDDEN
     await updateBoardVisibilityState(context.targetId, nextStatus)
+    revalidateContentListCaches()
     expireTaxonomyCacheImmediately()
     await writeAdminActionLog(context, adminModerationActionHandlers["board.hide"].metadata)
     return { message: nextStatus === BoardStatus.HIDDEN ? "版块已隐藏" : "版块已恢复显示" }

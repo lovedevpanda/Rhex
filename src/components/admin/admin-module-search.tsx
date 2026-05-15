@@ -235,7 +235,7 @@ export function AdminModuleSearch({ className }: AdminModuleSearchProps) {
             <CardContent className="max-h-[360px] overflow-y-auto p-2">
               {results.map((item) => (
                 <Link
-                  key={item.href}
+                  key={`${item.href}:${item.category}:${item.label}`}
                   href={item.href}
                   className="block rounded-lg px-3 py-3 transition-colors hover:bg-muted"
                   onClick={() => setOpen(false)}

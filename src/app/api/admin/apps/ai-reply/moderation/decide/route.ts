@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/db/client"
 import type { Prisma } from "@/db/types"
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
+import { revalidatePostDetailCache } from "@/lib/post-detail-cache"
 import { expireTaxonomyCacheImmediately } from "@/lib/taxonomy-cache"
 
 const moderationSuggestionDecisionSelect = {
@@ -158,6 +159,11 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   })
 
   revalidateHomeSidebarStatsCache()
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { id: true, slug: true },
+  })
+  revalidatePostDetailCache({ postId, slug: post?.slug })
   expireTaxonomyCacheImmediately()
 
   return apiSuccess({ id, status: "APPROVED" }, "已采纳该建议并应用到帖子")

@@ -1,4 +1,5 @@
-import type { Board, Comment, LotteryCondition, LotteryParticipant, LotteryPrize, LotteryWinner, PollOption, PollVote, Post, PostAppendix, PostAttachment, PostAttachmentSourceType, User } from "@/db/types"
+import type { Comment, LotteryCondition, LotteryParticipant, LotteryPrize, LotteryWinner, PollOption, PollVote, Post, PostAppendix, PostAttachment, PostAttachmentSourceType, User } from "@/db/types"
+import { unstable_cache } from "next/cache"
 
 
 
@@ -8,6 +9,7 @@ import type { AnonymousDisplayIdentity } from "@/lib/post-anonymous"
 import { getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 
 import { getPublicPostContentText, parsePostContentDocument } from "@/lib/post-content"
+import { getPostSeoCacheTag, POST_DETAIL_CACHE_REVALIDATE_SECONDS, POST_SEO_CACHE_TAG } from "@/lib/post-detail-cache"
 import type { PostAuctionSummary } from "@/lib/post-auctions"
 import type { PostRedPacketSummary } from "@/lib/post-red-packets"
 import type { PostTipSummary } from "@/lib/post-tips"
@@ -16,7 +18,8 @@ import { withRuntimeFallback } from "@/lib/runtime-errors"
 import type { SiteTippingGiftItem } from "@/lib/site-settings"
 
 
-import { findEditablePostBySlug, findHomepagePosts, findPostDetailBySlug, findPostSeoBySlug, increasePostViewCount } from "@/db/post-queries"
+import { findEditablePostBySlug, findHomepagePosts, findPostDetailBySlug, findPostSeoBySlug } from "@/db/post-queries"
+import { recordPostViewCount } from "@/lib/post-view-count-buffer"
 
 import { mapListPost } from "@/lib/post-map"
 
@@ -24,9 +27,43 @@ import { mapListPost } from "@/lib/post-map"
 
 
 
+type ListPostBoard = {
+  name: string
+  slug: string
+  iconPath?: string | null
+}
+
+type ListPostAuthor = Pick<User, "id" | "username" | "nickname" | "avatarPath" | "status" | "vipLevel" | "vipExpiresAt"> & {
+  userBadges?: Array<{
+    id: string
+    isDisplayed?: boolean
+    displayOrder?: number
+    badge: {
+      id: string
+      code: string
+      name: string
+      description?: string | null
+      color: string
+      iconText?: string | null
+      status: boolean
+    }
+  }>
+  verificationApplications?: Array<{
+    customIconText?: string | null
+    customDescription?: string | null
+    type: {
+      id: string
+      name: string
+      color: string
+      iconText?: string | null
+      description?: string | null
+    }
+  }>
+}
+
 interface PostDetailRelations {
-  board: Board
-  author: User
+  board: ListPostBoard
+  author: ListPostAuthor
   acceptedComment: (Comment & { user: User }) | null
   pollOptions: Array<PollOption & { votes: PollVote[] }>
   lotteryPrizes: Array<LotteryPrize & { winners: Array<LotteryWinner & { user: Pick<User, "username" | "nickname" | "avatarPath"> }> }>
@@ -215,7 +252,7 @@ export interface SitePostItem {
 }
 
 
-function mapDatabasePost(post: Post & { board: Board; author: User }, anonymousMaskIdentity: AnonymousDisplayIdentity | null = null): SitePostItem {
+function mapDatabasePost(post: Post & { board: ListPostBoard; author: ListPostAuthor }, anonymousMaskIdentity: AnonymousDisplayIdentity | null = null): SitePostItem {
   return mapListPost(post, anonymousMaskIdentity)
 }
 
@@ -410,32 +447,44 @@ export async function getEditablePostBySlug(slug: string) {
 }
 
 
+async function readPostSeoBySlug(slug: string): Promise<PostSeoData | null> {
+  const post = await findPostSeoBySlug(slug)
+
+  if (!post) {
+    return null
+  }
+
+  const parsed = parsePostContentDocument(post.content)
+  const fallbackDescription = parsed.blocks
+    .filter((block) => block.type === "PUBLIC")
+    .map((block) => block.summary || block.text)
+    .join("\n\n")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160)
+
+  return {
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    description: post.summary?.trim() || fallbackDescription,
+  }
+}
+
+async function getPersistentPostSeoBySlug(slug: string) {
+  return unstable_cache(
+    async () => readPostSeoBySlug(slug),
+    [POST_SEO_CACHE_TAG, slug],
+    {
+      tags: [POST_SEO_CACHE_TAG, getPostSeoCacheTag(slug)],
+      revalidate: POST_DETAIL_CACHE_REVALIDATE_SECONDS,
+    },
+  )()
+}
+
 export async function getPostSeoBySlug(slug: string): Promise<PostSeoData | null> {
-
   try {
-    const post = await findPostSeoBySlug(slug)
-
-    if (!post) {
-      return null
-    }
-
-    const parsed = parsePostContentDocument(post.content)
-    const fallbackDescription = parsed.blocks
-      .filter((block) => block.type === "PUBLIC")
-      .map((block) => block.summary || block.text)
-      .join("\n\n")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 160)
-
-    return {
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      description: post.summary?.trim() || fallbackDescription,
-    }
-
-
+    return await getPersistentPostSeoBySlug(slug)
   } catch (error) {
     console.error(error)
     return null
@@ -447,7 +496,7 @@ export async function getPostSeoBySlug(slug: string): Promise<PostSeoData | null
 
 export async function incrementPostViewCount(postId: string) {
   await withRuntimeFallback(async () => {
-    await increasePostViewCount(postId)
+    await recordPostViewCount(postId)
   }, {
     area: "posts",
     action: "incrementPostViewCount",

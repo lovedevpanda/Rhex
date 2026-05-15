@@ -7,6 +7,7 @@ import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import "@/lib/ai/capabilities/bridge"
 import { triggerAiMention } from "@/lib/ai/mention-trigger"
 import { apiError } from "@/lib/api-route"
+import { revalidateContentListCaches } from "@/lib/content-list-cache"
 import { enqueueNewPostFollowNotifications } from "@/lib/follow-notifications"
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
 import { enqueueEvaluateUserLevelProgress } from "@/lib/level-system"
@@ -99,6 +100,7 @@ export async function executePostCreation(body: unknown, options: ExecutePostCre
 
   revalidateUserSurfaceCache(result.author.id)
   if (!result.shouldPending) {
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
     expireTaxonomyCacheImmediately()
     void recordApprovedPostTaskEvent({

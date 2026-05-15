@@ -1068,6 +1068,8 @@ model Comment {
   reviewedById          Int?
   reviewedAt            DateTime?              @db.Timestamptz(3)
   likeCount             Int                    @default(0)
+  tipCount              Int                    @default(0)
+  tipTotalPoints        Int                    @default(0)
   isAcceptedAnswer      Boolean                @default(false)
   isPinnedByAuthor      Boolean                @default(false)
   acceptedAt            DateTime?              @db.Timestamptz(3)
@@ -1083,6 +1085,8 @@ model Comment {
   quotedReplies         Comment[]              @relation("CommentReplyTargets")
   reviewer              User?                  @relation("commentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   likes                 Like[]
+  tips                  PostTip[]
+  giftEvents            PostGiftEvent[]
   pollVotes             PollVote[]
   lotteryParticipants   LotteryParticipant[]
   redPacketClaims       PostRedPacketClaim[]
@@ -2196,18 +2200,22 @@ model AutoCategorizeTask {
 model PostTip {
   id         String   @id @default(cuid())
   postId     String
+  commentId  String?
   senderId   Int
   receiverId Int
   amount     Int
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
   sender     User     @relation("PostTipSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver   User     @relation("PostTipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([postId])
+  @@index([commentId])
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
   @@index([postId, senderId, createdAt])
+  @@index([commentId, senderId, createdAt])
 }
 
 model PostAuction {
@@ -2294,6 +2302,7 @@ model GiftDefinition {
 model PostGiftEvent {
   id               String   @id
   postId           String
+  commentId        String?
   senderId         Int
   receiverId       Int
   giftId           String
@@ -2304,14 +2313,17 @@ model PostGiftEvent {
   totalPoints      Int
   createdAt        DateTime @default(now()) @db.Timestamptz(3)
   post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment          Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
   sender           User     @relation("PostGiftSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver         User     @relation("PostGiftReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([postId, createdAt])
+  @@index([commentId, createdAt])
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
   @@index([giftId, createdAt])
   @@index([postId, senderId, createdAt])
+  @@index([commentId, senderId, createdAt])
 }
 
 model PostGiftStats {

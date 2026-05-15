@@ -32,6 +32,7 @@ interface PostGiftEventDelegate {
     data: {
       id: string
       postId: string
+      commentId?: string | null
       senderId: number
       receiverId: number
       giftId: string
@@ -222,6 +223,7 @@ export async function syncGiftDefinitions(input: SiteTippingGiftItem[], client?:
 export async function countPostGiftEventsBySender(params: {
   senderId: number
   postId?: string
+  commentId?: string | null
   start?: Date
   end?: Date
   client?: PostGiftQueryClient
@@ -231,6 +233,7 @@ export async function countPostGiftEventsBySender(params: {
     FROM "PostGiftEvent"
     WHERE "senderId" = ${params.senderId}
       ${params.postId ? Prisma.sql`AND "postId" = ${params.postId}` : Prisma.empty}
+      ${params.commentId !== undefined ? Prisma.sql`AND "commentId" IS NOT DISTINCT FROM ${params.commentId}` : Prisma.empty}
       ${params.start ? Prisma.sql`AND "createdAt" >= ${params.start}` : Prisma.empty}
       ${params.end ? Prisma.sql`AND "createdAt" < ${params.end}` : Prisma.empty}
   `)
@@ -248,6 +251,28 @@ export async function listPostGiftSupportAggregates(postId: string, limit = 10, 
       SUM("totalPoints")::int AS "totalAmount"
     FROM "PostGiftEvent"
     WHERE "postId" = ${postId}
+      AND "commentId" IS NULL
+    GROUP BY "senderId"
+    ORDER BY SUM("totalPoints") DESC, MAX("createdAt") DESC
+    LIMIT ${Math.max(1, limit)}
+  `)
+
+  return rows.map((row) => ({
+    senderId: parseNumberValue(row.senderId),
+    totalAmount: parseNumberValue(row.totalAmount),
+  }))
+}
+
+export async function listCommentGiftSupportAggregates(commentId: string, limit = 10, client?: PostGiftQueryClient): Promise<PostGiftSupportAggregateRow[]> {
+  const rows = await resolveClient(client).$queryRaw<Array<{
+    senderId: number | string | bigint
+    totalAmount: number | string | bigint
+  }>>(Prisma.sql`
+    SELECT
+      "senderId",
+      SUM("totalPoints")::int AS "totalAmount"
+    FROM "PostGiftEvent"
+    WHERE "commentId" = ${commentId}
     GROUP BY "senderId"
     ORDER BY SUM("totalPoints") DESC, MAX("createdAt") DESC
     LIMIT ${Math.max(1, limit)}
@@ -293,6 +318,41 @@ export async function listPostGiftStats(postId: string, client?: PostGiftQueryCl
   }))
 }
 
+export async function listCommentGiftStats(commentId: string, client?: PostGiftQueryClient): Promise<PostGiftStatItem[]> {
+  const rows = await resolveClient(client).$queryRaw<Array<{
+    giftId: string
+    giftNameSnapshot: string
+    giftIconSnapshot: string
+    unitPrice: number | string | bigint
+    totalCount: number | string | bigint
+    totalPoints: number | string | bigint
+    lastSentAt: Date | string
+  }>>(Prisma.sql`
+    SELECT
+      "giftId",
+      MAX("giftNameSnapshot") AS "giftNameSnapshot",
+      MAX("giftIconSnapshot") AS "giftIconSnapshot",
+      MAX("unitPrice")::int AS "unitPrice",
+      SUM("quantity")::int AS "totalCount",
+      SUM("totalPoints")::int AS "totalPoints",
+      MAX("createdAt") AS "lastSentAt"
+    FROM "PostGiftEvent"
+    WHERE "commentId" = ${commentId}
+    GROUP BY "giftId"
+    ORDER BY SUM("quantity") DESC, MAX("createdAt") DESC
+  `)
+
+  return rows.map((row) => ({
+    giftId: row.giftId,
+    giftName: row.giftNameSnapshot,
+    giftIcon: row.giftIconSnapshot,
+    unitPrice: parseNumberValue(row.unitPrice),
+    totalCount: parseNumberValue(row.totalCount),
+    totalPoints: parseNumberValue(row.totalPoints),
+    lastSentAt: parseDateValue(row.lastSentAt).toISOString(),
+  }))
+}
+
 export async function listRecentPostGiftEvents(postId: string, limit = 12, client?: PostGiftQueryClient): Promise<PostGiftRecentEventItem[]> {
   const rows = await resolveClient(client).$queryRaw<Array<{
     id: string
@@ -313,6 +373,41 @@ export async function listRecentPostGiftEvents(postId: string, limit = 12, clien
     INNER JOIN "User" AS "user"
       ON "user"."id" = event."senderId"
     WHERE event."postId" = ${postId}
+      AND event."commentId" IS NULL
+    ORDER BY event."createdAt" DESC
+    LIMIT ${Math.max(1, limit)}
+  `)
+
+  return rows.map((row) => ({
+    id: row.id,
+    giftId: row.giftId,
+    senderId: parseNumberValue(row.senderId),
+    senderName: row.senderName,
+    senderAvatarPath: row.senderAvatarPath,
+    createdAt: parseDateValue(row.createdAt).toISOString(),
+  }))
+}
+
+export async function listRecentCommentGiftEvents(commentId: string, limit = 12, client?: PostGiftQueryClient): Promise<PostGiftRecentEventItem[]> {
+  const rows = await resolveClient(client).$queryRaw<Array<{
+    id: string
+    giftId: string
+    senderId: number | string | bigint
+    senderName: string
+    senderAvatarPath: string | null
+    createdAt: Date | string
+  }>>(Prisma.sql`
+    SELECT
+      event."id",
+      event."giftId",
+      event."senderId",
+      COALESCE(NULLIF("user"."nickname", ''), "user"."username") AS "senderName",
+      "user"."avatarPath" AS "senderAvatarPath",
+      event."createdAt"
+    FROM "PostGiftEvent" AS event
+    INNER JOIN "User" AS "user"
+      ON "user"."id" = event."senderId"
+    WHERE event."commentId" = ${commentId}
     ORDER BY event."createdAt" DESC
     LIMIT ${Math.max(1, limit)}
   `)
@@ -330,6 +425,7 @@ export async function listRecentPostGiftEvents(postId: string, limit = 12, clien
 export async function createPostGiftEvent(params: {
   tx: Prisma.TransactionClient
   postId: string
+  commentId?: string | null
   senderId: number
   receiverId: number
   gift: SiteTippingGiftItem
@@ -344,6 +440,7 @@ export async function createPostGiftEvent(params: {
     data: {
       id: crypto.randomUUID(),
       postId: params.postId,
+      commentId: params.commentId,
       senderId: params.senderId,
       receiverId: params.receiverId,
       giftId: params.gift.id,
@@ -354,6 +451,13 @@ export async function createPostGiftEvent(params: {
       totalPoints,
     },
   })
+
+  if (params.commentId) {
+    return {
+      quantity,
+      totalPoints,
+    }
+  }
 
   await tx.postGiftStats.upsert({
     where: {

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { AdminAnnouncementManager } from "@/components/admin/admin-announcement-manager"
+import { AdminAttachmentManager } from "@/components/admin/admin-attachment-manager"
 import { AdminModuleSearch } from "@/components/admin/admin-module-search"
 import { AdminOverviewDashboard } from "@/components/admin/admin-overview-dashboard"
 import { AdminPillTabs } from "@/components/admin/admin-pill-tabs"
@@ -33,6 +34,7 @@ import { resolveAdminSettingsRoute } from "@/lib/admin-settings-navigation"
 import { isLocalPostType } from "@/lib/post-types"
 
 import { getAdminLogCenter } from "@/lib/admin-logs"
+import { getAdminAttachmentManagement } from "@/lib/admin-attachments"
 import { getAdminUsers } from "@/lib/admin-users"
 import { getAllBadges, type BadgeEffectRuleItem, type BadgeItem, type BadgeRuleItem } from "@/lib/badges"
 import { getLevelDefinitions } from "@/lib/level-system"
@@ -128,8 +130,13 @@ export default async function AdminPage(props: PageProps<"/admin">) {
   const currentLogBucketType = readSearchParam(searchParams?.logBucketType) ?? "ALL"
   const currentLogPage = readSearchParam(searchParams?.logPage) ?? "1"
   const currentLogPageSize = readSearchParam(searchParams?.logPageSize) ?? "20"
+  const currentAttachmentKeyword = readSearchParam(searchParams?.attachmentKeyword) ?? ""
+  const currentAttachmentBucketType = readSearchParam(searchParams?.attachmentBucketType) ?? "ALL"
+  const currentAttachmentReferenceStatus = readSearchParam(searchParams?.attachmentReferenceStatus) ?? "ALL"
+  const currentAttachmentPage = readSearchParam(searchParams?.attachmentPage) ?? "1"
+  const currentAttachmentPageSize = readSearchParam(searchParams?.attachmentPageSize) ?? "20"
 
-  const [dashboardData, structureData, adminUsers, filteredPosts, filteredComments, levelDefinitions, badges, announcements, customPages, reports, sensitiveWordResult, logCenter, verificationAdminData] = await Promise.all([
+  const [dashboardData, structureData, adminUsers, filteredPosts, filteredComments, levelDefinitions, badges, announcements, customPages, reports, attachments, sensitiveWordResult, logCenter, verificationAdminData] = await Promise.all([
     admin.role === "ADMIN" && tab === "overview"
       ? getAdminDashboardData()
       : Promise.resolve<Awaited<ReturnType<typeof getAdminDashboardData>> | null>(null),
@@ -183,6 +190,15 @@ export default async function AdminPage(props: PageProps<"/admin">) {
     admin.role === "ADMIN" && tab === "reports"
       ? getAdminReports({ page: Number(currentReportPage), pageSize: Number(currentReportPageSize) })
       : Promise.resolve<Awaited<ReturnType<typeof getAdminReports>> | null>(null),
+    admin.role === "ADMIN" && tab === "attachments"
+      ? getAdminAttachmentManagement({
+        keyword: currentAttachmentKeyword || undefined,
+        bucketType: currentAttachmentBucketType,
+        referenceStatus: currentAttachmentReferenceStatus,
+        page: Number(currentAttachmentPage),
+        pageSize: Number(currentAttachmentPageSize),
+      })
+      : Promise.resolve<Awaited<ReturnType<typeof getAdminAttachmentManagement>> | null>(null),
     admin.role === "ADMIN" && tab === "security"
       ? getSensitiveWordPage({ page: Number(currentSecurityPage), pageSize: Number(currentSecurityPageSize) })
       : Promise.resolve<Awaited<ReturnType<typeof getSensitiveWordPage>> | null>(null),
@@ -280,6 +296,7 @@ export default async function AdminPage(props: PageProps<"/admin">) {
         {tab === "announcements" ? <AdminAnnouncementManager initialItems={announcements} /> : null}
         {tab === "custom-pages" ? <AdminCustomPageManager initialItems={customPages} /> : null}
         {tab === "reports" ? <AdminReportCenter data={reports!} /> : null}
+        {tab === "attachments" ? <AdminAttachmentManager data={attachments!} /> : null}
         {tab === "logs" ? <AdminLogCenter data={logCenter!} /> : null}
         {tab === "security" ? <AdminSensitiveWordManager data={sensitiveWordResult!} /> : null}
       </div>

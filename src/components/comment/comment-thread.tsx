@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { GitBranch, List } from "lucide-react"
 
-import { CommentThreadCommentItem, CommentThreadReplyItem } from "@/components/comment/comment-thread-items"
+import { CommentThreadCommentItem, CommentThreadReplyItem, type CommentThreadTippingConfig } from "@/components/comment/comment-thread-items"
 import { CommentThreadReplyBox } from "@/components/comment/comment-thread-shared"
 
 import { updateBrowsingPreferences } from "@/lib/browsing-preferences"
@@ -21,6 +21,7 @@ interface CommentThreadProps {
   postId: string
   postPath: string
   pointName?: string
+  tipping?: CommentThreadTippingConfig
   canReply: boolean
   currentPage: number
   pageSize: number
@@ -60,7 +61,7 @@ function shouldIgnoreReplyShortcut(target: EventTarget | null) {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
 }
 
-export function CommentThread({ threadId, comments, flatComments = [], postId, postPath, pointName, canReply, currentPage, pageSize, total, currentSort, currentDisplayMode, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, anonymousReplyEnabled = false, anonymousReplyDefaultChecked = false, anonymousReplySwitchVisible = false, isAdmin = false, adminRole = null, canPinComment = false, markdownEmojiMap, commentEditWindowMinutes = 5, initialVisibleReplies = 10 }: CommentThreadProps) {
+export function CommentThread({ threadId, comments, flatComments = [], postId, postPath, pointName, tipping, canReply, currentPage, pageSize, total, currentSort, currentDisplayMode, currentUserId, canAcceptAnswer = false, commentsVisibleToAuthorOnly = false, anonymousReplyEnabled = false, anonymousReplyDefaultChecked = false, anonymousReplySwitchVisible = false, isAdmin = false, adminRole = null, canPinComment = false, markdownEmojiMap, commentEditWindowMinutes = 5, initialVisibleReplies = 10 }: CommentThreadProps) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -780,6 +781,7 @@ export function CommentThread({ threadId, comments, flatComments = [], postId, p
                 index={index}
                 postPath={postPath}
                 pointName={pointName}
+                tipping={tipping}
                 canReply={canReply}
                 currentUserId={currentUserId}
             canAcceptAnswer={canAcceptAnswerState}
@@ -817,6 +819,7 @@ export function CommentThread({ threadId, comments, flatComments = [], postId, p
                 index={index}
                 postPath={postPath}
                 pointName={pointName}
+                tipping={tipping}
                 canReply={canReply}
                 currentUserId={currentUserId}
                 canAcceptAnswer={canAcceptAnswerState}
@@ -857,6 +860,7 @@ export function CommentThread({ threadId, comments, flatComments = [], postId, p
               referenceCommentId={entry.reply.replyToCommentId ?? entry.reply.parentCommentId}
               parentCommentHref={entry.reply.replyToCommentId ? `?sort=${currentSort}&page=${entry.reply.replyToCommentPage ?? 1}&view=flat&highlight=${entry.reply.replyToCommentId}#comment-${entry.reply.replyToCommentId}` : entry.reply.parentCommentId ? `?sort=${currentSort}&page=${entry.reply.parentCommentPage ?? 1}&view=flat&highlight=${entry.reply.parentCommentId}#comment-${entry.reply.parentCommentId}` : undefined}
               pointName={pointName}
+              tipping={tipping}
               canReply={canReply}
               currentUserId={currentUserId}
               isAdmin={isAdmin}

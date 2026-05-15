@@ -18,6 +18,11 @@ import { cn } from "@/lib/utils"
 
 interface PostTipPanelProps {
   postId: string
+  endpoint?: string
+  requestPayload?: Record<string, string | number | boolean | null | undefined>
+  targetLabel?: string
+  triggerLabel?: string
+  supportTargetLabel?: string
   enabled: boolean
   isLoggedIn: boolean
   pointName: string
@@ -100,6 +105,11 @@ const tipSelectionActiveClassName = [
 
 export function PostTipPanel({
   postId,
+  endpoint = "/api/posts/tip",
+  requestPayload,
+  targetLabel = "帖子",
+  triggerLabel = "送礼",
+  supportTargetLabel = "作者",
   enabled,
   isLoggedIn,
   pointName,
@@ -160,13 +170,13 @@ export function PostTipPanel({
       return `今日打赏次数已用完（${dailyLimit}/${dailyLimit}）`
     }
     if (postUsed >= perPostLimit) {
-      return `该帖子打赏次数已达上限（${perPostLimit}/${perPostLimit}）`
+      return `该${targetLabel}打赏次数已达上限（${perPostLimit}/${perPostLimit}）`
     }
     if (points <= 0) {
       return `当前${pointName}余额不足，暂时无法打赏`
     }
-    return `今日还能打赏 ${Math.max(0, dailyLimit - todayUsed)} 次，本帖还能打赏 ${Math.max(0, perPostLimit - postUsed)} 次`
-  }, [dailyLimit, enabled, isLoggedIn, perPostLimit, pointName, points, postUsed, todayUsed])
+    return `今日还能打赏 ${Math.max(0, dailyLimit - todayUsed)} 次，本${targetLabel}还能打赏 ${Math.max(0, perPostLimit - postUsed)} 次`
+  }, [dailyLimit, enabled, isLoggedIn, perPostLimit, pointName, points, postUsed, targetLabel, todayUsed])
   const compactSupporters = supporters.slice(0, 6)
   const giftStatMap = useMemo(
     () => new Map(giftSummary.map((item) => [item.giftId, item])),
@@ -205,8 +215,8 @@ export function PostTipPanel({
   )
   const totalGiftCount = useMemo(() => giftSummary.reduce((total, item) => total + item.totalCount, 0), [giftSummary])
   const triggerTooltip = tipTotalPoints > 0
-    ? `本帖已收到 ${totalGiftCount > 0 ? `${totalGiftCount} 份礼物，` : ""}${formatNumber(tipTotalPoints)} ${pointName}`
-    : "送礼或积分打赏支持作者"
+    ? `本${targetLabel}已收到 ${totalGiftCount > 0 ? `${totalGiftCount} 份礼物，` : ""}${formatNumber(tipTotalPoints)} ${pointName}`
+    : `送礼或积分打赏支持${supportTargetLabel}`
 
   const clearAnimationTimers = useCallback(() => {
     animationTimersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -296,7 +306,7 @@ export function PostTipPanel({
       return `今日打赏次数已用完（${dailyLimit}/${dailyLimit}）`
     }
     if (postUsed >= perPostLimit) {
-      return `该帖子打赏次数已达上限（${perPostLimit}/${perPostLimit}）`
+      return `该${targetLabel}打赏次数已达上限（${perPostLimit}/${perPostLimit}）`
     }
     if (amount <= 0) {
       return mode === "gift" ? "当前礼物价格无效，请稍后重试" : "请选择有效的打赏金额"
@@ -341,10 +351,10 @@ export function PostTipPanel({
 
     startTransition(async () => {
       try {
-        const response = await fetch("/api/posts/tip", {
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId, amount: targetAmount, giftId: targetGift?.id }),
+          body: JSON.stringify({ postId, ...requestPayload, amount: targetAmount, giftId: targetGift?.id }),
         })
         const result = await response.json()
 
@@ -420,8 +430,8 @@ export function PostTipPanel({
       <div className="relative">
         <Tooltip content={triggerTooltip}>
           <PopoverTrigger
-            title="送礼"
-            aria-label="送礼"
+            title={triggerLabel}
+            aria-label={triggerLabel}
             aria-expanded={open}
             aria-haspopup="dialog"
             className={cn(

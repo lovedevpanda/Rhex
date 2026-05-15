@@ -4,6 +4,7 @@ import { ensureBackgroundJobRuntimeReady } from "../src/lib/background-jobs"
 import { acquireRedisLease, type RedisLease } from "../src/lib/redis-lease"
 import { createRedisKey, hasRedisUrl } from "../src/lib/redis"
 import { acquireLeaseWithRetry, renewLeaseWithRecovery } from "../src/lib/worker-singleton"
+import { startPostViewCountFlushLoop, stopPostViewCountFlushLoop } from "../src/lib/post-view-count-buffer"
 
 const WORKER_SINGLETON_LEASE_KEY = createRedisKey("worker", "singleton")
 const WORKER_SINGLETON_LEASE_TTL_MS = 30_000
@@ -38,6 +39,7 @@ async function shutdown(signal: string) {
 
   shuttingDown = true
   console.log(`[worker] received ${signal}, shutting down...`)
+  await stopPostViewCountFlushLoop()
   await releaseSingletonLease()
   process.exit(0)
 }
@@ -110,6 +112,7 @@ async function main() {
 
   console.log("[worker] starting background jobs runtime")
   await ensureBackgroundJobRuntimeReady()
+  startPostViewCountFlushLoop()
   console.log("[worker] background jobs runtime ready")
 }
 
@@ -123,6 +126,8 @@ process.on("exit", () => {
 
 void main().catch((error) => {
   console.error("[worker] fatal error", error)
-  void releaseSingletonLease()
+  void stopPostViewCountFlushLoop().finally(() => {
+    void releaseSingletonLease()
+  })
   process.exitCode = 1
 })

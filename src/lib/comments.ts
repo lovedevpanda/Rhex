@@ -1,8 +1,11 @@
 import { findCommentEffectFeedbackByCommentIds } from "@/db/comment-effect-feedback-queries"
 import { countRootCommentsByPostId, countUserRepliesByPostId, countVisibleCommentsByPostId, findAllFlatCommentIdsByPostId, findAllRootCommentIdsByPostId, findAllVisibleCommentIdsByPostId, findCommentRewardClaimsByCommentIds, findCommentsByIds, findFlatCommentsByPostId, findRepliesByParentIds, findRootCommentsByPostId } from "@/db/comment-queries"
+import { countPostGiftEventsBySender, listCommentGiftStats, listCommentGiftSupportAggregates, listRecentCommentGiftEvents, type PostGiftRecentEventItem, type PostGiftStatItem } from "@/db/post-gift-queries"
+import { countPostTipEventsBySender, findPostTipSupportersByIds, listCommentTipSupportAggregates } from "@/db/post-tip-queries"
 import { getAiAgentUserId } from "@/lib/ai-agent"
 import { formatRelativeTime } from "@/lib/formatters"
 import type { AnonymousDisplayIdentity } from "@/lib/post-anonymous"
+import type { PostTipLeaderboardItem } from "@/lib/post-tips"
 import type { PostRewardPoolEffectFeedback } from "@/lib/post-reward-effect-feedback"
 import type { PostRewardPoolMode } from "@/lib/post-reward-pool-config"
 import {
@@ -79,6 +82,14 @@ export interface SiteCommentReplyItem {
   flatFloor?: number
   rewardClaim?: SiteCommentRewardClaim
   rewardEffectFeedback?: PostRewardPoolEffectFeedback
+  tipping?: {
+    totalCount: number
+    totalPoints: number
+    usedCount?: number
+    giftStats?: PostGiftStatItem[]
+    recentGiftEvents?: PostGiftRecentEventItem[]
+    topSupporters?: PostTipLeaderboardItem[]
+  }
 }
 
 export interface SiteCommentItem {
@@ -121,6 +132,14 @@ export interface SiteCommentItem {
   viewerLiked?: boolean
   rewardClaim?: SiteCommentRewardClaim
   rewardEffectFeedback?: PostRewardPoolEffectFeedback
+  tipping?: {
+    totalCount: number
+    totalPoints: number
+    usedCount?: number
+    giftStats?: PostGiftStatItem[]
+    recentGiftEvents?: PostGiftRecentEventItem[]
+    topSupporters?: PostTipLeaderboardItem[]
+  }
   floor: number
   isAcceptedAnswer: boolean
   isPinnedByAuthor: boolean
@@ -292,6 +311,8 @@ export async function getCommentsByPostId(
       parentId: string | null
       content: string
       likeCount: number
+      tipCount: number
+      tipTotalPoints: number
       isAcceptedAnswer: boolean
       isPinnedByAuthor: boolean
       createdAt: Date
@@ -406,6 +427,14 @@ export async function getCommentsByPostId(
         createdAtRaw: comment.createdAt.toISOString(),
         likes: comment.likeCount,
         viewerLiked: Boolean(viewer?.userId && comment.likes?.some((item) => item.userId === viewer.userId)),
+        tipping: {
+          totalCount: comment.tipCount,
+          totalPoints: comment.tipTotalPoints,
+          usedCount: 0,
+          giftStats: [],
+          recentGiftEvents: [],
+          topSupporters: [],
+        },
         rewardClaim: undefined,
         rewardEffectFeedback: undefined,
         floor,
@@ -422,6 +451,58 @@ export async function getCommentsByPostId(
       }
 
       return getUserDisplayName(comment.user)
+    }
+
+    const attachGiftStats = async <TComment extends SiteCommentItem | SiteCommentReplyItem>(items: TComment[]) => {
+      await Promise.all(items.map(async (item) => {
+        const [giftStats, recentGiftEvents, rawTipSupporters, giftSupporters, rawUsedCount, giftUsedCount] = await Promise.all([
+          listCommentGiftStats(item.id),
+          listRecentCommentGiftEvents(item.id),
+          listCommentTipSupportAggregates(item.id, 20),
+          listCommentGiftSupportAggregates(item.id, 20),
+          viewer?.userId ? countPostTipEventsBySender({ senderId: viewer.userId, commentId: item.id }) : Promise.resolve(0),
+          viewer?.userId ? countPostGiftEventsBySender({ senderId: viewer.userId, commentId: item.id }) : Promise.resolve(0),
+        ])
+        const supporterTotals = new Map<number, number>()
+
+        for (const row of rawTipSupporters) {
+          supporterTotals.set(row.senderId, (supporterTotals.get(row.senderId) ?? 0) + row.totalAmount)
+        }
+
+        for (const row of giftSupporters) {
+          supporterTotals.set(row.senderId, (supporterTotals.get(row.senderId) ?? 0) + row.totalAmount)
+        }
+
+        const supporterRows = Array.from(supporterTotals.entries())
+          .map(([senderId, totalAmount]) => ({ senderId, totalAmount }))
+          .sort((left, right) => right.totalAmount - left.totalAmount)
+          .slice(0, 20)
+        const supporterProfiles = await findPostTipSupportersByIds(supporterRows.map((row) => row.senderId))
+        const supporterMap = new Map(supporterProfiles.map((profile) => [profile.id, profile]))
+        const topSupporters: PostTipLeaderboardItem[] = supporterRows.flatMap((row) => {
+          const supporter = supporterMap.get(row.senderId)
+          if (!supporter) {
+            return []
+          }
+
+          return [{
+            userId: supporter.id,
+            username: supporter.username,
+            nickname: supporter.nickname,
+            avatarPath: supporter.avatarPath,
+            totalAmount: row.totalAmount,
+          }]
+        })
+
+        item.tipping = {
+          totalCount: item.tipping?.totalCount ?? 0,
+          totalPoints: item.tipping?.totalPoints ?? 0,
+          usedCount: rawUsedCount + giftUsedCount,
+          giftStats,
+          recentGiftEvents,
+          topSupporters,
+        }
+      }))
     }
 
     const allRootComments = await findAllRootCommentIdsByPostId({
@@ -575,6 +656,8 @@ export async function getCommentsByPostId(
         }
       })
 
+      await attachGiftStats(flatItems.flatMap((item) => item.type === "comment" ? [item.comment] : [item.reply]))
+
       return {
         items: [],
         flatItems: await applyHookedUserPresentationToFlatCommentItems(flatItems),
@@ -670,6 +753,8 @@ export async function getCommentsByPostId(
       mappedComment.rewardEffectFeedback = rewardEffectFeedbackMap.get(comment.id)
       return mappedComment
     })
+
+    await attachGiftStats(normalizedComments.flatMap((comment) => [comment, ...comment.replies]))
 
     return {
       items: await applyHookedUserPresentationToCommentThreads(normalizedComments),

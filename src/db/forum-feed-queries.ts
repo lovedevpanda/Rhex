@@ -1,24 +1,13 @@
 import { prisma } from "@/db/client"
+import { postListInclude } from "@/db/queries"
 import { buildHomeVisiblePostWhere } from "@/db/home-feed-visibility"
 import type { Prisma } from "@/db/types"
 
 export type FeedQuerySort = "latest" | "new" | "hot" | "weekly" | "following"
 
 const feedPostInclude = {
-  board: {
-    select: { name: true, slug: true, iconPath: true },
-  },
-  author: {
-    select: {
-      id: true,
-      username: true,
-      nickname: true,
-      avatarPath: true,
-      status: true,
-      vipLevel: true,
-      vipExpiresAt: true,
-    },
-  },
+  board: postListInclude.board,
+  author: postListInclude.author,
   redPacket: {
     select: {
       id: true,
@@ -33,7 +22,11 @@ const feedPostInclude = {
     where: { status: "NORMAL" },
     orderBy: { createdAt: "desc" },
     take: 1,
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      useAnonymousIdentity: true,
+      content: true,
       user: {
         select: { username: true, nickname: true },
       },

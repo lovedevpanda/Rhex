@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   AppWindow,
   BookText,
+  Files,
   FileCode2,
   Flag,
   LayoutGrid,
@@ -30,6 +31,7 @@ export type AdminTabKey =
   | "announcements"
   | "custom-pages"
   | "reports"
+  | "attachments"
   | "logs"
   | "security"
   | "settings"
@@ -88,6 +90,7 @@ export const adminTabs: AdminTabKey[] = [
   "announcements",
   "custom-pages",
   "reports",
+  "attachments",
   "logs",
   "security",
   "settings",
@@ -133,6 +136,7 @@ export const adminTabLabels: Record<AdminTabKey, string> = {
   announcements: "站点文档",
   "custom-pages": "自定义页面",
   reports: "举报中心",
+  attachments: "附件管理",
   logs: "日志中心",
   security: "内容安全",
   settings: "站点设置",
@@ -304,6 +308,15 @@ export const adminNavigation: AdminNavigationItem[] = [
     label: "举报中心",
     description: "举报处置和风险流转。",
     icon: Flag,
+    group: "operations",
+    adminOnly: true,
+  },
+  {
+    key: "attachments",
+    href: "/admin?tab=attachments",
+    label: "附件管理",
+    description: "上传资源、引用状态和无引用清理。",
+    icon: Files,
     group: "operations",
     adminOnly: true,
   },

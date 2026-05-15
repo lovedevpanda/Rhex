@@ -12,6 +12,7 @@ import { CommentLikeButton } from "@/components/comment/comment-like-button"
 import { AdminCommentStatusNotice, buildCommentAdminActions, CommentAuthorIdentityBadges, CommentJackpotDepositBadge, CommentReviewStatusNotice, CommentRewardBadge, CommentRewardEffectBadge, CommentUnavailablePlaceholder, copyCommentPermalink, getCommentUnavailableMessage, type CommentAdminAction } from "@/components/comment/comment-thread-shared"
 import { InlineTokenContent } from "@/components/inline-token-content"
 import { MarkdownContent } from "@/components/markdown-content"
+import { PostTipPanel } from "@/components/post/post-tip-panel"
 import { ReportDialog } from "@/components/post/report-dialog"
 import { TimeTooltip } from "@/components/time-tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -25,17 +26,31 @@ import { Button } from "@/components/ui/rbutton"
 import type { SiteCommentItem, SiteCommentReplyItem } from "@/lib/comments"
 import type { CommentReplyTarget } from "@/lib/comment-reply-box-events"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
+import type { SiteTippingGiftItem } from "@/lib/site-settings"
 import { cn } from "@/lib/utils"
 
 type ThreadEntry = SiteCommentItem | SiteCommentReplyItem
 export type CommentThreadReplyLayout = "tree" | "flat"
 type CommentThreadEntryType = "comment" | "reply"
 
+export interface CommentThreadTippingConfig {
+  enabled: boolean
+  isLoggedIn: boolean
+  pointName: string
+  currentUserPoints: number
+  allowedAmounts: number[]
+  gifts: SiteTippingGiftItem[]
+  dailyLimit: number
+  perTargetLimit: number
+  usedDailyCount: number
+}
+
 interface CommentThreadCommentItemProps {
   comment: SiteCommentItem
   index: number
   postPath: string
   pointName?: string
+  tipping?: CommentThreadTippingConfig
   canReply: boolean
   currentUserId?: number
   canAcceptAnswer: boolean
@@ -72,6 +87,7 @@ interface CommentThreadReplyItemProps {
   referenceCommentId?: string
   parentCommentHref?: string
   pointName?: string
+  tipping?: CommentThreadTippingConfig
   canReply: boolean
   currentUserId?: number
   isAdmin: boolean
@@ -401,6 +417,7 @@ export function CommentThreadReplyItem({
   referenceCommentId,
   parentCommentHref,
   pointName,
+  tipping,
   canReply,
   currentUserId,
   isAdmin,
@@ -519,6 +536,31 @@ export function CommentThreadReplyItem({
 
               <div className={cn("flex w-full items-center gap-2 text-[11px] text-muted-foreground", editingCommentId === reply.id && "border-t border-border/50 pt-2")}>
                 <CommentLikeButton commentId={reply.id} initialCount={reply.likes} initialLiked={reply.viewerLiked} />
+                {tipping && currentUserId !== reply.authorId ? (
+                  <PostTipPanel
+                    postId={reply.postId}
+                    endpoint="/api/comments/tip"
+                    requestPayload={{ commentId: reply.id }}
+                    targetLabel="评论"
+                    triggerLabel="评论送礼"
+                    supportTargetLabel="层主"
+                    enabled={tipping.enabled}
+                    isLoggedIn={tipping.isLoggedIn}
+                    pointName={tipping.pointName}
+                    currentUserPoints={tipping.currentUserPoints}
+                    gifts={tipping.gifts}
+                    giftStats={reply.tipping?.giftStats ?? []}
+                    recentGiftEvents={reply.tipping?.recentGiftEvents ?? []}
+                    allowedAmounts={tipping.allowedAmounts}
+                    dailyLimit={tipping.dailyLimit}
+                    perPostLimit={tipping.perTargetLimit}
+                    usedDailyCount={tipping.usedDailyCount}
+                    usedPostCount={reply.tipping?.usedCount ?? 0}
+                    totalCount={reply.tipping?.totalCount ?? 0}
+                    totalPoints={reply.tipping?.totalPoints ?? 0}
+                    topSupporters={reply.tipping?.topSupporters ?? []}
+                  />
+                ) : null}
                 {replyRewardBadges ? <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{replyRewardBadges}</div> : <div className="min-w-0 flex-1" />}
 
                 
@@ -579,6 +621,7 @@ export function CommentThreadCommentItem({
   index,
   postPath,
   pointName,
+  tipping,
   canReply,
   currentUserId,
   canAcceptAnswer,
@@ -682,6 +725,31 @@ export function CommentThreadCommentItem({
 
               <div className={cn("flex w-full items-center gap-2 text-[11px] text-muted-foreground sm:text-xs", editingCommentId === comment.id && "border-t border-border/60 pt-2")}>
                 <CommentLikeButton commentId={comment.id} initialCount={comment.likes} initialLiked={comment.viewerLiked} />
+                {tipping && currentUserId !== comment.authorId ? (
+                  <PostTipPanel
+                    postId={comment.postId}
+                    endpoint="/api/comments/tip"
+                    requestPayload={{ commentId: comment.id }}
+                    targetLabel="评论"
+                    triggerLabel="评论送礼"
+                    supportTargetLabel="层主"
+                    enabled={tipping.enabled}
+                    isLoggedIn={tipping.isLoggedIn}
+                    pointName={tipping.pointName}
+                    currentUserPoints={tipping.currentUserPoints}
+                    gifts={tipping.gifts}
+                    giftStats={comment.tipping?.giftStats ?? []}
+                    recentGiftEvents={comment.tipping?.recentGiftEvents ?? []}
+                    allowedAmounts={tipping.allowedAmounts}
+                    dailyLimit={tipping.dailyLimit}
+                    perPostLimit={tipping.perTargetLimit}
+                    usedDailyCount={tipping.usedDailyCount}
+                    usedPostCount={comment.tipping?.usedCount ?? 0}
+                    totalCount={comment.tipping?.totalCount ?? 0}
+                    totalPoints={comment.tipping?.totalPoints ?? 0}
+                    topSupporters={comment.tipping?.topSupporters ?? []}
+                  />
+                ) : null}
                 {commentRewardBadges ? <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{commentRewardBadges}</div> : <div className="min-w-0 flex-1" />}
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
                   {!hideFloatingActionButtons && commentActions.length > 0 ? (
@@ -750,6 +818,7 @@ export function CommentThreadCommentItem({
                       parentCommentFloor={comment.floor}
                       parentCommentHref={`?sort=oldest&page=1&view=tree#comment-${comment.id}`}
                       pointName={pointName}
+                      tipping={tipping}
                       canReply={canReply}
                       currentUserId={currentUserId}
                       isAdmin={isAdmin}

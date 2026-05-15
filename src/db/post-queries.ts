@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client"
+import { Prisma, type Prisma as PrismaType } from "@prisma/client"
 
 import { prisma } from "@/db/client"
 import { buildPostDetailInclude, pinnedPostOrderBy, postListInclude } from "@/db/queries"
@@ -130,6 +130,39 @@ export async function increasePostViewCount(postId: string) {
       },
     },
   })
+}
+
+export async function increasePostViewCounts(
+  increments: Array<{ postId: string; count: number }>,
+) {
+  const normalized = increments
+    .map((item) => ({
+      postId: item.postId.trim(),
+      count: Math.trunc(item.count),
+    }))
+    .filter((item) => item.postId && item.count > 0)
+
+  if (normalized.length === 0) {
+    return 0
+  }
+
+  const chunkSize = 500
+  const statements: PrismaType.PrismaPromise<number>[] = []
+
+  for (let index = 0; index < normalized.length; index += chunkSize) {
+    const chunk = normalized.slice(index, index + chunkSize)
+    const values = Prisma.join(chunk.map((item) => Prisma.sql`(${item.postId}, ${item.count})`))
+
+    statements.push(prisma.$executeRaw`
+      UPDATE "Post" AS p
+      SET "viewCount" = p."viewCount" + v.delta
+      FROM (VALUES ${values}) AS v(id, delta)
+      WHERE p.id = v.id
+    `)
+  }
+
+  const results = await prisma.$transaction(statements)
+  return results.reduce((total, count) => total + count, 0)
 }
 
 export async function findPostSeoBySlug(slug: string) {

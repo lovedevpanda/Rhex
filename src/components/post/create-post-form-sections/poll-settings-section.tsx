@@ -31,7 +31,7 @@ export function PollSettingsSection({
       </div>
       <div className="space-y-3">
         {pollOptions.map((option, index) => (
-          <div key={`${index}-${option}`} className="flex items-center gap-3">
+          <div key={`poll-option-${index}`} className="flex items-center gap-3">
             <input
               value={option}
               onChange={(event) => onPollOptionChange(index, event.target.value)}

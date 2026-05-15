@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChevronDown, ChevronUp, Clock3, Gift, Sparkles, Trophy } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -274,8 +275,11 @@ export function LotteryPanel({ postId, isOwnerOrAdmin, lottery }: LotteryPanelPr
         : lottery.endsAt
           ? "距结束"
           : lottery.triggerMode === "AUTO_PARTICIPANT_COUNT"
-            ? "人数开奖"
+          ? "人数开奖"
             : "进行中"
+  const announcementLines = lottery.announcement?.split("\n") ?? []
+  const announcementPrizeLineOffset = Math.max(0, announcementLines.length - lottery.prizes.length)
+  const announcementHeaderLines = announcementLines.slice(0, announcementPrizeLineOffset)
 
   async function loadParticipantPage(page: number) {
     setParticipantLoading(true)
@@ -514,9 +518,34 @@ export function LotteryPanel({ postId, isOwnerOrAdmin, lottery }: LotteryPanelPr
                     <Trophy className="h-4 w-4 text-muted-foreground" />
                     <p className="text-sm font-medium text-foreground">开奖公告</p>
                   </div>
-                  <pre className="mt-2 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
-                    {lottery.announcement}
-                  </pre>
+                  <div className="mt-2 text-xs leading-6 text-muted-foreground">
+                    {announcementHeaderLines.map((line, index) => (
+                      <p key={`lottery-announcement-header-${index}`} className="whitespace-pre-wrap">{line}</p>
+                    ))}
+                    {lottery.prizes.map((prize, index) => {
+                      const sourceLine = announcementLines[announcementPrizeLineOffset + index] ?? ""
+                      const prizePrefix = sourceLine.includes("：")
+                        ? sourceLine.slice(0, sourceLine.indexOf("：") + 1)
+                        : `${prize.title}（${prize.quantity} 名）：`
+
+                      return (
+                        <p key={prize.id} className="whitespace-pre-wrap">
+                          <span>{prizePrefix}</span>
+                          {prize.winners.length > 0 ? prize.winners.map((winner, winnerIndex) => (
+                            <span key={`${prize.id}-${winner.userId}`}>
+                              {winnerIndex > 0 ? "、" : null}
+                              <Link
+                                href={`/users/${winner.username}`}
+                                className="font-medium text-foreground underline-offset-4 hover:underline"
+                              >
+                                {winner.nickname ?? winner.username}
+                              </Link>
+                            </span>
+                          )) : "无人中奖"}
+                        </p>
+                      )
+                    })}
+                  </div>
                 </div>
               ) : null}
             </div>

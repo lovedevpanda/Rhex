@@ -5,8 +5,8 @@ import { pinnedPostOrderBy, postListInclude } from "@/db/queries"
 import type { TaxonomyPostSort } from "@/lib/forum-taxonomy-sort"
 
 const taxonomyPostInclude = {
-  board: true,
-  author: true,
+  board: postListInclude.board,
+  author: postListInclude.author,
   redPacket: {
     select: {
       id: true,
@@ -21,7 +21,11 @@ const taxonomyPostInclude = {
     where: { status: "NORMAL" },
     orderBy: { createdAt: "desc" },
     take: 1,
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      useAnonymousIdentity: true,
+      content: true,
       user: {
         select: { username: true, nickname: true },
       },

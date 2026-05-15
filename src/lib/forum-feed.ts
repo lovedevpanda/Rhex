@@ -1,7 +1,10 @@
+import { unstable_cache } from "next/cache"
+
 import { resolvePagination } from "@/db/helpers"
 import { findFollowFeedTargetIds } from "@/db/follow-queries"
 import { countFollowingFeedPosts, countLatestFeedPosts, findFollowingFeedPosts, findLatestFeedPosts, findLatestReplyComments, findLatestTopicPosts } from "@/db/forum-feed-queries"
 import { findGlobalPinnedPosts } from "@/db/taxonomy-queries"
+import { FORUM_FEED_CACHE_TAG } from "@/lib/content-list-cache"
 import { formatRelativeTime } from "@/lib/formatters"
 import { applyAnonymousIdentityToPost, getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { extractPinnedPostIds } from "@/lib/pinned-posts"
@@ -12,6 +15,9 @@ import { getPostTypeLabel, type LocalPostType } from "@/lib/post-types"
 import type { PostRewardPoolMode } from "@/lib/post-reward-pool-config"
 
 export type FeedSort = "latest" | "new" | "hot" | "weekly" | "following"
+
+const PUBLIC_FEED_CACHE_REVALIDATE_SECONDS = 30
+const PUBLIC_FEED_CACHE_MAX_PAGE = 3
 
 export interface ForumFeedItem {
   id: string
@@ -53,6 +59,46 @@ export interface ForumFeedItem {
   type: LocalPostType
   typeLabel: string
 }
+
+async function readPublicFeedPage(
+  page: number,
+  pageSize: number,
+  sort: Exclude<FeedSort, "following">,
+  hotRecentWindowHours: number,
+): Promise<ForumFeedPageResult> {
+  const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
+  const globalPinnedPosts = await findGlobalPinnedPosts({ homeVisibleOnly: true })
+  const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
+  const total = await countLatestFeedPosts(pinnedPostIds)
+  const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
+  const normalPosts = await findLatestFeedPosts(pagination.page, pagination.pageSize, sort, pinnedPostIds, hotRecentWindowHours)
+
+  return {
+    items: pagination.page === 1
+      ? [...globalPinnedPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)), ...normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity))]
+      : normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    total: pagination.total,
+    totalPages: pagination.totalPages,
+    hasPrevPage: pagination.hasPrevPage,
+    hasNextPage: pagination.hasNextPage,
+  }
+}
+
+const getPersistentPublicFeedPage = unstable_cache(
+  async (
+    page: number,
+    pageSize: number,
+    sort: Exclude<FeedSort, "following">,
+    hotRecentWindowHours: number,
+  ) => readPublicFeedPage(page, pageSize, sort, hotRecentWindowHours),
+  [FORUM_FEED_CACHE_TAG],
+  {
+    tags: [FORUM_FEED_CACHE_TAG],
+    revalidate: PUBLIC_FEED_CACHE_REVALIDATE_SECONDS,
+  },
+)
 
 export interface ForumFeedPageResult {
   items: ForumFeedItem[]
@@ -220,24 +266,11 @@ export async function getLatestFeed(
     }
   }
 
-  const anonymousMaskIdentity = await getAnonymousMaskDisplayIdentity()
-  const globalPinnedPosts = await findGlobalPinnedPosts({ homeVisibleOnly: true })
-  const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
-  const total = await countLatestFeedPosts(pinnedPostIds)
-  const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)
-  const normalPosts = await findLatestFeedPosts(pagination.page, pagination.pageSize, sort, pinnedPostIds, hotRecentWindowHours)
-
-  return {
-    items: pagination.page === 1
-      ? [...globalPinnedPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)), ...normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity))]
-      : normalPosts.map((post) => mapFeedPost(post, anonymousMaskIdentity)),
-    page: pagination.page,
-    pageSize: pagination.pageSize,
-    total: pagination.total,
-    totalPages: pagination.totalPages,
-    hasPrevPage: pagination.hasPrevPage,
-    hasNextPage: pagination.hasNextPage,
+  if (!currentUserId && page <= PUBLIC_FEED_CACHE_MAX_PAGE) {
+    return getPersistentPublicFeedPage(page, pageSize, sort, hotRecentWindowHours)
   }
+
+  return readPublicFeedPage(page, pageSize, sort, hotRecentWindowHours)
 }
 
 export async function getLatestTopics(limit = 10) {

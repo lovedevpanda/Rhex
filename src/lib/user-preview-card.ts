@@ -42,6 +42,7 @@ export interface UserPreviewCardData {
     canFollow: boolean
     initialFollowed: boolean
   }
+  canSendMessage?: boolean
   radarData?: UserProfileRadarData | null
 }
 
@@ -121,6 +122,7 @@ export async function getUserPreviewCardData(username: string): Promise<UserPrev
       canFollow: (!currentUser || currentUser.id !== user.id) && !profileAccess.relation.isBlocked,
       initialFollowed,
     },
+    canSendMessage: Boolean(currentUser && currentUser.id !== user.id && !profileAccess.relation.isBlocked),
     radarData: buildUserProfileRadarData({
       user,
       snapshot: radarSnapshot,

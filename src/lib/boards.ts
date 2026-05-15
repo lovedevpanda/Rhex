@@ -15,7 +15,7 @@ import { mapListPost } from "@/lib/post-map"
 import { applyHookedUserPresentationToSitePosts } from "@/lib/user-presentation-server"
 import { findActiveBoardsWithZoneAndPostCount, findBoardBySlugWithZoneAndPostCount, findBoardModeratorsByBoardId } from "@/db/board-read-queries"
 import type { SitePostItem } from "@/lib/posts"
-import { TAXONOMY_CACHE_TAGS } from "@/lib/taxonomy-cache"
+import { TAXONOMY_CACHE_TAGS, TAXONOMY_CONTENT_CACHE_TAG } from "@/lib/taxonomy-cache"
 import { getUserDisplayName } from "@/lib/user-display"
 
 
@@ -155,7 +155,14 @@ export interface BoardPostPageResult {
   hasNextPage: boolean
 }
 
-export async function getBoardPosts(
+const TAXONOMY_POST_PAGE_CACHE_REVALIDATE_SECONDS = 30
+const TAXONOMY_POST_PAGE_CACHE_MAX_PAGE = 3
+
+function shouldCacheTaxonomyPostPage(page: number) {
+  return page >= 1 && page <= TAXONOMY_POST_PAGE_CACHE_MAX_PAGE
+}
+
+async function readBoardPosts(
   slug: string,
   page = 1,
   pageSize = 30,
@@ -216,6 +223,28 @@ export async function getBoardPosts(
     hasPrevPage: pagination.hasPrevPage,
     hasNextPage: pagination.hasNextPage,
   }
+}
+
+const getPersistentBoardPosts = unstable_cache(
+  async (slug: string, page: number, pageSize: number, sort: TaxonomyPostSort) => readBoardPosts(slug, page, pageSize, sort),
+  ["boards:posts"],
+  {
+    tags: [TAXONOMY_CONTENT_CACHE_TAG],
+    revalidate: TAXONOMY_POST_PAGE_CACHE_REVALIDATE_SECONDS,
+  },
+)
+
+export async function getBoardPosts(
+  slug: string,
+  page = 1,
+  pageSize = 30,
+  sort: TaxonomyPostSort = "latest",
+): Promise<BoardPostPageResult> {
+  if (shouldCacheTaxonomyPostPage(page)) {
+    return getPersistentBoardPosts(slug, page, pageSize, sort)
+  }
+
+  return readBoardPosts(slug, page, pageSize, sort)
 }
 
 export async function isUserFollowingBoard(userId: number, boardId: string) {

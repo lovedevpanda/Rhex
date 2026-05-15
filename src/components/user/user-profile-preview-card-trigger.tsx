@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Crown, FileText, FolderOpen, MessageSquareMore, ShieldCheck, Sparkles } from "lucide-react"
+import { Crown, FileText, FolderOpen, MessageCircleMore, MessageSquareMore, ShieldCheck, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { FollowToggleButton } from "@/components/follow-toggle-button"
@@ -426,6 +426,16 @@ function UserProfilePreviewCardContent({ data }: { data: UserPreviewCardData }) 
                       setFollowerCount((currentCount) => Math.max(0, currentCount + (followed ? 1 : -1)))
                     }}
                   />
+                ) : null}
+                {data.canSendMessage ? (
+                  <Link
+                    href={`/messages?conversation=user-${user.id}`}
+                    aria-label="发私信"
+                    title="发私信"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <MessageCircleMore className="size-4" />
+                  </Link>
                 ) : null}
               </div>
               <div className="mt-1.5 flex flex-nowrap items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">

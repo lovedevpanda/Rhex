@@ -5,7 +5,7 @@ import path from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 import { getServerSiteSettings } from "@/lib/site-settings"
 import { resolveUploadBaseUrl } from "@/lib/upload-path"
@@ -502,4 +502,21 @@ export async function createDownloadResponseFromStoredUpload(params: {
       "Cache-Control": "private, no-store",
     },
   })
+}
+
+export async function deleteStoredUploadFile(storagePath: string) {
+  if (storagePath.startsWith("s3://")) {
+    const settings = await getServerSiteSettings()
+    const { bucket, key } = parseS3StoragePath(storagePath)
+    const client = createS3Client(settings)
+
+    await client.send(new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    }))
+    return
+  }
+
+  const { unlink } = await import("fs/promises")
+  await unlink(storagePath)
 }

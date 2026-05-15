@@ -31,13 +31,13 @@ import { getAiAgentUserId } from "@/lib/ai-agent"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
 import { PinScope } from "@/db/types"
-import { renderAddonPostContentHtml } from "@/lib/addon-post-content-render"
 import { checkBoardPermission, getBoardAccessContextByPostId } from "@/lib/board-access"
 import { getBoards } from "@/lib/boards"
 import { getCommentsByPostId, getUserReplyCountByPost } from "@/lib/comments"
 import { isUserFollowingTarget } from "@/lib/follows"
 import { resolveSidebarUser } from "@/lib/home-sidebar"
 import { checkPostAccessPermission, mergeAccessPermissions, resolvePostAccessRequirements } from "@/lib/post-access"
+import { renderCachedPostContentHtml } from "@/lib/post-detail-cache"
 import { getPostDetailBySlug, getPostSeoBySlug, incrementPostViewCount } from "@/lib/posts"
 
 import { getPostSidebarData } from "@/lib/post-sidebar"
@@ -411,7 +411,9 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
       (displayPost.contentBlocks ?? []).map(async (block) => {
         const shouldRenderHtml = Boolean(block.text && (block.type === "PUBLIC" || block.visible))
         const html = shouldRenderHtml
-          ? await renderAddonPostContentHtml({
+          ? await renderCachedPostContentHtml({
+              postId: displayPost.id,
+              blockId: block.id,
               content: block.text,
               markdownEmojiMap: settings.markdownEmojiMap,
               pathname: canonicalPath,
@@ -425,7 +427,9 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
     Promise.all(
       (displayPost.appendices ?? []).map(async (appendix) => ({
         ...appendix,
-        html: await renderAddonPostContentHtml({
+        html: await renderCachedPostContentHtml({
+          postId: displayPost.id,
+          blockId: `appendix:${appendix.id}`,
           content: appendix.content,
           markdownEmojiMap: settings.markdownEmojiMap,
           pathname: canonicalPath,
@@ -675,6 +679,17 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                         postId={displayPost.id}
                         postPath={canonicalPath}
                         pointName={settings.pointName}
+                        tipping={tipSummary ? {
+                          enabled: tipSummary.enabled,
+                          isLoggedIn: tipSummary.isLoggedIn,
+                          pointName: tipSummary.pointName,
+                          currentUserPoints: tipSummary.currentUserPoints,
+                          allowedAmounts: tipSummary.allowedAmounts,
+                          gifts: tipSummary.gifts,
+                          dailyLimit: tipSummary.dailyLimit,
+                          perTargetLimit: tipSummary.perPostLimit,
+                          usedDailyCount: tipSummary.usedDailyCount,
+                        } : undefined}
                         canReply={Boolean(currentUser && displayPost.status === "NORMAL")}
                         currentPage={commentResult.page}
                         pageSize={commentResult.pageSize}

@@ -5,6 +5,7 @@ import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { triggerAiMention } from "@/lib/ai/mention-trigger"
 import { apiError } from "@/lib/api-route"
 import { createCommentFlow } from "@/lib/comment-create-service"
+import { revalidateContentListCaches } from "@/lib/content-list-cache"
 import { enqueuePostFollowCommentNotifications } from "@/lib/follow-notifications"
 import { handleCommentCreateSideEffects } from "@/lib/interaction-side-effects"
 import { revalidateHomeSidebarStatsCache } from "@/lib/home-sidebar-stats"
@@ -106,6 +107,7 @@ export async function executeCommentCreation(body: unknown, options: ExecuteComm
 
   revalidateUserSurfaceCache(author.id)
   if (!result.reviewRequired) {
+    revalidateContentListCaches()
     revalidateHomeSidebarStatsCache()
     void recordApprovedCommentTaskEvent({
       type: "APPROVED_COMMENT",

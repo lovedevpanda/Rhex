@@ -9,7 +9,7 @@ import { mapListPost } from "@/lib/post-map"
 import { applyHookedUserPresentationToSitePosts } from "@/lib/user-presentation-server"
 import { normalizePostListLoadMode, type PostListLoadMode } from "@/lib/post-list-load-mode"
 import { normalizePostListDisplayMode, type PostListDisplayMode } from "@/lib/post-list-display"
-import { TAXONOMY_CACHE_TAGS } from "@/lib/taxonomy-cache"
+import { TAXONOMY_CACHE_TAGS, TAXONOMY_CONTENT_CACHE_TAG } from "@/lib/taxonomy-cache"
 
 import type { SitePostItem } from "@/lib/posts"
 
@@ -124,7 +124,14 @@ export interface ZonePostPageResult {
   hasNextPage: boolean
 }
 
-export async function getZonePosts(
+const TAXONOMY_POST_PAGE_CACHE_REVALIDATE_SECONDS = 30
+const TAXONOMY_POST_PAGE_CACHE_MAX_PAGE = 3
+
+function shouldCacheTaxonomyPostPage(page: number) {
+  return page >= 1 && page <= TAXONOMY_POST_PAGE_CACHE_MAX_PAGE
+}
+
+async function readZonePosts(
   slug: string,
   page = 1,
   pageSize = 10,
@@ -188,4 +195,26 @@ export async function getZonePosts(
     hasPrevPage: pagination.hasPrevPage,
     hasNextPage: pagination.hasNextPage,
   }
+}
+
+const getPersistentZonePosts = unstable_cache(
+  async (slug: string, page: number, pageSize: number, sort: TaxonomyPostSort) => readZonePosts(slug, page, pageSize, sort),
+  ["zones:posts"],
+  {
+    tags: [TAXONOMY_CONTENT_CACHE_TAG],
+    revalidate: TAXONOMY_POST_PAGE_CACHE_REVALIDATE_SECONDS,
+  },
+)
+
+export async function getZonePosts(
+  slug: string,
+  page = 1,
+  pageSize = 10,
+  sort: TaxonomyPostSort = "latest",
+): Promise<ZonePostPageResult> {
+  if (shouldCacheTaxonomyPostPage(page)) {
+    return getPersistentZonePosts(slug, page, pageSize, sort)
+  }
+
+  return readZonePosts(slug, page, pageSize, sort)
 }

@@ -1,7 +1,10 @@
+import { unstable_cache } from "next/cache"
+
 import { executeAddonAsyncWaterfallHook } from "@/addons-host/runtime/hooks"
 import type { SidebarUserCardData } from "@/components/user/sidebar-user-card"
 import { findHomeSidebarHotTopics } from "@/db/home-sidebar-queries"
 import type { getCurrentUser } from "@/lib/auth"
+import { HOME_SIDEBAR_HOT_TOPICS_CACHE_TAG } from "@/lib/content-list-cache"
 import { applyAnonymousIdentityToPost, getAnonymousMaskDisplayIdentity } from "@/lib/post-anonymous"
 import { formatMonthDayTime } from "@/lib/formatters"
 import { getLevelBadgeData } from "@/lib/level-badge"
@@ -11,13 +14,16 @@ import { applyHookedUserPresentationToHomeSidebarItems } from "@/lib/user-presen
 import { getUserDisplayName } from "@/lib/users"
 import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
-export async function getHomeSidebarHotTopics(limit = 5) {
-  const [posts, anonymousMaskIdentity] = await Promise.all([
+const HOME_SIDEBAR_HOT_TOPICS_REVALIDATE_SECONDS = 60
+
+const getPersistentHomeSidebarHotTopics = unstable_cache(
+  async (limit = 5) => {
+    const [posts, anonymousMaskIdentity] = await Promise.all([
     findHomeSidebarHotTopics(limit),
     getAnonymousMaskDisplayIdentity(),
-  ])
+    ])
 
-  const items = posts.map((post) => ({
+    const items = posts.map((post) => ({
     ...(function () {
       const maskedAuthor = applyAnonymousIdentityToPost({
         isAnonymous: Boolean(post.isAnonymous),
@@ -39,11 +45,21 @@ export async function getHomeSidebarHotTopics(limit = 5) {
     slug: post.slug,
     title: post.title,
     lastRepliedAt: formatMonthDayTime(post.lastCommentedAt ?? post.createdAt),
-  }))
-  const presentationHookedItems = await applyHookedUserPresentationToHomeSidebarItems(items)
-  const hooked = await executeAddonAsyncWaterfallHook("home.sidebar.hot-topics.items", presentationHookedItems)
+    }))
+    const presentationHookedItems = await applyHookedUserPresentationToHomeSidebarItems(items)
+    const hooked = await executeAddonAsyncWaterfallHook("home.sidebar.hot-topics.items", presentationHookedItems)
 
-  return Array.isArray(hooked.value) ? hooked.value : presentationHookedItems
+    return Array.isArray(hooked.value) ? hooked.value : presentationHookedItems
+  },
+  [HOME_SIDEBAR_HOT_TOPICS_CACHE_TAG],
+  {
+    tags: [HOME_SIDEBAR_HOT_TOPICS_CACHE_TAG],
+    revalidate: HOME_SIDEBAR_HOT_TOPICS_REVALIDATE_SECONDS,
+  },
+)
+
+export async function getHomeSidebarHotTopics(limit = 5) {
+  return getPersistentHomeSidebarHotTopics(limit)
 }
 
 type SidebarUserSource = Awaited<ReturnType<typeof getCurrentUser>> | null

@@ -3,9 +3,22 @@ import { postAttachmentSelect } from "@/db/post-attachment-queries"
 
 
 export const postListInclude = {
-  board: true,
+  board: {
+    select: {
+      name: true,
+      slug: true,
+      iconPath: true,
+    },
+  },
   author: {
-    include: {
+    select: {
+      id: true,
+      username: true,
+      nickname: true,
+      avatarPath: true,
+      status: true,
+      vipLevel: true,
+      vipExpiresAt: true,
       userBadges: {
         where: {
           isDisplayed: true,
@@ -15,8 +28,21 @@ export const postListInclude = {
         },
         orderBy: [{ displayOrder: "asc" }, { grantedAt: "desc" }],
         take: 3,
-        include: {
-          badge: true,
+        select: {
+          id: true,
+          isDisplayed: true,
+          displayOrder: true,
+          badge: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              description: true,
+              color: true,
+              iconText: true,
+              status: true,
+            },
+          },
         },
       },
       verificationApplications: {
@@ -25,8 +51,18 @@ export const postListInclude = {
         },
         orderBy: [{ reviewedAt: "desc" }, { submittedAt: "desc" }],
         take: 1,
-        include: {
-          type: true,
+        select: {
+          customIconText: true,
+          customDescription: true,
+          type: {
+            select: {
+              id: true,
+              name: true,
+              color: true,
+              iconText: true,
+              description: true,
+            },
+          },
         },
       },
     },
@@ -45,7 +81,11 @@ export const postListInclude = {
     where: { status: "NORMAL" },
     orderBy: { createdAt: "desc" },
     take: 1,
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      useAnonymousIdentity: true,
+      content: true,
       user: {
         select: { username: true, nickname: true },
       },

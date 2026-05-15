@@ -3,6 +3,7 @@ import { prisma } from "@/db/client"
 import { NotificationType, TargetType } from "@/db/types"
 
 import { toggleCommentLike, togglePostLike } from "@/db/interaction-queries"
+import { revalidateContentListCaches } from "@/lib/content-list-cache"
 import { handlePostLikeSideEffects } from "@/lib/interaction-side-effects"
 import { buildLikeTaskEventDescriptors } from "@/lib/like-task-events"
 import { enqueueSyncUserReceivedLikes } from "@/lib/level-system"
@@ -109,6 +110,8 @@ async function applyPostLikeMutationEffects(input: {
   if (input.result.targetUserId) {
     revalidateUserSurfaceCache(input.result.targetUserId)
   }
+
+  revalidateContentListCaches()
 
   if (input.result.liked && input.result.notificationTargetUserId) {
     void enqueueNotification({

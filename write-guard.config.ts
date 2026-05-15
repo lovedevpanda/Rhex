@@ -122,6 +122,17 @@ const writeGuardConfig = {
       parts: ["userId", "commentId"],
     },
   },
+  "comments-tip": {
+    description: "评论打赏防重，防止连点造成重复扣积分。",
+    scope: "comments-tip",
+    cooldownMs: 1_500,
+    cooldownMessage: "打赏操作过于频繁，请稍后再试",
+    releaseOnError: true,
+    dedupe: {
+      windowMs: 10_000,
+      parts: ["userId", "commentId", "amount", "giftId"],
+    },
+  },
   "invite-codes-purchase": {
     description: "邀请码购买防重，避免连点重复扣积分。",
     scope: "invite-codes-purchase",
