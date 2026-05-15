@@ -35,13 +35,13 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/lovedevpanda/rhex
+          images: ghcr.io/herper/Rhex
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha
           labels: |
-            org.opencontainers.image.source=https://github.com/lovedevpanda/Rhex
+            org.opencontainers.image.source=https://github.com/herper/Rhex
 
       - name: Build and push image
         uses: docker/build-push-action@v6
