@@ -1,0 +1,15 @@
+services:
+  setup:
+    image: rhex-custom:1.0.42-20260628-2
+    platform: linux/amd64
+    pull_policy: never
+
+  web:
+    image: rhex-custom:1.0.42-20260628-2
+    platform: linux/amd64
+    pull_policy: never
+
+  worker:
+    image: rhex-custom:1.0.42-20260628-2
+    platform: linux/amd64
+    pull_policy: never

@@ -256,6 +256,7 @@ export function LoginForm({
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
                   type="button"
+                  tabIndex={-1}
                   aria-label={showPassword ? "隐藏密码" : "显示密码"}
                   onClick={() => setShowPassword((current) => !current)}
                 >

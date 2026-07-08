@@ -40,7 +40,7 @@ registerInteractionEffectHooks({
           }))
         : Promise.resolve(null),
       input.liked
-        ? swallowSideEffect(`post-like:lottery:${input.postId}:${input.userId}`, () => enrollUserInLotteryPool({ postId: input.postId, userId: input.userId }))
+        ? enrollUserInLotteryPool({ postId: input.postId, userId: input.userId })
         : Promise.resolve(null),
     ])
 
@@ -61,10 +61,10 @@ registerInteractionEffectHooks({
         userId: input.userId,
         triggerType: "FAVORITE",
       })),
-      swallowSideEffect(`post-favorite:lottery:${input.postId}:${input.userId}`, () => enrollUserInLotteryPool({
+      enrollUserInLotteryPool({
         postId: input.postId,
         userId: input.userId,
-      })),
+      }),
     ])
     revalidatePostDataCache({ postId: input.postId })
     revalidatePostViewerCache(input.userId)
@@ -77,11 +77,11 @@ registerInteractionEffectHooks({
         triggerType: "REPLY",
         triggerCommentId: input.commentId,
       })),
-      swallowSideEffect(`comment-create:lottery:${input.commentId}`, () => enrollUserInLotteryPool({
+      enrollUserInLotteryPool({
         postId: input.postId,
         userId: input.userId,
         replyCommentId: input.commentId,
-      })),
+      }),
     ])
     revalidatePostCommentCache({ postId: input.postId })
     revalidatePostViewerCache(input.userId)

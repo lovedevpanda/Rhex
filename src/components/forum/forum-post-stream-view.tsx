@@ -8,6 +8,7 @@ import { PostWeiboFeed } from "@/components/post/post-weibo-feed"
 import type { TaxonomyPostSortLinks } from "@/lib/forum-taxonomy-sort"
 import type { PostStreamDisplayItem } from "@/lib/forum-post-stream-display"
 import { normalizePostListDisplayMode, POST_LIST_DISPLAY_MODE_GALLERY, POST_LIST_DISPLAY_MODE_WEIBO, type PostListDisplayMode } from "@/lib/post-list-display"
+import { cn } from "@/lib/utils"
 
 interface ForumPostStreamViewProps {
   items: PostStreamDisplayItem[]
@@ -29,21 +30,24 @@ export function ForumPostStreamView({
   sortLinks,
 }: ForumPostStreamViewProps) {
   const resolvedListDisplayMode = normalizePostListDisplayMode(listDisplayMode)
+  const isGalleryMode = resolvedListDisplayMode === POST_LIST_DISPLAY_MODE_GALLERY
   const pinnedPosts = items.filter((post) => Boolean(post.pinLabel))
   const normalPosts = items.filter((post) => !post.pinLabel)
-  const shouldShowPinnedDivider = showPinnedDivider && pinnedPosts.length > 0 && normalPosts.length > 0
+  const displayPinnedPosts = isGalleryMode ? [] : pinnedPosts
+  const galleryPosts = isGalleryMode ? items : normalPosts
+  const shouldShowPinnedDivider = showPinnedDivider && displayPinnedPosts.length > 0 && normalPosts.length > 0
   const shouldShowLatestContentHeader = Boolean(sortLinks) || shouldShowPinnedDivider
 
   return (
     <div className="overflow-hidden rounded-md bg-background">
-      <div className="lg:pl-4">
-        {pinnedPosts.map((post, index) => (
+      <div className={cn(!isGalleryMode && "lg:pl-4")}>
+        {displayPinnedPosts.map((post, index) => (
           <ForumPostListItem
             key={post.id}
             item={post}
             showBoard={showBoard}
             compactFirstItem={compactFirstItem && index === 0}
-            hideDivider={shouldShowPinnedDivider && index === pinnedPosts.length - 1}
+            hideDivider={shouldShowPinnedDivider && index === displayPinnedPosts.length - 1}
             postLinkDisplayMode={postLinkDisplayMode}
           />
         ))}
@@ -55,7 +59,7 @@ export function ForumPostStreamView({
           </div>
         ) : null}
         {resolvedListDisplayMode === POST_LIST_DISPLAY_MODE_GALLERY ? (
-          <PostGalleryGrid items={normalPosts} showBoard={showBoard} postLinkDisplayMode={postLinkDisplayMode} />
+          <PostGalleryGrid items={galleryPosts} showBoard={showBoard} postLinkDisplayMode={postLinkDisplayMode} />
         ) : resolvedListDisplayMode === POST_LIST_DISPLAY_MODE_WEIBO ? (
           <AddonSurfaceClientRenderer
             surface="post.weibo.feed"
@@ -74,7 +78,7 @@ export function ForumPostStreamView({
             key={post.id}
             item={post}
             showBoard={showBoard}
-            compactFirstItem={compactFirstItem && pinnedPosts.length === 0 && index === 0}
+            compactFirstItem={compactFirstItem && displayPinnedPosts.length === 0 && index === 0}
             postLinkDisplayMode={postLinkDisplayMode}
           />
         ))}

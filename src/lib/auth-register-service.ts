@@ -29,6 +29,7 @@ import { isEquivalentNickname } from "@/lib/nickname"
 import { isPrismaUniqueConstraintError } from "@/lib/prisma-errors"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 import { findUsernameSensitiveWord } from "@/lib/username-sensitive-words"
+import { createSystemNotification } from "@/lib/notification-writes"
 import { validateAuthPayload } from "@/lib/validators"
 import { verifyCode } from "@/lib/verification"
 import type { PasswordStrength } from "@/lib/password-policy"
@@ -402,6 +403,17 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
 
     if (inviter) {
       await incrementUserInviteCount(inviter.id, tx)
+      await createSystemNotification({
+        client: tx,
+        userId: inviter.id,
+        relatedType: "USER",
+        relatedId: String(createdUser.id),
+        url: `/users/${createdUser.username}`,
+        title: "邀请注册成功",
+        content: inviteCodeRecord
+          ? `你分享的邀请码 ${inviteCodeRecord.code} 已被用户 ${createdUser.username} 注册使用。`
+          : `用户 ${createdUser.username} 已通过你的邀请注册。`,
+      })
     }
 
     await createUserLoginLogEntry(createdUser.id, registerIp, userAgent, tx)

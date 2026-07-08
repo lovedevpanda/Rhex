@@ -56,14 +56,28 @@ const searchPostListSelect = {
   },
 } satisfies Prisma.PostSelect
 
+function normalizeSearchTerms(keyword: string) {
+  const terms = keyword
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+
+  return terms.length > 0 ? Array.from(new Set(terms)) : [keyword.trim()]
+}
+
 export function buildPostSearchWhere(keyword: string) {
+  const terms = normalizeSearchTerms(keyword)
+
   return {
     status: { in: [...PUBLIC_READABLE_POST_STATUSES] },
-    OR: [
-      { title: { contains: keyword, mode: "insensitive" as const } },
-      { summary: { contains: keyword, mode: "insensitive" as const } },
-      { content: { contains: keyword, mode: "insensitive" as const } },
-    ],
+    AND: terms.map((term) => ({
+      OR: [
+        { title: { contains: term, mode: "insensitive" as const } },
+        { summary: { contains: term, mode: "insensitive" as const } },
+        { content: { contains: term, mode: "insensitive" as const } },
+      ],
+    })),
   }
 }
 
@@ -131,23 +145,27 @@ export async function findSearchPostsCursor(params: {
 }
 
 export function buildBoardSearchWhere(keyword: string): Prisma.BoardWhereInput {
+  const terms = normalizeSearchTerms(keyword)
+
   return {
     status: "ACTIVE",
-    OR: [
-      { name: { contains: keyword, mode: "insensitive" } },
-      { slug: { contains: keyword, mode: "insensitive" } },
-      { description: { contains: keyword, mode: "insensitive" } },
-      {
-        zone: {
-          is: {
-            OR: [
-              { name: { contains: keyword, mode: "insensitive" } },
-              { slug: { contains: keyword, mode: "insensitive" } },
-            ],
+    AND: terms.map((term) => ({
+      OR: [
+        { name: { contains: term, mode: "insensitive" } },
+        { slug: { contains: term, mode: "insensitive" } },
+        { description: { contains: term, mode: "insensitive" } },
+        {
+          zone: {
+            is: {
+              OR: [
+                { name: { contains: term, mode: "insensitive" } },
+                { slug: { contains: term, mode: "insensitive" } },
+              ],
+            },
           },
         },
-      },
-    ],
+      ],
+    })),
   }
 }
 
@@ -199,11 +217,15 @@ export function findSearchBoardsPage(params: {
 }
 
 export function buildTagSearchWhere(keyword: string): Prisma.TagWhereInput {
+  const terms = normalizeSearchTerms(keyword)
+
   return {
-    OR: [
-      { name: { contains: keyword, mode: "insensitive" } },
-      { slug: { contains: keyword, mode: "insensitive" } },
-    ],
+    AND: terms.map((term) => ({
+      OR: [
+        { name: { contains: term, mode: "insensitive" } },
+        { slug: { contains: term, mode: "insensitive" } },
+      ],
+    })),
   }
 }
 
@@ -238,15 +260,19 @@ export function findSearchTagsPage(params: {
 }
 
 export function buildUserSearchWhere(keyword: string): Prisma.UserWhereInput {
+  const terms = normalizeSearchTerms(keyword)
+
   return {
     status: {
       in: [UserStatus.ACTIVE, UserStatus.MUTED],
     },
-    OR: [
-      { username: { contains: keyword, mode: "insensitive" } },
-      { nickname: { contains: keyword, mode: "insensitive" } },
-      { bio: { contains: keyword, mode: "insensitive" } },
-    ],
+    AND: terms.map((term) => ({
+      OR: [
+        { username: { contains: term, mode: "insensitive" } },
+        { nickname: { contains: term, mode: "insensitive" } },
+        { bio: { contains: term, mode: "insensitive" } },
+      ],
+    })),
   }
 }
 
@@ -299,6 +325,7 @@ export function buildFavoriteCollectionSearchWhere(
   keyword: string,
   currentUserId?: number | null,
 ): Prisma.FavoriteCollectionWhereInput {
+  const terms = normalizeSearchTerms(keyword)
   const visibilityWhere: Prisma.FavoriteCollectionWhereInput = currentUserId
     ? {
         OR: [
@@ -311,14 +338,14 @@ export function buildFavoriteCollectionSearchWhere(
   return {
     AND: [
       visibilityWhere,
-      {
+      ...terms.map((term) => ({
         OR: [
-          { title: { contains: keyword, mode: "insensitive" } },
-          { description: { contains: keyword, mode: "insensitive" } },
-          { owner: { username: { contains: keyword, mode: "insensitive" } } },
-          { owner: { nickname: { contains: keyword, mode: "insensitive" } } },
+          { title: { contains: term, mode: "insensitive" as const } },
+          { description: { contains: term, mode: "insensitive" as const } },
+          { owner: { username: { contains: term, mode: "insensitive" as const } } },
+          { owner: { nickname: { contains: term, mode: "insensitive" as const } } },
         ],
-      },
+      })),
     ],
   }
 }

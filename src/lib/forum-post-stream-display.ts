@@ -63,6 +63,15 @@ type PostStreamDisplaySettings = Pick<
   | "markdownEmojiMap" | "postLinkDisplayMode"
 >
 
+function resolveGalleryCoverImage(coverImage: string | null | undefined, previewMedia: PostListPreviewMedia | null) {
+  const normalizedCoverImage = coverImage?.trim()
+  if (normalizedCoverImage) {
+    return normalizedCoverImage
+  }
+
+  return previewMedia?.type === "image" ? previewMedia.src : null
+}
+
 export function getVisiblePinLabel(
   pinScope: SitePostItem["pinScope"],
   visiblePinScopes: Array<"GLOBAL" | "ZONE" | "BOARD">,
@@ -115,7 +124,7 @@ export function mapSitePostsToDisplayItems(
       title: post.title,
       excerpt: post.excerpt,
       contentMarkdown,
-      coverImage: post.coverImage,
+      coverImage: resolveGalleryCoverImage(post.coverImage, previewMedia),
       previewMedia,
       type: post.type,
       typeLabel: post.typeLabel,

@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-import { connection } from "next/server"
 import { Suspense, type CSSProperties } from "react"
 
 import { RhexGlobalSdkBootstrap } from "@/addons-host/client/rhex-global-sdk"
@@ -87,13 +86,10 @@ export async function generateRootMetadata(): Promise<Metadata> {
     })
   }
 
-  await connection()
   return buildMetadataFromSettings(await getSiteSettings())
 }
 
 export async function RootRuntimeProviders({ children }: { children: React.ReactNode }) {
-  await connection()
-
   const [settings, editorProviders, editorToolbarItems, addonSurfaceOverrides, footerHiddenPaths] = await Promise.all([
     getSiteSettings(),
     listAddonEditorProviderDescriptors(),

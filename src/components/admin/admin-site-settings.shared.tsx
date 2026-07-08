@@ -11,7 +11,7 @@ import { POST_LIST_LOAD_MODE_INFINITE, POST_LIST_LOAD_MODE_PAGINATION, type Post
 import { normalizePostListDisplayMode, POST_LIST_DISPLAY_MODE_DEFAULT, type PostListDisplayMode } from "@/lib/post-list-display"
 import { defaultSiteSettingsCreateInput } from "@/lib/site-settings-defaults"
 import { DEFAULT_GOD_COMMENT_AUTO_LIKE_THRESHOLD } from "@/lib/god-comment-settings"
-import { DEFAULT_THEME_CUSTOMIZATION_SETTINGS, type BuiltInThemePreset, type EditableThemePresetDefinition, type FontSizePreset, type FontSizePresetDefinition, type ThemeCustomizationSettings, type ThemeRuntimeSettings } from "@/lib/theme"
+import { DEFAULT_THEME_CUSTOMIZATION_SETTINGS, type BuiltInThemePreset, type EditableThemePresetDefinition, type FontSizePreset, type FontSizePresetDefinition, type PostContentImageMode, type ThemeCustomizationSettings, type ThemePreference, type ThemeRuntimeSettings } from "@/lib/theme"
 import type { InteractionGateCondition, InteractionGateSettings, MentionRecommendationSettings } from "@/lib/site-settings"
 import type { LeftSidebarDisplayMode, LeftSidebarHomeSettings, LeftSidebarNavigationMode, PostSlugGenerationMode, RegistrationEmailTemplateSettings, SiteSearchSettings, SiteTippingGiftItem } from "@/lib/site-settings"
 import type { PasswordStrength } from "@/lib/password-policy"
@@ -209,10 +209,12 @@ export interface AdminBasicSettingsDraft {
   leftSidebarHomeEnabled: boolean
   leftSidebarHomeName: string
   leftSidebarHomeIcon: string
+  defaultPreference: ThemePreference
   defaultThemePreset: BuiltInThemePreset
   defaultFontSizePreset: FontSizePreset
   defaultMobileThemePreset: BuiltInThemePreset
   defaultMobileFontSizePreset: FontSizePreset
+  postContentImageMode: PostContentImageMode
   fontSizePresets: Record<FontSizePreset, FontSizePresetDefinition>
   themePresets: Record<BuiltInThemePreset, EditableThemePresetDefinition>
   postSlugGenerationMode: PostSlugGenerationMode
@@ -468,10 +470,12 @@ export function createAdminBasicSettingsDraft(initialSettings: AdminBasicSetting
     leftSidebarHomeEnabled: coerceBoolean(initialSettings.leftSidebarHome?.enabled, true),
     leftSidebarHomeName: coerceString(initialSettings.leftSidebarHome?.name, "首页"),
     leftSidebarHomeIcon: coerceString(initialSettings.leftSidebarHome?.icon, "🏠"),
+    defaultPreference: themeCustomization.defaultPreference,
     defaultThemePreset: themeCustomization.defaultThemePreset,
     defaultFontSizePreset: themeCustomization.defaultFontSizePreset,
     defaultMobileThemePreset: themeCustomization.defaultMobileThemePreset,
     defaultMobileFontSizePreset: themeCustomization.defaultMobileFontSizePreset,
+    postContentImageMode: themeCustomization.postContentImageMode,
     fontSizePresets: themeCustomization.fontSizePresets,
     themePresets: themeCustomization.themePresets,
     postSlugGenerationMode: initialSettings.postSlugGenerationMode ?? "TITLE_TIMESTAMP",
@@ -658,10 +662,12 @@ export function buildAdminBasicSettingsPayload(draft: AdminBasicSettingsDraft, m
         icon: draft.leftSidebarHomeIcon,
       },
       themeCustomization: {
+        defaultPreference: draft.defaultPreference,
         defaultThemePreset: draft.defaultThemePreset,
         defaultFontSizePreset: draft.defaultFontSizePreset,
         defaultMobileThemePreset: draft.defaultMobileThemePreset,
         defaultMobileFontSizePreset: draft.defaultMobileFontSizePreset,
+        postContentImageMode: draft.postContentImageMode,
         fontSizePresets: draft.fontSizePresets,
         themePresets: draft.themePresets,
       },

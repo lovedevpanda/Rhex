@@ -16,7 +16,7 @@ function parsePage(request: Request) {
 
 function parseSort(request: Request): Exclude<FeedSort, "weekly"> {
   const value = new URL(request.url).searchParams.get("sort")
-  return value === "new" || value === "hot" || value === "following" ? value : "latest"
+  return value === "new" || value === "hot" || value === "featured" || value === "following" ? value : "latest"
 }
 
 export const GET = createRouteHandler(async ({ request }) => {
@@ -31,9 +31,11 @@ export const GET = createRouteHandler(async ({ request }) => {
     ? "/new"
     : sort === "hot"
       ? "/hot"
-      : sort === "following"
-        ? "/following"
-        : "/"
+      : sort === "featured"
+        ? "/featured"
+        : sort === "following"
+          ? "/following"
+          : "/"
 
   const items = await buildHookedFeedDisplayItems({
     items: result.items,

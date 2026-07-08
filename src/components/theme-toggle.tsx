@@ -17,6 +17,7 @@ import {
   getThemePresetDisplayMeta,
   readThemeLocalSettingsSnapshot,
   readStoredCustomThemeConfig,
+  setStoredThemePreference,
   setStoredFontSizePreset,
   setStoredThemePreset,
 } from "@/lib/theme"
@@ -118,6 +119,7 @@ export function ThemeToggle() {
   }, [themeSettings])
 
   function handleThemeSelect(preference: ThemePreference) {
+    setStoredThemePreference(preference)
     setTheme(preference)
     setMenuOpen(true)
   }

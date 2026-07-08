@@ -1,5 +1,18 @@
 import { prisma } from "@/db/client"
 
+export type InviteCodeUsageStatus = "all" | "used" | "unused"
+
+function buildInviteCodeCreatorWhere(userId: number, status: InviteCodeUsageStatus = "all") {
+  return {
+    createdById: userId,
+    ...(status === "used"
+      ? { usedById: { not: null } }
+      : status === "unused"
+        ? { usedById: null }
+        : {}),
+  }
+}
+
 export function findInviteCodeByCode(code: string) {
   return prisma.inviteCode.findUnique({ where: { code } })
 }
@@ -46,22 +59,18 @@ export function deleteInviteCodesByScope(scope: "all" | "used" | "unused") {
   })
 }
 
-export function countInviteCodesByCreator(userId: number) {
+export function countInviteCodesByCreator(userId: number, status: InviteCodeUsageStatus = "all") {
   return prisma.inviteCode.count({
-    where: {
-      createdById: userId,
-    },
+    where: buildInviteCodeCreatorWhere(userId, status),
   })
 }
 
-export function findInviteCodesByCreator(userId: number, options: { page: number; pageSize: number }) {
+export function findInviteCodesByCreator(userId: number, options: { page: number; pageSize: number; status?: InviteCodeUsageStatus }) {
   const page = Math.max(1, Math.trunc(options.page))
-  const pageSize = Math.max(1, Math.min(Math.trunc(options.pageSize), 50))
+  const pageSize = Math.max(1, Math.min(Math.trunc(options.pageSize), 1000))
 
   return prisma.inviteCode.findMany({
-    where: {
-      createdById: userId,
-    },
+    where: buildInviteCodeCreatorWhere(userId, options.status ?? "all"),
     orderBy: { createdAt: "desc" },
     skip: (page - 1) * pageSize,
     take: pageSize,

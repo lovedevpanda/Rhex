@@ -85,15 +85,17 @@ export function ThemeProvider({
   defaultDevice?: ThemeDefaultDevice
   settings?: ThemeRuntimeSettings
 }) {
+  const defaultTheme = themeSettings?.preference ?? DEFAULT_THEME_RUNTIME_SETTINGS.preference
+
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="light"
+      defaultTheme={defaultTheme}
       disableTransitionOnChange
       enableColorScheme
       enableSystem
       storageKey={THEME_STORAGE_KEY}
-      themes={["light", "dark"]}
+      themes={["light", "dark", "system"]}
     >
       <ThemeSettingsContext.Provider value={themeSettings}>
         <ThemeRuntimeSync defaultDevice={defaultDevice} settings={themeSettings} />
@@ -123,6 +125,7 @@ function ThemeRuntimeSync({
 
       return {
         ...DEFAULT_THEME_LOCAL_SETTINGS_SNAPSHOT,
+        preference: defaults.preference,
         preset: defaults.preset,
         fontSizePreset: defaults.fontSizePreset,
       }

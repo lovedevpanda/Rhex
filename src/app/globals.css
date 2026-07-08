@@ -586,9 +586,23 @@
     max-width: 100%;
     margin: 0 !important;
   }
+  .markdown-body.markdown-body--large-images p:has(> img:only-child),
+  .markdown-body.markdown-body--large-images p:has(> a:only-child > img:only-child) {
+    display: block;
+    max-width: 100%;
+    margin: 0.75rem 0;
+  }
+  .markdown-body.markdown-body--large-images img.my-3,
+  .markdown-body.markdown-body--large-images img.my-4 {
+    max-width: 100%;
+  }
   .markdown-body.markdown-body--image-only img.my-3,
   .markdown-body.markdown-body--image-only img.my-4 {
     max-width: 100%;
+  }
+  .markdown-body.markdown-body--small-images.markdown-body--image-only img.my-3,
+  .markdown-body.markdown-body--small-images.markdown-body--image-only img.my-4 {
+    max-width: 20em;
   }
   .message-markdown img.my-3,
   .message-markdown img.my-4 {
@@ -1212,7 +1226,7 @@
     }
 
     html[data-sidebar-collapsed='true'] .forum-page-shell:is([data-sidebar-display-mode='default'], [data-sidebar-display-mode='tree']) .forum-page-main .post-gallery-grid {
-      grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+      column-width: 14rem;
     }
 
     .forum-page-shell[data-sidebar-display-mode='docked'] .forum-page-sidebar-docked,
@@ -1330,52 +1344,23 @@
     }
   }
 
-.post-gallery-grid {
-  display: block !important;
-  column-width: 15.5rem;
-  column-gap: 0.75rem;
-}
-
-.post-gallery-card {
-  display: inline-block;
-  width: 100%;
-  margin: 0 0 0.75rem;
-  break-inside: avoid;
-  page-break-inside: avoid;
-  vertical-align: top;
-}
-
-.post-gallery-card img {
-  display: block;
-  width: 100%;
-  height: auto;
-  object-fit: cover;
-}
-
-.post-gallery-card > a > .relative {
-  min-height: 0 !important;
-}
-
-@media (max-width: 640px) {
   .post-gallery-grid {
-    column-width: auto;
-    column-count: 1;
-    column-gap: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
-}
 
-@media (min-width: 641px) and (max-width: 1023px) {
-  .post-gallery-grid {
-    column-count: 2;
+  .post-gallery-column {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 0.5rem;
   }
-}
 
-@media (min-width: 1024px) {
-  .post-gallery-grid {
-    column-width: 15.5rem;
+  .post-gallery-card {
+    width: 100%;
   }
-}
-
 
   @keyframes toast-in {
     from {

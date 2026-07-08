@@ -44,6 +44,7 @@ export function InfiniteForumPostStream({
   const pageRef = useRef(initialPage)
   const hasNextPageRef = useRef(initialHasNextPage)
   const isLoadingRef = useRef(false)
+  const loadedIdsRef = useRef(new Set(initialItems.map((item) => item.id)))
 
   const loadMore = useCallback(async () => {
     if (isLoadingRef.current || !hasNextPageRef.current) {
@@ -72,12 +73,12 @@ export function InfiniteForumPostStream({
 
       const nextResultPage = result.data.page
       const nextHasNextPage = result.data.hasNextPage && nextResultPage > currentPage
-      setItems((current) => {
-        const existingIds = new Set(current.map((item) => item.id))
-        const nextItems = result.data!.items.filter((item) => !existingIds.has(item.id))
+      const nextItems = result.data.items.filter((item) => !loadedIdsRef.current.has(item.id))
+      nextItems.forEach((item) => loadedIdsRef.current.add(item.id))
 
-        return [...current, ...nextItems]
-      })
+      if (nextItems.length > 0) {
+        setItems((current) => [...current, ...nextItems])
+      }
       pageRef.current = Math.max(currentPage, nextResultPage)
       hasNextPageRef.current = nextHasNextPage
       setHasNextPage(nextHasNextPage)
@@ -93,6 +94,7 @@ export function InfiniteForumPostStream({
     pageRef.current = initialPage
     hasNextPageRef.current = initialHasNextPage
     isLoadingRef.current = false
+    loadedIdsRef.current = new Set(initialItems.map((item) => item.id))
     setItems(initialItems)
     setHasNextPage(initialHasNextPage)
     setIsLoading(false)

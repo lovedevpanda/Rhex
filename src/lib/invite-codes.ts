@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto"
 
-import { countInviteCodesByCreator, createInviteCodesBatch, deleteInviteCodeById, deleteInviteCodesByScope, findInviteCodeByCode, findInviteCodeForUse, findInviteCodeList, findInviteCodesByCodes, findInviteCodesByCreator, findInvitePurchaseUser, findUserInviteResolverById, findUserInviteResolverByUsername } from "@/db/invite-code-queries"
+import { countInviteCodesByCreator, createInviteCodesBatch, deleteInviteCodeById, deleteInviteCodesByScope, findInviteCodeByCode, findInviteCodeForUse, findInviteCodeList, findInviteCodesByCodes, findInviteCodesByCreator, findInvitePurchaseUser, findUserInviteResolverById, findUserInviteResolverByUsername, type InviteCodeUsageStatus } from "@/db/invite-code-queries"
 import { purchaseInviteCodeTransaction } from "@/db/invite-code-write-queries"
 import { apiError } from "@/lib/api-route"
 import { ensureAdminActorPermission } from "@/lib/admin-scope-permissions"
@@ -13,6 +13,8 @@ import { getVipLevel, isVipActive } from "@/lib/vip-status"
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const DEFAULT_CODE_LENGTH = 8
+const MAX_INVITE_CODE_PURCHASE_COUNT = 10
+const MAX_UNUSED_INVITE_CODE_HOLDINGS = 100
 
 export interface InviteCodeItem {
   id: string
@@ -132,13 +134,18 @@ export async function deleteInviteCodes(input: { scope: "single" | "used" | "unu
   return result.count
 }
 
-export async function getPurchasedInviteCodePage(userId: number, options?: { page?: number; pageSize?: number }): Promise<InviteCodePageData> {
+function normalizeInviteCodeUsageStatus(status: unknown): InviteCodeUsageStatus {
+  return status === "used" || status === "unused" ? status : "all"
+}
+
+export async function getPurchasedInviteCodePage(userId: number, options?: { page?: number; pageSize?: number; status?: unknown }): Promise<InviteCodePageData> {
   const requestedPage = Math.max(1, Math.trunc(options?.page ?? 1))
-  const pageSize = Math.max(1, Math.min(Math.trunc(options?.pageSize ?? 10), 50))
-  const total = await countInviteCodesByCreator(userId)
+  const pageSize = Math.max(1, Math.min(Math.trunc(options?.pageSize ?? 10), 1000))
+  const status = normalizeInviteCodeUsageStatus(options?.status)
+  const total = await countInviteCodesByCreator(userId, status)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const page = Math.min(requestedPage, totalPages)
-  const rows = await findInviteCodesByCreator(userId, { page, pageSize })
+  const rows = await findInviteCodesByCreator(userId, { page, pageSize, status })
 
   return {
     items: rows.map((row) => ({
@@ -208,7 +215,11 @@ export async function resolveInviter(input: { inviterUsername?: string; inviteCo
   }
 }
 
-export async function purchaseInviteCode(userId: number) {
+export async function purchaseInviteCode(userId: number, options?: { count?: number }) {
+  const requestedCount = Number(options?.count ?? 1)
+  const count = Number.isFinite(requestedCount)
+    ? Math.max(1, Math.min(Math.trunc(requestedCount), MAX_INVITE_CODE_PURCHASE_COUNT))
+    : 1
   const [settings, user] = await Promise.all([
     getSiteSettings(),
     findInvitePurchaseUser(userId),
@@ -234,18 +245,37 @@ export async function purchaseInviteCode(userId: number) {
     apiError(400, "邀请码价格未设置")
   }
 
-  if (user.points < price) {
-    apiError(409, `${settings.pointName}不足，无法购买邀请码`)
+  const unusedCount = await countInviteCodesByCreator(userId, "unused")
+
+  if (unusedCount + count > MAX_UNUSED_INVITE_CODE_HOLDINGS) {
+    apiError(409, `一次最多购买 ${MAX_INVITE_CODE_PURCHASE_COUNT} 个邀请码，最多持有 ${MAX_UNUSED_INVITE_CODE_HOLDINGS} 个未使用邀请码。你当前已有 ${unusedCount} 个未使用邀请码`)
   }
 
+  const totalPrice = price * count
 
-  const code = await generateUniqueInviteCode()
+  if (user.points < totalPrice) {
+    apiError(409, `${settings.pointName}不足，无法购买 ${count} 个邀请码`)
+  }
+
+  const codes: string[] = []
+  const seenCodes = new Set<string>()
+
+  while (codes.length < count) {
+    const code = await generateUniqueInviteCode()
+    if (seenCodes.has(code)) {
+      continue
+    }
+    seenCodes.add(code)
+    codes.push(code)
+  }
 
   return purchaseInviteCodeTransaction({
     userId,
     price,
+    count,
+    maxUnusedHoldings: MAX_UNUSED_INVITE_CODE_HOLDINGS,
     pointName: settings.pointName,
-    code,
+    codes,
   })
 
 }

@@ -1,4 +1,4 @@
-import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
+import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { purchaseInviteCode } from "@/lib/invite-codes"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
@@ -7,15 +7,21 @@ import { withRequestWriteGuard } from "@/lib/write-guard"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const requestUrl = new URL(request.url)
+  const body = await readJsonBody(request)
+  const requestedCount = Number(body.count ?? 1)
+  const count = Number.isFinite(requestedCount)
+    ? Math.max(1, Math.min(Math.trunc(requestedCount), 10))
+    : 1
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("invite-codes-purchase", {
     request,
     userId: currentUser.id,
-    input: {},
+    input: { count },
   }), async () => {
     await executeAddonActionHook("invite-code.purchase.before", {
       userId: currentUser.id,
       username: currentUser.username,
+      count,
     }, {
       request,
       pathname: requestUrl.pathname,
@@ -23,12 +29,14 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       throwOnError: true,
     })
 
-    const inviteCode = await purchaseInviteCode(currentUser.id)
+    const inviteCode = await purchaseInviteCode(currentUser.id, { count })
 
     await executeAddonActionHook("invite-code.purchase.after", {
       userId: currentUser.id,
       username: currentUser.username,
       code: inviteCode.code,
+      codes: inviteCode.codes,
+      count,
     }, {
       request,
       pathname: requestUrl.pathname,
@@ -36,7 +44,10 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     })
 
     revalidateUserSurfaceCache(currentUser.id)
-    return apiSuccess({ code: inviteCode.code, balance: inviteCode.balance }, "邀请码购买成功")
+    return apiSuccess(
+      { code: inviteCode.code, codes: inviteCode.codes, count, balance: inviteCode.balance },
+      count > 1 ? `已购买 ${count} 个邀请码` : "邀请码购买成功",
+    )
   })
 }, {
   errorMessage: "邀请码购买失败",
@@ -44,4 +55,3 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   unauthorizedMessage: "请先登录",
   allowStatuses: ["ACTIVE", "MUTED"],
 })
-

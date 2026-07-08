@@ -1,0 +1,25 @@
+.git
+.github
+.next
+node_modules
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+*.tar
+*.tar.gz
+*.zip
+
+backups
+artifacts
+tools
+
+# Exclude persisted runtime data at the project root only.
+# Keep the leading slash: unanchored patterns such as uploads/** also match
+# app routes like src/app/uploads and break the Docker build output.
+/uploads/**
+/public/uploads/**
+/addons/**

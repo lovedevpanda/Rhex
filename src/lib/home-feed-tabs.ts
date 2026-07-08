@@ -9,6 +9,7 @@ export const BUILTIN_HOME_FEED_TAB_ORDER: Record<HomeFeedSort, number> = {
   latest: 100,
   new: 200,
   hot: 300,
+  featured: 350,
   following: 400,
   universe: 500,
 }
@@ -17,6 +18,7 @@ const BUILTIN_HOME_FEED_TAB_LABELS: Record<HomeFeedSort, string> = {
   latest: "最新",
   new: "新贴",
   hot: "热门",
+  featured: "精华",
   following: "关注",
   universe: "宇宙",
 }
@@ -98,6 +100,14 @@ export function buildResolvedHomeFeedTabs(input: {
       order: BUILTIN_HOME_FEED_TAB_ORDER.hot,
       kind: "builtin",
       builtinSort: "hot",
+    },
+    {
+      key: "featured",
+      label: BUILTIN_HOME_FEED_TAB_LABELS.featured,
+      href: buildHomeFeedHref("featured"),
+      order: BUILTIN_HOME_FEED_TAB_ORDER.featured,
+      kind: "builtin",
+      builtinSort: "featured",
     },
     {
       key: "following",
