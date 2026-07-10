@@ -22,7 +22,14 @@ interface FeedApiPayload {
   hasNextPage: boolean
 }
 
-export function InfiniteForumFeed({
+export function InfiniteForumFeed(props: InfiniteForumFeedProps) {
+  const { initialItems, initialPage, initialHasNextPage, currentSort } = props
+  const streamKey = `${currentSort}:${initialPage}:${initialHasNextPage}:${JSON.stringify(initialItems)}`
+
+  return <InfiniteForumFeedContent key={streamKey} {...props} />
+}
+
+function InfiniteForumFeedContent({
   initialItems,
   initialPage,
   initialHasNextPage,
@@ -79,16 +86,6 @@ export function InfiniteForumFeed({
       setIsLoading(false)
     }
   }, [currentSort])
-
-  useEffect(() => {
-    pageRef.current = initialPage
-    hasNextPageRef.current = initialHasNextPage
-    isLoadingRef.current = false
-    setItems(initialItems)
-    setHasNextPage(initialHasNextPage)
-    setIsLoading(false)
-    setError("")
-  }, [currentSort, initialHasNextPage, initialItems, initialPage])
 
   useEffect(() => {
     if (!hasNextPage || !sentinelRef.current) {

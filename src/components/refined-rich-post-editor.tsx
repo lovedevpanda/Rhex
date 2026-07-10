@@ -15,7 +15,6 @@ import {
   AiMentionPanel,
   buildMentionInsertText,
   findActiveMentionQuery,
-  type ActiveMentionQuery,
   type MentionChoice,
   type MentionPanelPosition,
 } from "@/components/refined-rich-post-editor/ai-mention-panel"
@@ -172,10 +171,10 @@ export function RefinedRichPostEditor({
     selectionStore.getSnapshot,
     selectionStore.getSnapshot,
   )
-  const [activeMention, setActiveMention] = useState<ActiveMentionQuery | null>(null)
   const [mentionPanelPosition, setMentionPanelPosition] = useState<MentionPanelPosition | null>(null)
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0)
   const [mentionChoices, setMentionChoices] = useState<MentionChoice[]>([])
+  const [dismissedMentionSignature, setDismissedMentionSignature] = useState<string | null>(null)
   const shortcutPlatform = useMemo(() => (isClient ? getClientPlatform() : "other"), [isClient])
   const markdownEmojiMap = useMarkdownEmojiMap(externalMarkdownEmojiMap)
   const markdownImageUploadEnabled = useMarkdownImageUploadEnabled(externalMarkdownImageUploadEnabled)
@@ -253,12 +252,23 @@ export function RefinedRichPostEditor({
     closeBase64Dialog: panels.base64Dialog.closeDialog,
   })
 
+  const mentionPanelEnabled = !disabled && (viewState.activeTab === "write" || viewState.activeTab === "live-preview")
+  const detectedMention = useMemo(() => (
+    mentionPanelEnabled
+      ? findActiveMentionQuery(value, editorSelection.start, editorSelection.end)
+      : null
+  ), [editorSelection.end, editorSelection.start, mentionPanelEnabled, value])
+  const mentionSignature = detectedMention
+    ? `${detectedMention.start}:${detectedMention.end}:${detectedMention.query}`
+    : null
+  const visibleMention = mentionSignature === dismissedMentionSignature ? null : detectedMention
+
   const closeMentionPanel = useCallback(() => {
-    setActiveMention(null)
+    setDismissedMentionSignature(mentionSignature)
     setMentionPanelPosition(null)
     setMentionActiveIndex(0)
     setMentionChoices([])
-  }, [])
+  }, [mentionSignature])
 
   const handleEditorChange = useCallback((nextValue: string, nextSelection?: EditorSelectionRange) => {
     if (nextSelection) {
@@ -268,23 +278,23 @@ export function RefinedRichPostEditor({
   }, [onChange, updateSelection])
 
   const insertMentionChoice = useCallback((choice: MentionChoice) => {
-    if (!activeMention) {
+    if (!visibleMention) {
       return
     }
 
     const insertText = buildMentionInsertText(choice)
-    const nextValue = `${value.slice(0, activeMention.start)}${insertText}${value.slice(activeMention.end)}`
-    const nextSelection = activeMention.start + insertText.length
+    const nextValue = `${value.slice(0, visibleMention.start)}${insertText}${value.slice(visibleMention.end)}`
+    const nextSelection = visibleMention.start + insertText.length
     selectionState.applyEditorUpdate({
       value: nextValue,
       selectionStart: nextSelection,
       selectionEnd: nextSelection,
     })
     closeMentionPanel()
-  }, [activeMention, closeMentionPanel, selectionState, value])
+  }, [closeMentionPanel, selectionState, value, visibleMention])
 
   const handleEditorKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (activeMention && !event.nativeEvent.isComposing) {
+    if (visibleMention && !event.nativeEvent.isComposing) {
       if (event.key === "Escape") {
         event.preventDefault()
         closeMentionPanel()
@@ -311,34 +321,20 @@ export function RefinedRichPostEditor({
     }
 
     commands.handleTextareaKeyDown(event)
-  }, [activeMention, closeMentionPanel, commands, insertMentionChoice, mentionActiveIndex, mentionChoices])
-
-  useLayoutEffect(() => {
-    if (disabled || (viewState.activeTab !== "write" && viewState.activeTab !== "live-preview")) {
-      closeMentionPanel()
-      return
-    }
-
-    const nextMention = findActiveMentionQuery(value, editorSelection.start, editorSelection.end)
-    setActiveMention(nextMention)
-    if (!nextMention) {
-      setMentionPanelPosition(null)
-      setMentionChoices([])
-    }
-  }, [closeMentionPanel, disabled, editorSelection.end, editorSelection.start, value, viewState.activeTab])
+  }, [closeMentionPanel, commands, insertMentionChoice, mentionActiveIndex, mentionChoices, visibleMention])
 
   const syncMentionPanelPosition = useCallback(() => {
     const textarea = textareaRef.current
-    if (!activeMention || !textarea) {
+    if (!visibleMention || !textarea) {
       setMentionPanelPosition(null)
       return
     }
 
-    setMentionPanelPosition(getTextareaCaretPosition(textarea, activeMention.end))
-  }, [activeMention])
+    setMentionPanelPosition(getTextareaCaretPosition(textarea, visibleMention.end))
+  }, [visibleMention])
 
   useLayoutEffect(() => {
-    if (!activeMention) {
+    if (!visibleMention) {
       return
     }
 
@@ -347,10 +343,10 @@ export function RefinedRichPostEditor({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeMention, syncMentionPanelPosition, value])
+  }, [syncMentionPanelPosition, value, visibleMention])
 
   useEffect(() => {
-    if (!activeMention) {
+    if (!visibleMention) {
       return
     }
 
@@ -380,7 +376,7 @@ export function RefinedRichPostEditor({
       window.removeEventListener("scroll", handleViewportChange, true)
       document.removeEventListener("pointerdown", handlePointerDown)
     }
-  }, [activeMention, closeMentionPanel, syncMentionPanelPosition, textareaRef])
+  }, [closeMentionPanel, syncMentionPanelPosition, textareaRef, visibleMention])
 
   const toolbarApi = useMemo<AddonEditorToolbarApi>(() => ({
     focus: () => {
@@ -555,8 +551,8 @@ export function RefinedRichPostEditor({
       />
       {isClient ? createPortal(
         <AiMentionPanel
-          open={Boolean(activeMention)}
-          query={activeMention?.query ?? ""}
+          open={Boolean(visibleMention)}
+          query={visibleMention?.query ?? ""}
           position={mentionPanelPosition}
           activeIndex={mentionActiveIndex}
           onActiveIndexChange={setMentionActiveIndex}

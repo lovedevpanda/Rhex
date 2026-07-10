@@ -38,14 +38,14 @@ function UnlockedContentFrame({ title, content, html, summary, markdownEmojiMap 
   )
 }
 
-export function RestrictedPostBlock({ type, postId, blockId, text, html, visible, currentUserId, pointName, replyThreshold, price, purchaseCount = 0, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
+export function RestrictedPostBlock(props: RestrictedPostBlockProps) {
+  return <RestrictedPostBlockContent key={`${props.blockId}:${props.userReplyCount ?? 0}`} {...props} />
+}
+
+function RestrictedPostBlockContent({ type, postId, blockId, text, html, visible, currentUserId, pointName, replyThreshold, price, purchaseCount = 0, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
 
   const [scrolling, setScrolling] = useState(false)
   const [localUserReplyCount, setLocalUserReplyCount] = useState(userReplyCount)
-
-  useEffect(() => {
-    setLocalUserReplyCount(userReplyCount)
-  }, [userReplyCount])
 
   useEffect(() => {
     if (type !== "REPLY_UNLOCK" || !currentUserId) {

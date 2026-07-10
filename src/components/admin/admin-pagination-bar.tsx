@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants, Button } from "@/components/ui/button"
@@ -108,11 +108,13 @@ export function AdminPaginationBar({
   const totalPages = Math.max(1, pagination.totalPages)
   const currentPage = Math.min(Math.max(1, pagination.page), totalPages)
   const pageTokens = showPageNumbers ? buildPageTokens(currentPage, totalPages) : []
-  const [pageInput, setPageInput] = useState(String(currentPage))
-
-  useEffect(() => {
-    setPageInput(String(currentPage))
-  }, [currentPage])
+  const [pageInputDraft, setPageInputDraft] = useState(() => ({
+    page: currentPage,
+    value: String(currentPage),
+  }))
+  const pageInput = pageInputDraft.page === currentPage
+    ? pageInputDraft.value
+    : String(currentPage)
 
   return (
     <div
@@ -175,7 +177,7 @@ export function AdminPaginationBar({
                 max={totalPages}
                 step={1}
                 value={pageInput}
-                onChange={(event) => setPageInput(event.target.value)}
+                onChange={(event) => setPageInputDraft({ page: currentPage, value: event.target.value })}
                 aria-label={jump.ariaLabel ?? "跳转到页码"}
                 className="h-8 w-16 rounded-full bg-background px-2 text-center text-xs"
               />

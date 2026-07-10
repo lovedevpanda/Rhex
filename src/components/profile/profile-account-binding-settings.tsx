@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { browserSupportsWebAuthn, startRegistration } from "@simplewebauthn/browser"
 import { Chrome, Github, KeyRound, Link2 } from "lucide-react"
@@ -34,6 +34,18 @@ interface PasskeyBindingItem {
   backedUp: boolean
   lastUsedAt: string | null
   createdAt: string
+}
+
+function subscribeToWebAuthnSupport() {
+  return () => undefined
+}
+
+function getWebAuthnSupportSnapshot() {
+  return browserSupportsWebAuthn()
+}
+
+function getServerWebAuthnSupportSnapshot() {
+  return true
 }
 
 interface ProfileAccountBindingSettingsProps {
@@ -79,7 +91,11 @@ function getProviderIcon(provider: ProviderBindingItem["provider"]) {
 
 export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAccountBindingSettingsProps) {
   const router = useRouter()
-  const [supportPasskey, setSupportPasskey] = useState(true)
+  const supportPasskey = useSyncExternalStore(
+    subscribeToWebAuthnSupport,
+    getWebAuthnSupportSnapshot,
+    getServerWebAuthnSupportSnapshot,
+  )
   const [activeProvider, setActiveProvider] = useState<string | null>(null)
   const [bindingPasskey, setBindingPasskey] = useState(false)
   const [unlinkingPasskeyId, setUnlinkingPasskeyId] = useState<string | null>(null)
@@ -88,26 +104,34 @@ export function ProfileAccountBindingSettings({ providers, passkey }: ProfileAcc
   const showPasskeySection = passkey.enabled
   const showEmptyState = !hasProviders && !showPasskeySection
 
-  useEffect(() => {
-    setSupportPasskey(browserSupportsWebAuthn())
-  }, [])
 
   useEffect(() => {
-    const nextFlash = readAccountBindingFlashOnClient()
+    let cancelled = false
 
-    if (!nextFlash) {
-      return
+    queueMicrotask(() => {
+      if (cancelled) {
+        return
+      }
+
+      const nextFlash = readAccountBindingFlashOnClient()
+      if (!nextFlash) {
+        return
+      }
+
+      setFlash(nextFlash)
+      clearAccountBindingFlashOnClient()
+
+      if (nextFlash.type === "success") {
+        toast.success(nextFlash.message, "账号绑定")
+        return
+      }
+
+      toast.error(nextFlash.message, "账号绑定")
+    })
+
+    return () => {
+      cancelled = true
     }
-
-    setFlash(nextFlash)
-    clearAccountBindingFlashOnClient()
-
-    if (nextFlash.type === "success") {
-      toast.success(nextFlash.message, "账号绑定")
-      return
-    }
-
-    toast.error(nextFlash.message, "账号绑定")
   }, [])
 
   async function unlinkProvider(provider: string, label: string) {

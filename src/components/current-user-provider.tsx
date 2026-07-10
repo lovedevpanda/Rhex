@@ -125,7 +125,9 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
   }, [setCurrentUserPayload])
 
   useEffect(() => {
-    void refresh()
+    queueMicrotask(() => {
+      void refresh()
+    })
   }, [refresh])
 
   useEffect(() => {

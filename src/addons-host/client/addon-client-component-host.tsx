@@ -60,12 +60,33 @@ export function AddonClientComponentHost({
   fallback?: React.ReactNode
 }) {
   const sdk = useMemo(() => createAddonClientSdk(), [])
+
+  return (
+    <AddonClientComponentHostContent
+      key={moduleUrl}
+      moduleUrl={moduleUrl}
+      props={props}
+      fallback={fallback}
+      sdk={sdk}
+    />
+  )
+}
+
+function AddonClientComponentHostContent({
+  moduleUrl,
+  props,
+  fallback,
+  sdk,
+}: {
+  moduleUrl: string
+  props: Record<string, unknown>
+  fallback: React.ReactNode
+  sdk: ReturnType<typeof createAddonClientSdk>
+}) {
   const [LoadedComponent, setLoadedComponent] = useState<AddonClientComponent | null>(null)
 
   useEffect(() => {
     let disposed = false
-
-    setLoadedComponent(null)
 
     if (!moduleUrl) {
       return

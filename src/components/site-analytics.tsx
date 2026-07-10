@@ -36,6 +36,8 @@ export function SiteAnalytics({ code }: { code?: string | null }) {
   const { html } = normalizedCode
     ? parseSiteAnalyticsCode(normalizedCode)
     : EMPTY_ANALYTICS_CODE
+  // Analytics code is a trusted administrator capability. It intentionally supports
+  // executable snippets and must never receive untrusted/user-provided content.
   const hookProps = html
     ? { dangerouslySetInnerHTML: { __html: html } }
     : {}

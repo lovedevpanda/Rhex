@@ -96,7 +96,7 @@ export function AiReplyModerationPage() {
   }, [])
 
   useEffect(() => {
-    void loadPage(page)
+    void Promise.resolve().then(() => loadPage(page))
   }, [page, loadPage])
 
   const decide = useCallback((id: string, action: "approve" | "reject") => {

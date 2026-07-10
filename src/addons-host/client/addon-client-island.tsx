@@ -134,14 +134,40 @@ class AddonClientErrorBoundary extends React.Component<
 }
 
 export function AddonClientIsland({ moduleUrl, props, fallback = null }: AddonClientIslandProps) {
-  const containerRef = React.useRef<HTMLDivElement | null>(null)
   const serializedProps = React.useMemo(() => JSON.stringify(props ?? {}), [props])
   const mountHostKey = React.useMemo(() => `${moduleUrl}:${serializedProps}`, [moduleUrl, serializedProps])
   const stableProps = React.useMemo(
     () => JSON.parse(serializedProps) as Record<string, unknown>,
-    [serializedProps]
+    [serializedProps],
   )
   const sdk = React.useMemo(() => createAddonClientSdk(), [])
+
+  return (
+    <AddonClientIslandMountHost
+      key={mountHostKey}
+      moduleUrl={moduleUrl}
+      stableProps={stableProps}
+      fallback={fallback}
+      sdk={sdk}
+      mountHostKey={mountHostKey}
+    />
+  )
+}
+
+function AddonClientIslandMountHost({
+  moduleUrl,
+  stableProps,
+  fallback,
+  sdk,
+  mountHostKey,
+}: {
+  moduleUrl: string
+  stableProps: Record<string, unknown>
+  fallback: React.ReactNode
+  sdk: AddonClientSdk
+  mountHostKey: string
+}) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = React.useState(false)
   const [LoadedComponent, setLoadedComponent] = React.useState<AddonClientComponent | null>(null)
 
@@ -150,9 +176,6 @@ export function AddonClientIsland({ moduleUrl, props, fallback = null }: AddonCl
     let disposed = false
     let shouldClearContainer = true
     const container = containerRef.current
-
-    setReady(false)
-    setLoadedComponent(null)
 
     if (!moduleUrl) {
       return
