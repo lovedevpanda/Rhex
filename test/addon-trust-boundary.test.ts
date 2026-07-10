@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { normalizeAddonExternalAuthRedirectTo } from "../src/lib/addon-external-auth-bridge"
+
 import {
   ADDON_TRUSTED_CODE_ACKNOWLEDGEMENT,
   ADDON_TRUSTED_CODE_ACKNOWLEDGEMENT_ENV,
@@ -68,4 +70,12 @@ test("manifest permissions cannot claim a sandbox and unknown permissions grant 
     [...permissions].sort(),
     ["network:external", "page:public", "slot:register"],
   )
+})
+test("addon external-auth redirect targets remain on the local origin", () => {
+  const fallback = "/settings?tab=profile&profileTab=accounts"
+
+  assert.equal(normalizeAddonExternalAuthRedirectTo("/settings?tab=profile#accounts"), "/settings?tab=profile#accounts")
+  assert.equal(normalizeAddonExternalAuthRedirectTo("//attacker.example/steal"), fallback)
+  assert.equal(normalizeAddonExternalAuthRedirectTo("/\\attacker.example/steal"), fallback)
+  assert.equal(normalizeAddonExternalAuthRedirectTo("https://attacker.example/steal"), fallback)
 })
