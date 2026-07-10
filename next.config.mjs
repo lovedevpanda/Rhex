@@ -25,13 +25,25 @@ const nextConfig = {
     generateBuildId: async () => deploymentId,
   } : {}),
   reactStrictMode: true,
-  productionBrowserSourceMaps:false,
-  typescript: {
-    ignoreBuildErrors: isProductionBuild,
+  productionBrowserSourceMaps: false,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+          { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()" },
+        ],
+      },
+    ]
   },
   serverExternalPackages: ["@napi-rs/canvas", "ioredis", "ip2region", "nodemailer"],
   experimental: {
-    serverSourceMaps:false,
+    serverSourceMaps: false,
     proxyClientMaxBodySize: "64mb",
     staticGenerationRetryCount: 1,
     staticGenerationMaxConcurrency: 4,

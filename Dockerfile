@@ -31,8 +31,18 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN pnpm run prisma:generate
-RUN pnpm run build
+RUN pnpm run prisma:generate \
+  && pnpm run typecheck \
+  && pnpm run lint \
+  && pnpm run test \
+  && pnpm run build
+
+FROM base AS production-dependencies
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+
+# tsx is a production dependency because the worker executes TypeScript directly.
+RUN pnpm install --prod --frozen-lockfile
 
 FROM base AS runner
 
@@ -44,7 +54,9 @@ LABEL org.opencontainers.image.source="https://github.com/lovedevpanda/Rhex"
 
 RUN mkdir -p uploads addons
 
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=production-dependencies /app/node_modules ./node_modules
+# Prisma's generated client is produced in the checked builder stage.
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/addons ./addons
 COPY --from=builder /app/package.json ./package.json
