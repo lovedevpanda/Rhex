@@ -10,6 +10,7 @@ import { getConfiguredSiteOrigin } from "@/lib/site-origin"
 import { getUserDisplayName } from "@/lib/user-display"
 import { isUserNotificationChannelEnabled } from "@/lib/user-notification-preferences"
 import { resolveUserProfileSettings } from "@/lib/user-profile-settings"
+import { safeOutboundFetch } from "@/lib/safe-outbound-http"
 
 export interface SystemNotificationDeliveryEvent {
   type: "systemNotification"
@@ -168,15 +169,23 @@ function buildWebhookPayload(payload: UserNotificationDeliveryJobPayload): UserN
   }
 }
 
+function resolveWebhookIdempotencyKey(payload: UserNotificationWebhookPayload) {
+  const eventId = payload.event === "system.notification.created"
+    ? payload.notification.id
+    : payload.message.id
+  return `rhex:${payload.event}:${payload.recipient.userId}:${eventId}`
+}
+
 async function postWebhook(webhookUrl: string, payload: UserNotificationWebhookPayload) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5_000)
 
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await safeOutboundFetch(webhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Idempotency-Key": resolveWebhookIdempotencyKey(payload),
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

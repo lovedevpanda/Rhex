@@ -6,6 +6,7 @@ import { XMLParser } from "fast-xml-parser"
 
 import type { Prisma, RssLogLevel } from "@/db/types"
 import { toPrismaJsonValue } from "@/lib/shared/prisma-json"
+import { safeOutboundFetch } from "@/lib/safe-outbound-http"
 
 const RSS_ACCEPT_HEADER = "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.2"
 
@@ -278,7 +279,7 @@ export async function fetchFeedXml(params: {
     try {
       params.onLog("INFO", "fetch", "开始抓取 RSS 源", { url: currentUrl })
 
-      const response = await fetch(currentUrl, {
+      const response = await safeOutboundFetch(currentUrl, {
         method: "GET",
         redirect: "manual",
         signal: controller.signal,
