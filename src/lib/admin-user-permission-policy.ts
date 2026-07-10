@@ -12,8 +12,8 @@ export interface AdminRoleChangePolicyInput {
 }
 
 export function getBlockedAdminRoleChangeMessage(input: AdminRoleChangePolicyInput) {
-  if (input.actorId === input.targetId && input.nextRole !== UserRole.ADMIN) {
-    return "不能把当前登录管理员移出管理员组"
+  if (input.actorId === input.targetId) {
+    return "\u4e0d\u80fd\u4fee\u6539\u5f53\u524d\u767b\u5f55\u7ba1\u7406\u5458\u7684\u7528\u6237\u7ec4"
   }
 
   if (input.targetIsFounder && !(input.actorIsFounder || input.actorCanManageFounder)) {

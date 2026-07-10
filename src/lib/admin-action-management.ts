@@ -65,6 +65,13 @@ export async function executeAdminAction(context: AdminActionContext) {
     apiError(403, "无权执行该操作")
   }
 
+  if (context.action.startsWith("user.")) {
+    const targetUserId = Number(context.targetId)
+    if (Number.isInteger(targetUserId) && targetUserId === context.actor.id) {
+      apiError(403, "\u4e0d\u80fd\u901a\u8fc7\u540e\u53f0\u63a7\u5236\u9762\u4fee\u6539\u5f53\u524d\u767b\u5f55\u7ba1\u7406\u5458")
+    }
+  }
+
   const result = await definition.execute(context)
   const revalidatePaths = result.revalidatePaths ?? definition.metadata.revalidatePaths
   if (revalidatePaths?.length) {

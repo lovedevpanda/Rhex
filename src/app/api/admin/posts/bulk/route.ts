@@ -13,18 +13,33 @@ const BATCH_POST_ACTIONS = new Set([
 ])
 
 function readPostIds(body: JsonObject) {
-  const rawIds = Array.isArray(body.postIds) ? body.postIds : []
-  const postIds = [...new Set(rawIds.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean))]
-
-  if (postIds.length === 0) {
-    apiError(400, "请选择要处理的帖子")
+  const rawIds = body.postIds
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
+    apiError(400, "\u8bf7\u9009\u62e9\u8981\u5904\u7406\u7684\u5e16\u5b50")
   }
 
-  if (postIds.length > 100) {
-    apiError(400, "单次最多批量处理 100 篇帖子")
+  if (rawIds.length > 100) {
+    apiError(400, "\u5355\u6b21\u6700\u591a\u6279\u91cf\u5904\u7406 100 \u7bc7\u5e16\u5b50")
   }
 
-  return postIds
+  const ids = rawIds.map((item) => {
+    if (typeof item !== "string") {
+      apiError(400, "\u5e16\u5b50\u6807\u8bc6\u683c\u5f0f\u4e0d\u6b63\u786e")
+    }
+
+    const id = item.trim()
+    if (!id || id.length > 191) {
+      apiError(400, "\u5e16\u5b50\u6807\u8bc6\u683c\u5f0f\u4e0d\u6b63\u786e")
+    }
+
+    return id
+  })
+
+  if (new Set(ids).size !== ids.length) {
+    apiError(400, "\u5e16\u5b50\u6807\u8bc6\u4e0d\u80fd\u91cd\u590d")
+  }
+
+  return ids
 }
 
 function getErrorMessage(error: unknown) {
