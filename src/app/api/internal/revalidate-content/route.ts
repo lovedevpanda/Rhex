@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto"
+
 import { apiError, apiSuccess, createRouteHandler, readJsonBody } from "@/lib/api-route"
 import {
   revalidateApprovedCommentMutation,
@@ -11,16 +13,25 @@ type InternalRevalidationBody =
   | { type: "approved-comment"; postId: string; postSlug?: string | null; boardSlug?: string | null; authorId: number }
 
 function getInternalSecret() {
-  return process.env.INTERNAL_REVALIDATION_SECRET?.trim()
-    || process.env.SESSION_SECRET?.trim()
-    || ""
+  return process.env.INTERNAL_REVALIDATION_SECRET?.trim() ?? ""
 }
 
 function requireInternalSecret(request: Request) {
   const expected = getInternalSecret()
   const received = request.headers.get("x-internal-revalidation-secret")?.trim() ?? ""
 
-  if (!expected || received !== expected) {
+  if (!expected) {
+    // Do not reuse the user-session signing key as an internal API credential.
+    // A deployment that has not configured a dedicated secret must fail closed.
+    apiError(403, "无权操作")
+  }
+
+  const expectedBuffer = Buffer.from(expected)
+  const receivedBuffer = Buffer.from(received)
+  if (
+    expectedBuffer.length !== receivedBuffer.length
+    || !timingSafeEqual(expectedBuffer, receivedBuffer)
+  ) {
     apiError(403, "无权操作")
   }
 }

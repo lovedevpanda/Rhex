@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import {
   clearOAuthFlowState,
   clearPendingExternalAuthState,
-  readOAuthFlowState,
+  consumeOAuthFlowState,
   setPendingExternalAuthState,
 } from "@/lib/auth-flow-state"
 import { setAccountBindingFlash } from "@/lib/account-binding-flash"
@@ -13,6 +13,7 @@ import {
   normalizeAddonExternalAuthProviderCode,
 } from "@/lib/addon-external-auth-bridge"
 import { getCurrentUser } from "@/lib/auth"
+import { requireConfiguredOAuthOrigin } from "@/lib/auth-provider-config"
 import {
   attachAuthenticatedSession,
   connectExternalAuthIdentityToUser,
@@ -20,7 +21,6 @@ import {
   resolveExternalAuth,
 } from "@/lib/external-auth-service"
 import type { ExternalAuthIdentity } from "@/lib/external-auth-types"
-import { toAbsoluteSiteUrl } from "@/lib/site-origin"
 import { getServerSiteSettings } from "@/lib/site-settings"
 
 function normalizeOptionalString(value: unknown, fallback = "") {
@@ -61,17 +61,18 @@ function normalizeExternalAuthIdentity(
   }
 }
 
-async function buildRedirectUrl(path: string) {
-  return new URL(await toAbsoluteSiteUrl(path))
+function buildRedirectUrl(path: string, siteOrigin: string) {
+  return new URL(path, `${siteOrigin}/`)
 }
 
-async function redirectWithError(
+function redirectWithError(
   request: Request,
+  siteOrigin: string,
   targetPath: string,
   provider: string,
   message: string,
 ) {
-  const redirectUrl = await buildRedirectUrl(targetPath)
+  const redirectUrl = buildRedirectUrl(targetPath, siteOrigin)
   let response: NextResponse
 
   if (targetPath.startsWith("/settings")) {
@@ -134,8 +135,19 @@ export async function POST(request: Request) {
     )
   }
 
+  let siteOrigin: string
+  try {
+    siteOrigin = requireConfiguredOAuthOrigin()
+  } catch (error) {
+    console.error("[api/auth/addon-external/finish] missing configured OAuth origin", error)
+    return NextResponse.json({
+      code: 503,
+      message: "\u7b2c\u4e09\u65b9\u767b\u5f55\u6682\u4e0d\u53ef\u7528\uff0c\u8bf7\u8054\u7cfb\u7ba1\u7406\u5458\u914d\u7f6e\u7ad9\u70b9 URL",
+    }, { status: 503 })
+  }
+
   const providerCode = identity.provider ?? ""
-  const oauthState = await readOAuthFlowState(providerCode)
+  const oauthState = await consumeOAuthFlowState(providerCode)
   const fallbackTarget =
     oauthState?.mode === "register"
       ? "/register"
@@ -145,9 +157,10 @@ export async function POST(request: Request) {
           ? "/register"
           : "/login"
 
-  if (!oauthState) {
+  if (!oauthState || oauthState.provider !== providerCode) {
     return redirectWithError(
       request,
+      siteOrigin,
       fallbackTarget,
       providerCode,
       "第三方登录状态已失效，请重新发起登录",
@@ -174,7 +187,7 @@ export async function POST(request: Request) {
         request,
       })
 
-      const response = NextResponse.redirect(await buildRedirectUrl(fallbackTarget))
+      const response = NextResponse.redirect(buildRedirectUrl(fallbackTarget, siteOrigin))
       setAccountBindingFlash(response, {
         type: "success",
         message: `${identity.providerLabel} 账号已绑定到当前站内账户`,
@@ -187,14 +200,14 @@ export async function POST(request: Request) {
     const result = await resolveExternalAuth(identity, settings, request)
 
     if (result.kind === "pending") {
-      const response = NextResponse.redirect(await buildRedirectUrl("/auth/complete"))
+      const response = NextResponse.redirect(buildRedirectUrl("/auth/complete", siteOrigin))
       clearOAuthFlowState(response, providerCode, request)
       clearPendingExternalAuthState(response, request)
       await setPendingExternalAuthState(response, result.state, request)
       return response
     }
 
-    const response = NextResponse.redirect(await buildRedirectUrl("/"))
+    const response = NextResponse.redirect(buildRedirectUrl("/", siteOrigin))
     clearOAuthFlowState(response, providerCode, request)
     clearPendingExternalAuthState(response, request)
 
@@ -207,6 +220,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return redirectWithError(
       request,
+      siteOrigin,
       fallbackTarget,
       providerCode,
       error instanceof Error ? error.message : "第三方登录失败",

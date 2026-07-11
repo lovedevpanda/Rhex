@@ -225,16 +225,18 @@ export function InboxRealtimeProvider({
     }
 
     unreadCountsRef.current = nextCounts
-    setUnreadMessageCount((current) =>
-      current === nextCounts.unreadMessageCount
-        ? current
-        : nextCounts.unreadMessageCount,
-    )
-    setUnreadNotificationCount((current) =>
-      current === nextCounts.unreadNotificationCount
-        ? current
-        : nextCounts.unreadNotificationCount,
-    )
+    queueMicrotask(() => {
+      setUnreadMessageCount((current) =>
+        current === nextCounts.unreadMessageCount
+          ? current
+          : nextCounts.unreadMessageCount,
+      )
+      setUnreadNotificationCount((current) =>
+        current === nextCounts.unreadNotificationCount
+          ? current
+          : nextCounts.unreadNotificationCount,
+      )
+    })
   }, [
     initialUnreadMessageCount,
     initialUnreadNotificationCount,
@@ -470,7 +472,9 @@ export function InboxRealtimeProvider({
     if (!currentUserId || !messageRealtimeEnabled) {
       reconnectAttemptRef.current = 0
       streamCursorRef.current = null
-      setConnectionStatus("closed")
+      queueMicrotask(() => {
+        setConnectionStatus("closed")
+      })
       restoreDocumentTitle()
       return
     }

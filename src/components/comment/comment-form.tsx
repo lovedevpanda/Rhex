@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 
 import { AddonEditor } from "@/components/addon-editor"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
@@ -37,46 +37,44 @@ interface CommentFormProps {
   commentLoadMode?: CommentLoadMode
 }
 
-export function CommentForm({ postId, commentId, initialContent = "", mode = "create", editWindowMinutes = 5, parentId, replyToUserName, replyToCommentId, compact = false, onCancel, onSubmitted, disabledMessage, commentsVisibleToAuthorOnly = false, anonymousIdentityEnabled = false, anonymousIdentityDefaultChecked = false, anonymousIdentitySwitchVisible = false, markdownEmojiMap, embedded = false, commentLoadMode = COMMENT_LOAD_MODE_PAGINATION }: CommentFormProps) {
+function getInitialCommentContent(initialContent: string, mode: CommentFormProps["mode"], replyToUserName?: string) {
+  if (mode !== "create" || !replyToUserName) {
+    return initialContent
+  }
+
+  const prefix = `@${replyToUserName} `
+  return initialContent.startsWith(prefix) ? initialContent : `${prefix}${initialContent}`.trimStart()
+}
+
+function getCommentFormStateKey({
+  commentId,
+  initialContent = "",
+  mode = "create",
+  replyToUserName,
+  anonymousIdentityDefaultChecked = false,
+}: CommentFormProps) {
+  return JSON.stringify([commentId ?? "", initialContent, mode, replyToUserName ?? "", anonymousIdentityDefaultChecked])
+}
+
+export function CommentForm(props: CommentFormProps) {
+  return <CommentFormContent key={getCommentFormStateKey(props)} {...props} />
+}
+
+function CommentFormContent({ postId, commentId, initialContent = "", mode = "create", editWindowMinutes = 5, parentId, replyToUserName, replyToCommentId, compact = false, onCancel, onSubmitted, disabledMessage, commentsVisibleToAuthorOnly = false, anonymousIdentityEnabled = false, anonymousIdentityDefaultChecked = false, anonymousIdentitySwitchVisible = false, markdownEmojiMap, embedded = false, commentLoadMode = COMMENT_LOAD_MODE_PAGINATION }: CommentFormProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [content, setContent] = useState(initialContent)
+  const [content, setContent] = useState(() => getInitialCommentContent(initialContent, mode, replyToUserName))
   const [privateReplyRecipient, setPrivateReplyRecipient] = useState<PrivateReplyRecipient | null>(null)
   const [useAnonymousIdentity, setUseAnonymousIdentity] = useState(anonymousIdentityDefaultChecked)
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState(mode === "edit" || !compact)
-  const [shortcutPlatform, setShortcutPlatform] = useState<ClientPlatform>("other")
-
-  useEffect(() => {
-    setContent(initialContent)
-    if (mode === "edit") {
-      setPrivateReplyRecipient(null)
-    }
-  }, [initialContent, mode])
-
-  useEffect(() => {
-    setUseAnonymousIdentity(anonymousIdentityDefaultChecked)
-  }, [anonymousIdentityDefaultChecked])
-
-  useEffect(() => {
-    setShortcutPlatform(getClientPlatform())
-  }, [])
-
-  useEffect(() => {
-    if (replyToUserName && mode === "create") {
-      setExpanded(true)
-      setContent((current) => {
-        const prefix = `@${replyToUserName} `
-        if (current.startsWith(prefix)) {
-          return current
-        }
-
-        return `${prefix}${current}`.trimStart()
-      })
-    }
-  }, [mode, replyToUserName])
+  const [expanded, setExpanded] = useState(mode === "edit" || !compact || (mode === "create" && Boolean(replyToUserName)))
+  const shortcutPlatform = useSyncExternalStore(
+    () => () => undefined,
+    getClientPlatform,
+    () => "other" satisfies ClientPlatform,
+  )
 
   const helperMessage = privateReplyRecipient
     ? `本次回复仅 ${privateReplyRecipient.displayName} 和你本人可见。`

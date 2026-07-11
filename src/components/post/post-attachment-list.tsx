@@ -93,14 +93,14 @@ function isReplyRequirementBlocker(blockedReason: string) {
   return blockedReason === "回复本帖后可下载" || blockedReason === "登录并回复本帖后可下载"
 }
 
-export function PostAttachmentList({ postId, attachments, pointName }: { postId: string; attachments: PostAttachmentListItem[]; pointName: string }) {
+export function PostAttachmentList(props: { postId: string; attachments: PostAttachmentListItem[]; pointName: string }) {
+  return <PostAttachmentListContent key={JSON.stringify(props.attachments)} {...props} />
+}
+
+function PostAttachmentListContent({ postId, attachments, pointName }: { postId: string; attachments: PostAttachmentListItem[]; pointName: string }) {
   const [items, setItems] = useState(attachments)
   const [pendingAttachmentId, setPendingAttachmentId] = useState<string | null>(null)
   const [revealedAttachment, setRevealedAttachment] = useState<RevealedExternalAttachment | null>(null)
-
-  useEffect(() => {
-    setItems(attachments)
-  }, [attachments])
 
   useEffect(() => {
     return addPostReplyCreatedListener((detail) => {

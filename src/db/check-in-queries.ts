@@ -73,23 +73,10 @@ export async function executeUserCheckIn(params: ExecuteUserCheckInParams): Prom
       return null
     }
 
-    const existing = await tx.userCheckInLog.findUnique({
-      where: {
-        userId_checkedInOn: {
-          userId: dbUser.id,
-          checkedInOn: params.dateKey,
-        },
-      },
-      select: {
-        userId: true,
-      },
-    })
-
-    if (existing) {
-      return { alreadyCheckedIn: true, points: dbUser.points }
-    }
-
-    await tx.userCheckInLog.create({
+    // The unique key is the concurrency authority for a user/day. A read
+    // followed by create races under normal read-committed isolation; use an
+    // insert-if-absent so a duplicate request cannot run either settlement.
+    const created = await tx.userCheckInLog.createMany({
       data: {
         userId: dbUser.id,
         reward: params.reward,
@@ -97,7 +84,16 @@ export async function executeUserCheckIn(params: ExecuteUserCheckInParams): Prom
         isMakeUp: params.isMakeUp,
         makeUpCost: params.makeUpCost,
       },
+      skipDuplicates: true,
     })
+
+    if (created.count === 0) {
+      const currentUser = await tx.user.findUnique({
+        where: { id: dbUser.id },
+        select: { points: true },
+      })
+      return { alreadyCheckedIn: true, points: currentUser?.points ?? dbUser.points }
+    }
 
     let pointBalanceCursor = dbUser.points
 

@@ -82,13 +82,20 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   })
 
   const passwordHash = await bcrypt.hash(newPassword, 10)
-  await prisma.user.update({
-    where: { id: user.id },
+  const passwordUpdated = await prisma.user.updateMany({
+    where: {
+      id: user.id,
+      passwordHash: user.passwordHash,
+    },
     data: {
       passwordHash,
       sessionInvalidBefore: new Date(),
     },
   })
+
+  if (passwordUpdated.count !== 1) {
+    apiError(409, "账号凭据已被其他请求修改，请重新验证后再试")
+  }
 
   await revokeSessionToken(readSessionTokenFromCookieHeader(request.headers.get("cookie")))
 

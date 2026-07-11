@@ -25,7 +25,7 @@ export function findCommentOfflineTarget(commentId: string, client?: CommentOffl
   })
 }
 
-export function updateCommentOfflineTarget(
+export async function updateCommentOfflineTarget(
   client: CommentOfflineQueryClient,
   params: {
     commentId: string
@@ -33,34 +33,24 @@ export function updateCommentOfflineTarget(
     reviewNote: string
   },
 ) {
-  return client.comment.update({
-    where: { id: params.commentId },
+  const updated = await client.comment.updateMany({
+    where: {
+      id: params.commentId,
+      status: CommentStatus.NORMAL,
+    },
     data: {
       status: CommentStatus.HIDDEN,
       reviewNote: params.reviewNote,
       reviewedById: params.actorId,
       reviewedAt: new Date(),
     },
-    select: {
-      id: true,
-      postId: true,
-      userId: true,
-      status: true,
-      reviewNote: true,
-      post: {
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          board: {
-            select: {
-              slug: true,
-            },
-          },
-        },
-      },
-    },
   })
+
+  if (updated.count !== 1) {
+    return null
+  }
+
+  return findCommentOfflineTarget(params.commentId, client)
 }
 
 export function runCommentOfflineTransaction<T>(

@@ -3,7 +3,7 @@ import type { AuthenticationResponseJSON } from "@simplewebauthn/server"
 
 import { apiError, apiSuccess, createRouteHandler, readJsonBody } from "@/lib/api-route"
 import { attachAuthenticatedSession, findPasskeyLinkedUserByCredentialId, recordSuccessfulExternalLogin } from "@/lib/external-auth-service"
-import { clearPasskeyCeremonyState, readPasskeyCeremonyState } from "@/lib/auth-flow-state"
+import { clearPasskeyCeremonyState, consumePasskeyCeremonyState } from "@/lib/auth-flow-state"
 import { verifyPasskeyAuthentication } from "@/lib/passkey-auth"
 import { updatePasskeyCredentialUsage } from "@/lib/external-auth-store"
 import { getServerSiteSettings } from "@/lib/site-settings"
@@ -16,7 +16,7 @@ export const POST = createRouteHandler(async ({ request }) => {
   }
 
   const body = await readJsonBody(request)
-  const ceremonyState = await readPasskeyCeremonyState("login")
+  const ceremonyState = await consumePasskeyCeremonyState("login")
 
   if (!ceremonyState) {
     apiError(410, "Passkey 登录状态已失效，请重新发起登录")

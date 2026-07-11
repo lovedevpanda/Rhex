@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import { LevelIcon } from "@/components/level-icon"
 import { DEFAULT_MARKDOWN_EMOJI_GROUP, normalizeMarkdownEmojiGroup, type MarkdownEmojiItem } from "@/lib/markdown-emoji"
@@ -71,18 +71,11 @@ export function EmojiPicker({
   const gridColumnsClassName = GRID_COLUMNS_CLASSNAME[resolvedColumns] ?? GRID_COLUMNS_CLASSNAME[4]
   const groups = useMemo(() => groupEmojiItems(items), [items])
   const defaultGroup = groups.find((group) => group.group === DEFAULT_MARKDOWN_EMOJI_GROUP) ?? groups[0]
-  const [activeGroup, setActiveGroup] = useState(defaultGroup?.group ?? DEFAULT_MARKDOWN_EMOJI_GROUP)
+  const [requestedActiveGroup, setRequestedActiveGroup] = useState(defaultGroup?.group ?? DEFAULT_MARKDOWN_EMOJI_GROUP)
+  const activeGroup = groups.some((group) => group.group === requestedActiveGroup)
+    ? requestedActiveGroup
+    : defaultGroup?.group ?? DEFAULT_MARKDOWN_EMOJI_GROUP
   const activeGroupItems = groups.find((group) => group.group === activeGroup)?.items ?? defaultGroup?.items ?? []
-
-  useEffect(() => {
-    if (!defaultGroup) {
-      return
-    }
-
-    if (!groups.some((group) => group.group === activeGroup)) {
-      setActiveGroup(defaultGroup.group)
-    }
-  }, [activeGroup, defaultGroup, groups])
 
   function renderGrid(groupItems: EmojiPickerItem[]) {
     return (
@@ -127,7 +120,7 @@ export function EmojiPicker({
                   "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity",
                   active && "text-primary after:opacity-100",
                 )}
-                onClick={() => setActiveGroup(group.group)}
+                onClick={() => setRequestedActiveGroup(group.group)}
               >
                 {group.group}
               </button>

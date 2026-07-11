@@ -2,44 +2,57 @@ import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-rout
 import { triggerAiMention } from "@/lib/ai/mention-trigger"
 import { revalidateUpdatedCommentMutation } from "@/lib/content-mutation-revalidation"
 import { updateCommentFlow } from "@/lib/comment-update-service"
+import { createPublicWriteDedupeKey, withPublicWriteGuard } from "@/lib/public-write-guard"
 import { logRequestSucceeded } from "@/lib/request-log"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
-  const result = await updateCommentFlow({
-    body,
-    request,
-    currentUser,
-  })
-
-  const targetId = typeof body?.commentId === "string" ? body.commentId : ""
-  logRequestSucceeded({
-    scope: "comments-update",
-    action: "update-comment",
-    userId: currentUser.id,
+  const targetId = typeof body.commentId === "string" ? body.commentId : ""
+  const dedupeKey = createPublicWriteDedupeKey(
     targetId,
-  }, {
-    contentAdjusted: result.contentAdjusted,
-  })
+    typeof body.postId === "string" ? body.postId : "",
+    typeof body.content === "string" ? body.content : "",
+  )
 
-  revalidateUpdatedCommentMutation({
-    postId: result.updated.postId,
-    postSlug: result.postSlug,
-    boardSlug: result.boardSlug,
-    zoneSlug: result.zoneSlug,
-  })
+  return withPublicWriteGuard("comments-update", {
+    request,
+    userId: currentUser.id,
+    dedupeKey,
+  }, async () => {
+    const result = await updateCommentFlow({
+      body,
+      request,
+      currentUser,
+    })
 
-  void triggerAiMention({
-    kind: "comment",
-    postId: result.updated.postId,
-    commentId: result.updated.id,
-    triggerUserId: currentUser.id,
-    mentionedUserIds: result.mentionUserIds,
-  })
+    logRequestSucceeded({
+      scope: "comments-update",
+      action: "update-comment",
+      userId: currentUser.id,
+      targetId,
+    }, {
+      contentAdjusted: result.contentAdjusted,
+    })
 
-  return apiSuccess({
-    id: result.updated.id,
-  }, result.contentAdjusted ? "评论已更新，部分内容已自动替换" : "评论已更新")
+    revalidateUpdatedCommentMutation({
+      postId: result.updated.postId,
+      postSlug: result.postSlug,
+      boardSlug: result.boardSlug,
+      zoneSlug: result.zoneSlug,
+    })
+
+    void triggerAiMention({
+      kind: "comment",
+      postId: result.updated.postId,
+      commentId: result.updated.id,
+      triggerUserId: currentUser.id,
+      mentionedUserIds: result.mentionUserIds,
+    })
+
+    return apiSuccess({
+      id: result.updated.id,
+    }, result.contentAdjusted ? "评论已更新，部分内容已自动替换" : "评论已更新")
+  })
 }, {
   errorMessage: "评论编辑失败",
   logPrefix: "[api/comments/update] unexpected error",

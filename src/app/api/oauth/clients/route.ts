@@ -1,4 +1,4 @@
-import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { applyForOAuthClient, rotateOwnOAuthClientSecret, updateOwnOAuthClient } from "@/lib/oauth-server"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
@@ -22,7 +22,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   if (action === "update") {
     await updateOwnOAuthClient({
       ownerId: currentUser.id,
-      id: typeof body.id === "string" ? body.id : "",
+      id: requireStringField(body, "id", "缺少 OAuth 应用 ID"),
       name: body.name,
       description: body.description,
       homepageUrl: body.homepageUrl,
@@ -37,7 +37,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   if (action === "rotate-secret") {
     const result = await rotateOwnOAuthClientSecret({
       ownerId: currentUser.id,
-      id: typeof body.id === "string" ? body.id : "",
+      id: requireStringField(body, "id", "缺少 OAuth 应用 ID"),
     })
 
     return apiSuccess(result, "OAuth 应用 key 已重置")

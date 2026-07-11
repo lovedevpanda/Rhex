@@ -11,6 +11,7 @@ import {
   getAutoCategorizeTaskResultForUser,
 } from "@/lib/ai/capabilities/auto-categorize"
 import { getAutoCategorizeConfig } from "@/lib/ai/capabilities/auto-categorize-config"
+import { createPublicWriteDedupeKey, withPublicWriteGuard } from "@/lib/public-write-guard"
 
 interface AiCategorizeRouteResponse {
   taskId?: string
@@ -71,11 +72,8 @@ async function loadTaskResultOrThrow(taskId: string, requesterUserId: number) {
 export const GET = createUserRouteHandler<AiCategorizeRouteResponse>(async ({ currentUser, request }) => {
   const taskId = requireSearchParam(request, "taskId", "缺少发帖辅助任务 ID")
 
-  try {
-    return apiSuccess(await loadTaskResultOrThrow(taskId, currentUser.id))
-  } catch (error) {
-    apiError(409, error instanceof Error ? error.message : "发帖辅助任务执行失败")
-  }
+  return apiSuccess(await loadTaskResultOrThrow(taskId, currentUser.id))
+
 }, {
   errorMessage: "读取 AI 发帖辅助任务失败",
   logPrefix: "[api/posts/ai-categorize:GET] unexpected error",
@@ -110,20 +108,29 @@ export const POST = createUserRouteHandler<AiCategorizeRouteResponse>(async ({ c
     })
   }
 
-  const taskId = await enqueueAutoCategorizePreviewTask({
-    requesterUserId: currentUser.id,
+  const dedupeKey = createPublicWriteDedupeKey(
     title,
     content,
     allowBoardSuggestion,
     allowTagSuggestion,
-  })
+  )
 
-  try {
-    const result = await loadTaskResultOrThrow(taskId, currentUser.id)
-    return apiSuccess(result)
-  } catch (error) {
-    apiError(409, error instanceof Error ? error.message : "发帖辅助任务执行失败")
-  }
+  return withPublicWriteGuard("posts-ai-categorize", {
+    request,
+    userId: currentUser.id,
+    dedupeKey,
+  }, async () => {
+    const taskId = await enqueueAutoCategorizePreviewTask({
+      requesterUserId: currentUser.id,
+      title,
+      content,
+      allowBoardSuggestion,
+      allowTagSuggestion,
+    })
+
+    return apiSuccess(await loadTaskResultOrThrow(taskId, currentUser.id))
+
+  })
 }, {
   errorMessage: "AI 建议生成失败",
   logPrefix: "[api/posts/ai-categorize:POST] unexpected error",

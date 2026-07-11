@@ -63,30 +63,43 @@ const MAX_BULK_USERS = 100
 const adminUserBulkActions = new Set<AdminUserBulkAction>(["setRole", "activate", "mute", "ban", "delete"])
 const roleValues = new Set<UserRole>(Object.values(UserRole))
 
-function normalizeBulkAction(value: string): AdminUserBulkAction {
-  if (!adminUserBulkActions.has(value as AdminUserBulkAction)) {
-    apiError(400, "暂不支持该批量操作")
+function normalizeBulkAction(value: unknown): AdminUserBulkAction {
+  if (typeof value !== "string" || !adminUserBulkActions.has(value as AdminUserBulkAction)) {
+    apiError(400, "\u6682\u4e0d\u652f\u6301\u8be5\u6279\u91cf\u64cd\u4f5c")
   }
 
   return value as AdminUserBulkAction
 }
 
 function normalizeUserIds(value: unknown) {
-  if (!Array.isArray(value)) {
-    apiError(400, "请选择要操作的用户")
+  if (!Array.isArray(value) || value.length === 0) {
+    apiError(400, "\u8bf7\u9009\u62e9\u8981\u64cd\u4f5c\u7684\u7528\u6237")
   }
 
-  const ids = [...new Set(value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0))]
-
-  if (ids.length === 0) {
-    apiError(400, "请选择要操作的用户")
+  if (value.length > MAX_BULK_USERS) {
+    apiError(400, `\u5355\u6b21\u6700\u591a\u6279\u91cf\u64cd\u4f5c ${MAX_BULK_USERS} \u4e2a\u7528\u6237`)
   }
 
-  if (ids.length > MAX_BULK_USERS) {
-    apiError(400, `单次最多批量操作 ${MAX_BULK_USERS} 个用户`)
+  const ids = value.map((item) => {
+    const id = typeof item === "number"
+      ? item
+      : typeof item === "string" && /^\d+$/.test(item.trim())
+        ? Number(item.trim())
+        : NaN
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      apiError(400, "\u7528\u6237\u6807\u8bc6\u4e0d\u5408\u6cd5")
+    }
+
+    return id
+  })
+
+  const uniqueIds = [...new Set(ids)]
+  if (uniqueIds.length !== ids.length) {
+    apiError(400, "\u7528\u6237\u6807\u8bc6\u4e0d\u80fd\u91cd\u590d")
   }
 
-  return ids
+  return uniqueIds
 }
 
 function readOptionalString(value: unknown) {
@@ -128,14 +141,13 @@ function toSkippedReasonList(skippedReasons: Map<string, number>) {
 }
 
 function buildStatusUpdateData(status: UserStatus, expiration: BulkStatusExpiration | null, reason: string): Prisma.UserUpdateManyMutationInput {
-  const shouldInvalidateSessions = status === UserStatus.BANNED || status === UserStatus.INACTIVE
   const shouldStoreReason = status === UserStatus.MUTED || status === UserStatus.BANNED
 
   return {
     status,
     statusExpiresAt: shouldStoreReason ? expiration?.expiresAt ?? null : null,
     statusReason: shouldStoreReason ? reason.trim() || null : null,
-    ...(shouldInvalidateSessions ? { sessionInvalidBefore: new Date() } : {}),
+    sessionInvalidBefore: new Date(),
   }
 }
 
@@ -232,6 +244,7 @@ async function runRoleBulkAction(actor: AdminActor, users: BulkUserRecord[], rol
             status: UserStatus.ACTIVE,
             statusExpiresAt: null,
             statusReason: null,
+            sessionInvalidBefore: new Date(),
           },
         })
         await tx.moderatorZoneScope.deleteMany({ where: { moderatorId: user.id } })
@@ -247,6 +260,7 @@ async function runRoleBulkAction(actor: AdminActor, users: BulkUserRecord[], rol
             status: UserStatus.ACTIVE,
             statusExpiresAt: null,
             statusReason: null,
+            sessionInvalidBefore: new Date(),
           },
         })
         await tx.adminPermissionGrant.deleteMany({ where: { userId: user.id } })
@@ -255,7 +269,7 @@ async function runRoleBulkAction(actor: AdminActor, users: BulkUserRecord[], rol
 
       await tx.user.update({
         where: { id: user.id },
-        data: { role },
+        data: { role, sessionInvalidBefore: new Date() },
       })
       await tx.adminPermissionGrant.deleteMany({ where: { userId: user.id } })
       await tx.moderatorZoneScope.deleteMany({ where: { moderatorId: user.id } })
@@ -369,7 +383,7 @@ async function runDeleteBulkAction(actor: AdminActor, users: BulkUserRecord[], s
 }
 
 export async function runAdminUserBulkAction(actor: AdminActor, input: AdminUserBulkActionInput): Promise<AdminUserBulkActionResult> {
-  const action = normalizeBulkAction(String(input.action ?? "").trim())
+  const action = normalizeBulkAction(typeof input.action === "string" ? input.action.trim() : input.action)
   const userIds = normalizeUserIds(input.userIds)
   const message = readOptionalString(input.message)
   const users = await prisma.user.findMany({

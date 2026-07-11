@@ -1,4 +1,4 @@
-import { apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
 import { redeemPointsCode } from "@/lib/redeem-codes"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
@@ -9,6 +9,9 @@ import { withRequestWriteGuard } from "@/lib/write-guard"
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const code = requireStringField(body, "code", "请输入兑换码")
+  if (code.length > 64) {
+    apiError(400, "兑换码格式不正确")
+  }
   const requestUrl = new URL(request.url)
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("redeem-codes-redeem", {

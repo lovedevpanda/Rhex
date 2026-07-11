@@ -1,10 +1,12 @@
 import { UserRole, UserStatus } from "@/db/types"
 import {
   deleteModeratorTargetScope,
+  findModeratorScopeSetup,
   findModeratorTargetContext,
   findModeratorUserByUsername,
   upsertModeratorTargetScope,
 } from "@/db/admin-moderator-scope-queries"
+import { invalidateUserSessions } from "@/db/admin-user-action-queries"
 import { apiError, readOptionalStringField, type JsonObject } from "@/lib/api-route"
 import { canAdminWithPermissionOverrides } from "@/lib/admin-permission-overrides"
 import type { AdminActor } from "@/lib/moderator-permissions"
@@ -15,8 +17,16 @@ function readTargetType(value: unknown) {
   return value === "zone" || value === "board" ? value : null
 }
 
-function readBoolean(value: unknown) {
-  return value === true || value === "true"
+function readOptionalBoolean(value: unknown, field: string, defaultValue: boolean) {
+  if (value === undefined) {
+    return defaultValue
+  }
+
+  if (typeof value !== "boolean") {
+    apiError(400, `${field} \u683c\u5f0f\u4e0d\u6b63\u786e`)
+  }
+
+  return value
 }
 
 function ensureCanManageModeratorTarget(actor: AdminActor, target: {
@@ -80,6 +90,14 @@ export async function upsertStructureModerator(params: {
     apiError(404, "版主用户不存在")
   }
 
+  if (moderator.id === params.actor.id) {
+    apiError(403, "\u4e0d\u80fd\u901a\u8fc7\u540e\u53f0\u63a7\u5236\u9762\u4fee\u6539\u5f53\u524d\u767b\u5f55\u7ba1\u7406\u5458\u7684\u7248\u4e3b\u6743\u9650")
+  }
+
+  if (moderator.role === UserRole.ADMIN) {
+    apiError(400, "\u7ba1\u7406\u5458\u8d26\u53f7\u65e0\u9700\u914d\u7f6e\u7248\u4e3b\u7ba1\u8f96\u8303\u56f4")
+  }
+
   if (moderator.status !== UserStatus.ACTIVE) {
     apiError(400, "只能添加启用状态的用户为版主")
   }
@@ -87,14 +105,19 @@ export async function upsertStructureModerator(params: {
   const promoteToModerator = moderator.role === UserRole.USER
   const effectiveRole = promoteToModerator ? UserRole.MODERATOR : moderator.role
 
+  const canEditSettings = readOptionalBoolean(rawBody.canEditSettings, "canEditSettings", false)
+  const canWithdrawTreasury = readOptionalBoolean(rawBody.canWithdrawTreasury, "canWithdrawTreasury", true)
+
   await upsertModeratorTargetScope({
     moderatorId: moderator.id,
     targetType,
     targetId,
-    canEditSettings: readBoolean(rawBody.canEditSettings),
-    canWithdrawTreasury: rawBody.canWithdrawTreasury !== false && rawBody.canWithdrawTreasury !== "false",
+    canEditSettings,
+    canWithdrawTreasury,
     promoteToModerator,
   })
+
+  await invalidateUserSessions(moderator.id)
 
   return {
     message: promoteToModerator
@@ -107,8 +130,8 @@ export async function upsertStructureModerator(params: {
         displayName: getUserDisplayName(moderator),
         role: effectiveRole,
         status: moderator.status,
-        canEditSettings: readBoolean(rawBody.canEditSettings),
-        canWithdrawTreasury: rawBody.canWithdrawTreasury !== false && rawBody.canWithdrawTreasury !== "false",
+        canEditSettings,
+        canWithdrawTreasury,
         source: targetType,
       },
     },
@@ -130,15 +153,39 @@ export async function removeStructureModerator(params: {
   const rawBody = params.body as Record<string, unknown>
   const targetType = readTargetType(rawBody.targetType)
   const targetId = readOptionalStringField(rawBody, "targetId")
-  const moderatorId = Number(rawBody.moderatorId)
+  const moderatorId = typeof rawBody.moderatorId === "number"
+    ? rawBody.moderatorId
+    : typeof rawBody.moderatorId === "string" && /^\d+$/.test(rawBody.moderatorId.trim())
+      ? Number(rawBody.moderatorId.trim())
+      : NaN
 
-  if (!targetType || !targetId || !Number.isInteger(moderatorId) || moderatorId <= 0) {
+  if (!targetType || !targetId || !Number.isSafeInteger(moderatorId) || moderatorId <= 0) {
     apiError(400, "缺少版主、分区或节点参数")
   }
 
-  const target = await findModeratorTargetContext({ targetType, targetId })
+  if (moderatorId === params.actor.id) {
+    apiError(403, "\u4e0d\u80fd\u901a\u8fc7\u540e\u53f0\u63a7\u5236\u9762\u4fee\u6539\u5f53\u524d\u767b\u5f55\u7ba1\u7406\u5458\u7684\u7248\u4e3b\u6743\u9650")
+  }
+
+  const [target, moderatorResult] = await Promise.all([
+    findModeratorTargetContext({ targetType, targetId }),
+    findModeratorScopeSetup(moderatorId, [], []),
+  ])
   if (!target) {
-    apiError(404, targetType === "zone" ? "分区不存在" : "节点不存在")
+    apiError(404, targetType === "zone" ? "\u5206\u533a\u4e0d\u5b58\u5728" : "\u8282\u70b9\u4e0d\u5b58\u5728")
+  }
+
+  const moderator = moderatorResult.user
+  if (!moderator) {
+    apiError(404, "\u7248\u4e3b\u7528\u6237\u4e0d\u5b58\u5728")
+  }
+
+  if (moderator.role === UserRole.ADMIN) {
+    apiError(400, "\u7ba1\u7406\u5458\u8d26\u53f7\u65e0\u9700\u914d\u7f6e\u7248\u4e3b\u7ba1\u8f96\u8303\u56f4")
+  }
+
+  if (moderator.role !== UserRole.MODERATOR) {
+    apiError(400, "\u53ea\u6709\u7248\u4e3b\u89d2\u8272\u624d\u80fd\u914d\u7f6e\u7ba1\u8f96\u8303\u56f4")
   }
 
   ensureCanManageModeratorTarget(params.actor, {
@@ -152,6 +199,8 @@ export async function removeStructureModerator(params: {
     targetType,
     targetId,
   })
+
+  await invalidateUserSessions(moderatorId)
 
   return {
     message: "版主已移除",

@@ -1,5 +1,7 @@
-import { GodCommentSource, Prisma } from "@/db/types"
+import { GodCommentSource, type Prisma } from "@/db/types"
+
 import { prisma } from "@/db/client"
+import { lockGodCommentPost } from "@/db/post-god-comment-queries"
 import { apiError } from "@/lib/api-route"
 import { DEFAULT_GOD_COMMENT_AUTO_LIKE_THRESHOLD } from "@/lib/god-comment-settings"
 import { getAdminManagementTier } from "@/lib/admin-permission-policy"
@@ -16,12 +18,64 @@ export interface GodCommentPromotionResult {
   affectedUserIds?: number[]
 }
 
+type GodCommentActionComment = {
+  id: string
+  postId: string
+  userId: number
+  parentId: string | null
+  status: "NORMAL" | "HIDDEN" | "PENDING"
+  likeCount: number
+  isGodComment: boolean
+}
+
 function normalizeLikeThreshold(value?: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_GOD_COMMENT_AUTO_LIKE_THRESHOLD
   }
 
   return Math.max(1, Math.floor(value))
+}
+
+async function findGodCommentActionComment(tx: Prisma.TransactionClient, commentId: string) {
+  return tx.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      postId: true,
+      userId: true,
+      parentId: true,
+      status: true,
+      likeCount: true,
+      isGodComment: true,
+    },
+  })
+}
+
+async function lockAndFindGodCommentActionComment(tx: Prisma.TransactionClient, commentId: string): Promise<GodCommentActionComment> {
+  const initial = await findGodCommentActionComment(tx, commentId)
+  if (!initial || initial.status !== "NORMAL") {
+    throw new Error("评论不存在或不可操作")
+  }
+
+  if (initial.parentId) {
+    throw new Error("回复评论不能设为神评")
+  }
+
+  const lockedPost = await lockGodCommentPost(tx, initial.postId)
+  if (!lockedPost) {
+    throw new Error("关联帖子不存在")
+  }
+
+  const comment = await findGodCommentActionComment(tx, commentId)
+  if (!comment || comment.status !== "NORMAL") {
+    throw new Error("评论状态已变化，操作失败")
+  }
+
+  if (comment.parentId) {
+    throw new Error("回复评论不能设为神评")
+  }
+
+  return comment
 }
 
 async function clearExistingGodCommentForPost(
@@ -53,6 +107,7 @@ async function clearExistingGodCommentForPost(
       id: {
         in: existing.map((comment) => comment.id),
       },
+      isGodComment: true,
     },
     data: {
       isGodComment: false,
@@ -84,26 +139,7 @@ export async function promoteGodComment(input: {
   markerUserId?: number | null
 }) {
   return prisma.$transaction(async (tx): Promise<GodCommentPromotionResult> => {
-    const comment = await tx.comment.findUnique({
-      where: { id: input.commentId },
-      select: {
-        id: true,
-        postId: true,
-        userId: true,
-        parentId: true,
-        status: true,
-        likeCount: true,
-        isGodComment: true,
-      },
-    })
-
-    if (!comment || comment.status !== "NORMAL") {
-      throw new Error("评论不存在或不可设为神评")
-    }
-
-    if (comment.parentId) {
-      throw new Error("仅支持将一级评论设为神评")
-    }
+    const comment = await lockAndFindGodCommentActionComment(tx, input.commentId)
 
     if (comment.isGodComment) {
       return {
@@ -148,8 +184,13 @@ export async function promoteGodComment(input: {
       }
     }
 
-    await tx.comment.update({
-      where: { id: comment.id },
+    const marked = await tx.comment.updateMany({
+      where: {
+        id: comment.id,
+        parentId: null,
+        status: "NORMAL",
+        isGodComment: false,
+      },
       data: {
         isGodComment: true,
         godCommentSource: input.source,
@@ -157,6 +198,10 @@ export async function promoteGodComment(input: {
         godCommentedAt: new Date(),
       },
     })
+
+    if (marked.count !== 1) {
+      throw new Error("评论状态已变化，神评设置失败")
+    }
 
     await tx.user.update({
       where: { id: comment.userId },
@@ -191,26 +236,7 @@ export async function demoteGodComment(input: {
   commentId: string
 }) {
   return prisma.$transaction(async (tx): Promise<GodCommentPromotionResult> => {
-    const comment = await tx.comment.findUnique({
-      where: { id: input.commentId },
-      select: {
-        id: true,
-        postId: true,
-        userId: true,
-        parentId: true,
-        status: true,
-        likeCount: true,
-        isGodComment: true,
-      },
-    })
-
-    if (!comment || comment.status !== "NORMAL") {
-      throw new Error("评论不存在或不可操作")
-    }
-
-    if (comment.parentId) {
-      throw new Error("仅支持操作一级评论")
-    }
+    const comment = await lockAndFindGodCommentActionComment(tx, input.commentId)
 
     if (!comment.isGodComment) {
       return {
@@ -223,8 +249,11 @@ export async function demoteGodComment(input: {
       }
     }
 
-    await tx.comment.update({
-      where: { id: comment.id },
+    const unmarked = await tx.comment.updateMany({
+      where: {
+        id: comment.id,
+        isGodComment: true,
+      },
       data: {
         isGodComment: false,
         godCommentSource: null,
@@ -232,6 +261,10 @@ export async function demoteGodComment(input: {
         godCommentedAt: null,
       },
     })
+
+    if (unmarked.count !== 1) {
+      throw new Error("评论状态已变化，取消神评失败")
+    }
 
     await tx.$executeRaw`
       UPDATE "User"
@@ -276,18 +309,10 @@ export async function maybePromoteGodCommentByLikes(input: {
     return null
   }
 
-  try {
-    return await promoteGodComment({
-      commentId: comment.id,
-      source: GodCommentSource.AUTO_LIKE,
-    })
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return null
-    }
-
-    throw error
-  }
+  return promoteGodComment({
+    commentId: comment.id,
+    source: GodCommentSource.AUTO_LIKE,
+  })
 }
 
 export async function toggleGodCommentByAdmin(input: {
@@ -301,10 +326,10 @@ export async function toggleGodCommentByAdmin(input: {
   await ensureAdminActorPermission(
     input.actor,
     "admin.comments.manage",
-    "无权操作神评",
+    "没有管理评论的权限",
   )
   if (getAdminManagementTier(input.actor) === "REVIEWER") {
-    apiError(403, "审核员不能操作神评")
+    apiError(403, "审核员不能管理神评")
   }
 
   return input.action === "mark"

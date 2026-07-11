@@ -12,6 +12,14 @@ const PASSKEY_REGISTER_COOKIE_NAME = "bbs_passkey_register"
 const PASSKEY_LOGIN_COOKIE_NAME = "bbs_passkey_login"
 const PASSKEY_CONNECT_COOKIE_NAME = "bbs_passkey_connect"
 
+const CONSUME_AUTH_FLOW_STATE_SCRIPT = `
+local value = redis.call("get", KEYS[1])
+if value then
+  redis.call("del", KEYS[1])
+end
+return value
+`
+
 interface SignedAuthFlowPointer {
   nonce: string
 }
@@ -126,34 +134,54 @@ async function setCookie<T extends object>(
   response.cookies.set(cookieName, createSignedValue<SignedAuthFlowPointer>({ nonce }, ttlSeconds), getCookieOptions(ttlSeconds, request))
 }
 
+function parseStoredAuthFlowValue<T extends object>(rawStoredValue: string | null) {
+  if (!rawStoredValue) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(rawStoredValue) as T & { expiresAt?: number }
+
+    if (!parsed || typeof parsed !== "object" || typeof parsed.expiresAt !== "number" || parsed.expiresAt <= Date.now()) {
+      return null
+    }
+
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 async function readCookieValue<T extends object>(cookieName: string) {
   const cookieStore = await cookies()
   const rawValue = cookieStore.get(cookieName)?.value
-
-
   const pointer = parseSignedValue<SignedAuthFlowPointer>(rawValue)
 
   if (pointer?.nonce) {
-    const rawStoredValue = await getRedis().get(getRedisAuthFlowKey(cookieName, pointer.nonce))
-
-    if (!rawStoredValue) {
-      return null
-    }
-
-    try {
-      const parsed = JSON.parse(rawStoredValue) as T & { expiresAt?: number }
-
-      if (!parsed || typeof parsed !== "object" || typeof parsed.expiresAt !== "number" || parsed.expiresAt <= Date.now()) {
-        return null
-      }
-
-      return parsed
-    } catch {
-      return null
-    }
+    return parseStoredAuthFlowValue<T>(await getRedis().get(getRedisAuthFlowKey(cookieName, pointer.nonce)))
   }
 
   return parseSignedValue<T>(rawValue)
+}
+
+async function consumeCookieValue<T extends object>(cookieName: string) {
+  const cookieStore = await cookies()
+  const rawValue = cookieStore.get(cookieName)?.value
+  const pointer = parseSignedValue<SignedAuthFlowPointer>(rawValue)
+
+  // Ceremony/OAuth state must be backed by Redis so it can be consumed exactly once.
+  // Reject legacy self-contained cookies instead of allowing a replay window during rollout.
+  if (!pointer?.nonce) {
+    return null
+  }
+
+  const rawStoredValue = await getRedis().eval(
+    CONSUME_AUTH_FLOW_STATE_SCRIPT,
+    1,
+    getRedisAuthFlowKey(cookieName, pointer.nonce),
+  ) as string | null
+
+  return parseStoredAuthFlowValue<T>(rawStoredValue)
 }
 
 export function buildOAuthStateCookieName(provider: string) {
@@ -164,8 +192,8 @@ export async function setOAuthFlowState(response: NextResponse, provider: string
   await setCookie(response, buildOAuthStateCookieName(provider), value, ttlSeconds, request)
 }
 
-export async function readOAuthFlowState(provider: string) {
-  return readCookieValue<OAuthFlowState>(buildOAuthStateCookieName(provider))
+export async function consumeOAuthFlowState(provider: string) {
+  return consumeCookieValue<OAuthFlowState>(buildOAuthStateCookieName(provider))
 }
 
 export function clearOAuthFlowState(response: NextResponse, provider: string, request?: Pick<Request, "headers" | "url"> | null) {
@@ -178,6 +206,10 @@ export async function setPendingExternalAuthState(response: NextResponse, value:
 
 export async function readPendingExternalAuthState() {
   return readCookieValue<PendingExternalAuthState>(PENDING_AUTH_COOKIE_NAME)
+}
+
+export async function consumePendingExternalAuthState() {
+  return consumeCookieValue<PendingExternalAuthState>(PENDING_AUTH_COOKIE_NAME)
 }
 
 export function clearPendingExternalAuthState(response: NextResponse, request?: Pick<Request, "headers" | "url"> | null) {
@@ -200,8 +232,8 @@ export async function setPasskeyCeremonyState(response: NextResponse, flow: "reg
   await setCookie(response, getPasskeyCeremonyCookieName(flow), value, ttlSeconds, request)
 }
 
-export async function readPasskeyCeremonyState(flow: "register" | "login" | "connect") {
-  return readCookieValue<PasskeyCeremonyState>(getPasskeyCeremonyCookieName(flow))
+export async function consumePasskeyCeremonyState(flow: "register" | "login" | "connect") {
+  return consumeCookieValue<PasskeyCeremonyState>(getPasskeyCeremonyCookieName(flow))
 }
 
 export function clearPasskeyCeremonyState(response: NextResponse, flow: "register" | "login" | "connect", request?: Pick<Request, "headers" | "url"> | null) {

@@ -25,6 +25,7 @@ import { resolveAiProvider, type AiProviderConfig } from "@/lib/ai/provider"
 import { runAiTask } from "@/lib/ai/service"
 import { AiProviderError } from "@/lib/ai/provider/types"
 import { AiRateLimitError } from "@/lib/ai/rate-limit"
+import { resolveSafeOutboundTarget } from "@/lib/safe-outbound-http"
 import { getAutoCategorizeConfig, type AutoCategorizeConfig } from "@/lib/ai/capabilities/auto-categorize-config"
 
 const AI_REPLY_BACKGROUND_JOB_NAME = "ai-reply.process"
@@ -439,6 +440,11 @@ async function callAiReplyModel(params: {
       : params.agentConfig.commentReplyPrompt.trim(),
   ].filter(Boolean).join("\n\n")
 
+  // The provider receives the configured API key. Validate the resolved target
+  // immediately before every dispatch so a saved private/local endpoint cannot
+  // be reached by task retries or the admin connectivity test.
+  await resolveSafeOutboundTarget(params.config.baseUrl)
+
   const providerConfig: AiProviderConfig = {
     kind: "openai-compatible",
     baseUrl: params.config.baseUrl,
@@ -531,9 +537,31 @@ async function createAiReplyComment(params: {
   parentId?: string
   replyToUserId?: number
   replyToCommentId?: string
+  taskId: string
+  taskStartedAt: Date
 }) {
   return prisma.$transaction(async (tx) => {
     const createdAt = new Date()
+
+    // A stale worker can be reclaimed while its model request is still in
+    // flight. Claim the task row inside the same transaction as the comment
+    // write so only the worker that still owns this startedAt value can create
+    // the externally visible reply.
+    const taskOwnership = await tx.aiReplyTask.updateMany({
+      where: {
+        id: params.taskId,
+        status: AiReplyTaskStatus.PROCESSING,
+        startedAt: params.taskStartedAt,
+        generatedCommentId: null,
+      },
+      data: {
+        startedAt: createdAt,
+      },
+    })
+
+    if (taskOwnership.count !== 1) {
+      return null
+    }
 
     const comment = await tx.comment.create({
       data: {
@@ -575,6 +603,17 @@ async function createAiReplyComment(params: {
       },
     })
 
+    await tx.aiReplyTask.update({
+      where: { id: params.taskId },
+      data: {
+        status: AiReplyTaskStatus.SUCCEEDED,
+        generatedCommentId: comment.id,
+        resultExcerpt: truncateText(comment.content, AI_REPLY_RESULT_EXCERPT_CHARS),
+        errorMessage: null,
+        finishedAt: createdAt,
+      },
+    })
+
     return comment
   })
 }
@@ -594,6 +633,7 @@ async function loadAiReplyTaskForWorker(taskId: string) {
       agentUserId: true,
       attemptCount: true,
       maxAttempts: true,
+      startedAt: true,
       post: {
         select: {
           id: true,
@@ -709,19 +749,6 @@ async function claimAiReplyTask(taskId: string) {
   })
 
   return claimed.count > 0
-}
-
-async function markAiReplyTaskSucceeded(taskId: string, generatedCommentId: string, resultExcerpt: string) {
-  await prisma.aiReplyTask.update({
-    where: { id: taskId },
-    data: {
-      status: AiReplyTaskStatus.SUCCEEDED,
-      generatedCommentId,
-      resultExcerpt: truncateText(resultExcerpt, AI_REPLY_RESULT_EXCERPT_CHARS),
-      errorMessage: null,
-      finishedAt: new Date(),
-    },
-  })
 }
 
 async function markAiReplyTaskCancelled(taskId: string, message: string) {
@@ -929,6 +956,9 @@ async function processAiReplyTask(taskId: string) {
   if (!task) {
     return
   }
+  if (!task.startedAt) {
+    return
+  }
 
   try {
     const content = await buildAiReplyContent(task)
@@ -937,6 +967,8 @@ async function processAiReplyTask(taskId: string) {
           postId: task.postId,
           agentUserId: task.agentUserId,
           content,
+          taskId: task.id,
+          taskStartedAt: task.startedAt,
         })
       : await createAiReplyComment({
           postId: task.postId,
@@ -945,9 +977,15 @@ async function processAiReplyTask(taskId: string) {
           parentId: task.sourceComment?.parentId ?? task.sourceComment?.id,
           replyToUserId: task.sourceComment?.userId,
           replyToCommentId: task.sourceComment?.id,
+          taskId: task.id,
+          taskStartedAt: task.startedAt,
         })
 
-    await markAiReplyTaskSucceeded(task.id, createdComment.id, createdComment.content)
+    if (!createdComment) {
+      // Another worker reclaimed this stale task and now owns completion.
+      // Returning prevents this replay from producing a second reply.
+      return
+    }
 
     await requestInternalContentRevalidation({
       type: "approved-comment",

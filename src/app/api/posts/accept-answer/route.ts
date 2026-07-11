@@ -55,19 +55,32 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       apiError(400, "不能采纳自己的回复")
     }
 
+    // Claim the unanswered bounty before mutating the comment or awarding
+    // points. The conditional update makes concurrent accept requests race on
+    // the database state instead of allowing both settlements to proceed.
+    const accepted = await tx.post.updateMany({
+      where: {
+        id: postId,
+        authorId: currentUser.id,
+        type: "BOUNTY",
+        status: PostStatus.NORMAL,
+        acceptedCommentId: null,
+      },
+      data: {
+        acceptedCommentId: commentId,
+        bountyAwardedAt: new Date(),
+      },
+    })
+
+    if (accepted.count === 0) {
+      apiError(400, "该悬赏帖已采纳答案或状态已变更")
+    }
+
     await tx.comment.update({
       where: { id: commentId },
       data: {
         isAcceptedAnswer: true,
         acceptedAt: new Date(),
-      },
-    })
-
-    await tx.post.update({
-      where: { id: postId },
-      data: {
-        acceptedCommentId: commentId,
-        bountyAwardedAt: new Date(),
       },
     })
 

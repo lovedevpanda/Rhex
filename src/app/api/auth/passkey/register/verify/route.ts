@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { RegistrationResponseJSON } from "@simplewebauthn/server"
 
 import { apiError, apiSuccess, createRouteHandler, readJsonBody } from "@/lib/api-route"
-import { clearPasskeyCeremonyState, clearPendingExternalAuthState, readPasskeyCeremonyState, setPendingExternalAuthState } from "@/lib/auth-flow-state"
+import { clearPasskeyCeremonyState, clearPendingExternalAuthState, consumePasskeyCeremonyState, setPendingExternalAuthState } from "@/lib/auth-flow-state"
 import { attachAuthenticatedSession, createPasskeyIdentity, recordSuccessfulExternalLogin, resolveExternalAuth } from "@/lib/external-auth-service"
 import { findPasskeyCredentialByCredentialId } from "@/lib/external-auth-store"
 import { buildPendingPasskeyCredential, verifyPasskeyRegistration } from "@/lib/passkey-auth"
@@ -16,7 +16,7 @@ export const POST = createRouteHandler(async ({ request }) => {
   }
 
   const body = await readJsonBody(request)
-  const ceremonyState = await readPasskeyCeremonyState("register")
+  const ceremonyState = await consumePasskeyCeremonyState("register")
 
   if (!ceremonyState) {
     apiError(410, "Passkey 注册状态已失效，请重新发起")

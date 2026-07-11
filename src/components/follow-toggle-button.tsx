@@ -1,7 +1,7 @@
 "use client"
 
 import { Heart } from "lucide-react"
-import { useEffect, useState, useTransition, type ComponentProps } from "react"
+import { useState, useTransition, type ComponentProps } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -22,12 +22,16 @@ interface FollowToggleButtonProps {
   size?: ComponentProps<typeof Button>["size"]
 }
 
-export function FollowToggleButton({
+export function FollowToggleButton(props: FollowToggleButtonProps) {
+  return <FollowToggleButtonContent key={String(props.initialFollowed)} {...props} />
+}
+
+function FollowToggleButtonContent({
   targetType,
   targetId,
   initialFollowed,
-  activeLabel = "取关",
-  inactiveLabel = "关注",
+  activeLabel = "??",
+  inactiveLabel = "??",
   showLabel = false,
   onFollowStateChange,
   className = "",
@@ -37,10 +41,6 @@ export function FollowToggleButton({
   const [followed, setFollowed] = useState(initialFollowed)
   const [isPending, startTransition] = useTransition()
   const label = followed ? activeLabel : inactiveLabel
-
-  useEffect(() => {
-    setFollowed(initialFollowed)
-  }, [initialFollowed])
 
   return (
     <Button

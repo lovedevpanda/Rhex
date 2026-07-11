@@ -81,11 +81,13 @@ export function HeaderNotificationsPopover({ unreadCount, badgeClassName }: Head
   const [visibleUnreadCount, setVisibleUnreadCount] = useState(unreadCount)
 
   useEffect(() => {
-    setVisibleUnreadCount(unreadCount)
+    queueMicrotask(() => {
+      setVisibleUnreadCount(unreadCount)
 
-    if (unreadCount > 0) {
-      setLoaded(false)
-    }
+      if (unreadCount > 0) {
+        setLoaded(false)
+      }
+    })
   }, [unreadCount])
 
   useEffect(() => {
@@ -95,14 +97,19 @@ export function HeaderNotificationsPopover({ unreadCount, badgeClassName }: Head
 
     const abortController = new AbortController()
 
-    setLoading(true)
-    setErrorMessage("")
+    queueMicrotask(() => {
+      if (abortController.signal.aborted) {
+        return
+      }
 
-    void fetch(`/api/notifications/unread?limit=${UNREAD_PREVIEW_LIMIT}`, {
+      setLoading(true)
+      setErrorMessage("")
+
+      void fetch(`/api/notifications/unread?limit=${UNREAD_PREVIEW_LIMIT}`, {
       cache: "no-store",
       signal: abortController.signal,
-    })
-      .then(async (response) => {
+      })
+        .then(async (response) => {
         const payload = await response.json().catch(() => null) as HeaderNotificationsResponse | null
 
         if (!response.ok) {
@@ -121,11 +128,12 @@ export function HeaderNotificationsPopover({ unreadCount, badgeClassName }: Head
 
         setErrorMessage(error instanceof Error ? error.message : "未读通知加载失败")
       })
-      .finally(() => {
-        if (!abortController.signal.aborted) {
-          setLoading(false)
-        }
-      })
+        .finally(() => {
+          if (!abortController.signal.aborted) {
+            setLoading(false)
+          }
+        })
+    })
 
     return () => {
       abortController.abort()

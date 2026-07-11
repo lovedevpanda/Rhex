@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto"
 
+import type { Prisma } from "@prisma/client"
+
 export { GobangPage } from "@/components/gobang-page"
 export { GobangAdminPage } from "@/components/admin/gobang-admin-page"
 
-import { countGobangMatchesInRange, createGobangMatchRecord, findGobangUserPoints, finishGobangMatch, finishGobangMatchNow, getGobangMatchRow, getGobangMoves, insertGobangMove, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, runGobangTransaction, type GobangMatchRow, type GobangMoveRow, updateGobangMatchTimestamp } from "@/db/gobang-queries"
+import { countGobangMatchesInRange, createGobangMatchRecord, findGobangUserPoints, getGobangMatchRow, getGobangMoves, insertGobangMoveNow, listGobangMatchRows, listGobangMovesByMatchIds, runGobangTransaction, type GobangMatchRow, type GobangMoveRow } from "@/db/gobang-queries"
 
 
 import { getGobangAppConfig } from "@/lib/app-config"
@@ -365,56 +367,83 @@ export async function getGobangPlayerSummary(user: CurrentUser): Promise<GobangP
   }
 }
 
-async function creditUserPoints(userId: number, amount: number, reason: string) {
-  if (amount <= 0) {
+async function acquireGobangTransactionLock(tx: Prisma.TransactionClient, key: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+}
+
+async function creditUserPoints(params: {
+  tx: Prisma.TransactionClient
+  userId: number
+  amount: number
+  pointName: string
+  reason: string
+}) {
+  if (params.amount <= 0) {
     return
   }
 
-  const [settings, preparedReward] = await Promise.all([
-    getSiteSettings(),
+  const [user, preparedReward] = await Promise.all([
+    params.tx.user.findUnique({
+      where: { id: params.userId },
+      select: { id: true, points: true },
+    }),
     prepareScopedPointDelta({
       scopeKey: "GOBANG_WAGER_INCOMING",
-      baseDelta: amount,
-      userId,
+      baseDelta: params.amount,
+      userId: params.userId,
     }),
   ])
 
-  await runGobangTransaction(async (tx) => {
-    const user = await findGobangUserPoints(userId, tx)
+  if (!user) {
+    throw new Error("用户不存在")
+  }
 
-    if (!user) {
-      throw new Error("用户不存在")
-    }
-
-    await applyPointDelta({
-      tx,
-      userId,
-      beforeBalance: user.points,
-      prepared: preparedReward,
-      pointName: settings.pointName,
-      reason,
-    })
+  await applyPointDelta({
+    tx: params.tx,
+    userId: params.userId,
+    beforeBalance: user.points,
+    prepared: preparedReward,
+    pointName: params.pointName,
+    reason: params.reason,
   })
 }
 
 export async function createGobangMatch(user: CurrentUser) {
-  const [config, todayCounts, settings] = await Promise.all([
+  const [config, settings] = await Promise.all([
     getGobangPluginConfig(),
-    countTodayMatches(user.id),
     getSiteSettings(),
   ])
-  const policy = resolveChallengePolicy(user, todayCounts, config)
-  const preparedTicketCost = policy.ticketCost > 0
-    ? await prepareScopedPointDelta({
-        scopeKey: "GOBANG_WAGER_OUTGOING",
-        baseDelta: -policy.ticketCost,
-        userId: user.id,
-      })
-    : null
   const id = randomUUID()
   const playerFirst = Math.random() >= 0.5
 
-  await runGobangTransaction(async (tx) => {
+  const policy = await runGobangTransaction(async (tx) => {
+    // Serialize a player's quota checks and point deduction across concurrent requests.
+    await acquireGobangTransactionLock(tx, `gobang:user:${user.id}`)
+
+    const { start, end } = getBusinessDayRange()
+    const [total, paid] = await Promise.all([
+      tx.gobangMatch.count({
+        where: {
+          creatorId: user.id,
+          createdAt: { gte: start, lt: end },
+        },
+      }),
+      tx.gobangMatch.count({
+        where: {
+          creatorId: user.id,
+          ticketCost: { gt: 0 },
+          createdAt: { gte: start, lt: end },
+        },
+      }),
+    ])
+    const policy = resolveChallengePolicy(user, { total, paid }, config)
+    const preparedTicketCost = policy.ticketCost > 0
+      ? await prepareScopedPointDelta({
+          scopeKey: "GOBANG_WAGER_OUTGOING",
+          baseDelta: -policy.ticketCost,
+          userId: user.id,
+        })
+      : null
     const latestUser = await findGobangUserPoints(user.id, tx)
 
     if (!latestUser) {
@@ -453,8 +482,9 @@ export async function createGobangMatch(user: CurrentUser) {
         client: tx,
       })
     }
-  })
 
+    return policy
+  })
 
   return {
     matches: await listGobangMatches(user.id),
@@ -468,7 +498,6 @@ export async function listGobangMatches(userId: number): Promise<GobangMatch[]> 
   if (matches.length === 0) {
     return []
   }
-
 
   const moves = await listGobangMovesByMatchIds(matches.map((match) => match.id))
   const moveMap = new Map<string, GobangMoveRow[]>()
@@ -493,123 +522,133 @@ export async function getGobangMatch(matchId: string) {
   }
 
   return mapMatch(match, moves)
-
 }
 
 export async function makeGobangMove(input: { matchId: string; user: CurrentUser; x: number; y: number }) {
+  if (!Number.isInteger(input.x) || !Number.isInteger(input.y)) {
+    throw new Error("落子坐标必须为整数")
+  }
   if (input.x < 0 || input.x >= BOARD_SIZE || input.y < 0 || input.y >= BOARD_SIZE) {
     throw new Error("落子坐标超出棋盘范围")
   }
 
-  const config = await getGobangPluginConfig()
-  const [match, moves] = await Promise.all([
-    getGobangMatchRow(input.matchId),
-    getGobangMoves(input.matchId),
+  const [config, settings] = await Promise.all([
+    getGobangPluginConfig(),
+    getSiteSettings(),
   ])
-
-  if (!match) {
-    throw new Error("对局不存在")
-  }
-
-  if (match.creatorId !== input.user.id) {
-    throw new Error("这不是你的对局")
-  }
-
-  if (match.status === "FINISHED") {
-    throw new Error("对局已结束")
-  }
-
-  const duplicated = moves.some((move) => move.x === input.x && move.y === input.y)
-  if (duplicated) {
-    throw new Error("该位置已经有棋子")
-  }
-
-  const firstHand = resolveFirstHandFromMoves(moves)
-  const playerTurn = firstHand === "PLAYER"
-    ? moves.length % 2 === 0
-    : moves.length % 2 !== 0
-
-  if (!playerTurn) {
-    throw new Error("当前轮到 AI 落子")
-  }
-
-  const board = buildBoard(moves)
-  board[input.y][input.x] = PLAYER_MARKER
-
-  await insertGobangMoveNow({
-    id: randomUUID(),
-    matchId: input.matchId,
-    playerId: input.user.id,
-    step: moves.length + 1,
-    x: input.x,
-    y: input.y,
-  })
-
-
-  const challengeMode = resolveChallengeMode(match)
-
-  if (isWinningMove(board, input.x, input.y, PLAYER_MARKER)) {
-    await finishGobangMatchNow({
-      matchId: input.matchId,
-      winnerId: input.user.id,
-      updatedAt: new Date(),
-    })
-
-
-
-    if (challengeMode === "FREE") {
-      await creditUserPoints(input.user.id, config.winReward, "[app:五子棋] 免费挑战获胜奖励")
-    } else {
-      await creditUserPoints(input.user.id, config.ticketCost + config.winReward, "[app:五子棋] 付费挑战胜利返本含奖金")
-    }
-
-    return {
-      match: await getGobangMatch(input.matchId),
-      winnerId: input.user.id,
-    }
-  }
-
-  const aiMove = chooseAiMove(board, config.aiLevel)
-  board[aiMove.y][aiMove.x] = AI_MARKER
-
-  const aiMoveTime = new Date()
-
-  await insertGobangMove({
-    id: randomUUID(),
-    matchId: input.matchId,
-    playerId: AI_PLAYER_ID,
-    step: moves.length + 2,
-    x: aiMove.x,
-    y: aiMove.y,
-    createdAt: aiMoveTime,
-  })
-
   let winnerId: number | null = null
-  const filledCells = board.flat().filter((cell) => cell !== 0).length
 
-  if (isWinningMove(board, aiMove.x, aiMove.y, AI_MARKER)) {
-    winnerId = AI_PLAYER_ID
-    await finishGobangMatch({
-      matchId: input.matchId,
-      winnerId: AI_PLAYER_ID,
-      updatedAt: new Date(),
-    })
-  } else if (filledCells >= BOARD_SIZE * BOARD_SIZE) {
-    winnerId = input.user.id
-    await finishGobangMatch({
-      matchId: input.matchId,
-      winnerId: input.user.id,
-      updatedAt: new Date(),
-    })
+  await runGobangTransaction(async (tx) => {
+    // A match has no database uniqueness constraint for a move/step, so serialize move validation and settlement.
+    await acquireGobangTransactionLock(tx, `gobang:match:${input.matchId}`)
 
-    if (challengeMode === "FREE") {
-      await creditUserPoints(input.user.id, config.winReward, "[app:五子棋] 免费挑战平局按玩家胜奖励")
-    } else {
-      await creditUserPoints(input.user.id, config.ticketCost + config.winReward, "[app:五子棋] 付费挑战平局按玩家胜返本与奖励")
+    const [match, moves] = await Promise.all([
+      tx.gobangMatch.findUnique({ where: { id: input.matchId } }),
+      tx.gobangMove.findMany({
+        where: { matchId: input.matchId },
+        orderBy: { step: "asc" },
+      }),
+    ])
+
+    if (!match) {
+      throw new Error("对局不存在")
     }
-  } else {
-    await updateGobangMatchTimestamp(input.matchId, new Date())
-  }
+    if (match.creatorId !== input.user.id) {
+      throw new Error("这不是你的对局")
+    }
+    if (match.status === "FINISHED") {
+      throw new Error("对局已结束")
+    }
+    if (moves.some((move) => move.x === input.x && move.y === input.y)) {
+      throw new Error("该位置已经有棋子")
+    }
+
+    const firstHand = resolveFirstHandFromMoves(moves)
+    const playerTurn = firstHand === "PLAYER"
+      ? moves.length % 2 === 0
+      : moves.length % 2 !== 0
+    if (!playerTurn) {
+      throw new Error("当前轮到 AI 落子")
+    }
+
+    const board = buildBoard(moves)
+    board[input.y][input.x] = PLAYER_MARKER
+    await tx.gobangMove.create({
+      data: {
+        id: randomUUID(),
+        matchId: input.matchId,
+        playerId: input.user.id,
+        step: moves.length + 1,
+        x: input.x,
+        y: input.y,
+      },
+    })
+
+    const settle = async (settledWinnerId: number) => {
+      const settled = await tx.gobangMatch.updateMany({
+        where: { id: input.matchId, status: "ONGOING" },
+        data: {
+          status: "FINISHED",
+          winnerId: settledWinnerId,
+          updatedAt: new Date(),
+        },
+      })
+      if (settled.count !== 1) {
+        throw new Error("对局状态已变化，请刷新后重试")
+      }
+      winnerId = settledWinnerId
+    }
+
+    if (isWinningMove(board, input.x, input.y, PLAYER_MARKER)) {
+      await settle(input.user.id)
+      await creditUserPoints({
+        tx,
+        userId: input.user.id,
+        amount: match.ticketCost + match.winReward,
+        pointName: settings.pointName,
+        reason: match.ticketCost > 0 ? "[app:五子棋] 付费挑战胜利返本含奖金" : "[app:五子棋] 免费挑战获胜奖励",
+      })
+      return
+    }
+
+    if (board.flat().every((cell) => cell !== 0)) {
+      await settle(input.user.id)
+      await creditUserPoints({
+        tx,
+        userId: input.user.id,
+        amount: match.ticketCost + match.winReward,
+        pointName: settings.pointName,
+        reason: match.ticketCost > 0 ? "[app:五子棋] 付费挑战平局按玩家胜返本与奖励" : "[app:五子棋] 免费挑战平局按玩家胜奖励",
+      })
+      return
+    }
+
+    const aiMove = chooseAiMove(board, config.aiLevel)
+    board[aiMove.y][aiMove.x] = AI_MARKER
+    await tx.gobangMove.create({
+      data: {
+        id: randomUUID(),
+        matchId: input.matchId,
+        playerId: AI_PLAYER_ID,
+        step: moves.length + 2,
+        x: aiMove.x,
+        y: aiMove.y,
+      },
+    })
+
+    if (isWinningMove(board, aiMove.x, aiMove.y, AI_MARKER)) {
+      await settle(AI_PLAYER_ID)
+      return
+    }
+
+    const updated = await tx.gobangMatch.updateMany({
+      where: { id: input.matchId, status: "ONGOING" },
+      data: { updatedAt: new Date() },
+    })
+    if (updated.count !== 1) {
+      throw new Error("对局状态已变化，请刷新后重试")
+    }
+  })
 
   return {
     match: await getGobangMatch(input.matchId),

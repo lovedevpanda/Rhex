@@ -5,6 +5,7 @@ import { prisma } from "@/db/client"
 import {
   countLotteryParticipants,
   executeLotteryDrawTransaction,
+  LotteryDrawClaimConflictError,
   findLotteryAutoDrawStatus,
   findLotteryDrawContext,
   findLotteryEnrollmentContext,
@@ -547,7 +548,7 @@ export async function enrollUserInLotteryPool(input: { postId: string; userId: n
     return { joined: false, reason: eligibility.reason }
   }
 
-  await upsertLotteryParticipantEligibility({
+  const participant = await upsertLotteryParticipantEligibility({
     postId: input.postId,
     userId: input.userId,
     replyCommentId: input.replyCommentId,
@@ -555,6 +556,10 @@ export async function enrollUserInLotteryPool(input: { postId: string; userId: n
     ineligibleReason: null,
     joinedAt: new Date(),
   })
+
+  if (!participant) {
+    return { joined: false, reason: "抽奖已结束或已开奖" }
+  }
 
   await maybeAutoDrawLottery(input.postId)
   return { joined: true, reason: null }
@@ -637,45 +642,33 @@ async function sendLotteryWinnerEmails(input: {
   )
 }
 
-export async function drawLotteryWinners(postId: string, options?: { force?: boolean; actorId?: number | null }) {
-  const post = await findLotteryDrawContext(postId)
+type LotteryDrawContext = NonNullable<Awaited<ReturnType<typeof findLotteryDrawContext>>>
 
-  if (!post || post.type !== "LOTTERY") {
-    apiError(404, "抽奖帖不存在")
-  }
-
-  if (post.lotteryStatus === LotteryStatus.DRAWN && !options?.force) {
-    apiError(409, "该抽奖已开奖")
-  }
-
-  if (post.lotteryStatus === LotteryStatus.DRAWN && options?.force && post.lotteryPrizes.some((prize) => prize.type !== "MANUAL")) {
-    apiError(409, "已发放或分配奖品的抽奖不可重新开奖")
-  }
-
-  if (post.lotteryTriggerMode === LotteryTriggerMode.MANUAL && !options?.force) {
+function assertLotteryDrawTriggerSatisfied(post: LotteryDrawContext) {
+  if (post.lotteryTriggerMode === LotteryTriggerMode.MANUAL) {
     if (!post.lotteryEndsAt || post.lotteryEndsAt.getTime() > Date.now()) {
-      apiError(409, "未到结束时间，暂不可开奖")
+      apiError(409, "抽奖尚未到开奖时间")
     }
   }
 
-  if (post.lotteryTriggerMode === LotteryTriggerMode.AUTO_PARTICIPANT_COUNT && !options?.force) {
+  if (post.lotteryTriggerMode === LotteryTriggerMode.AUTO_PARTICIPANT_COUNT) {
     const goal = post.lotteryParticipantGoal ?? 0
     if (goal <= 0 || post.lotteryParticipants.length < goal) {
-      apiError(409, "未达到自动开奖人数")
+      apiError(409, "尚未达到参与人数目标")
     }
   }
 
   if (post.lotteryPrizes.length === 0) {
-    apiError(400, "当前未配置奖项")
+    apiError(400, "请至少设置一个奖项")
   }
+}
 
-
-  const lockedAt = new Date()
-  const pool = secureShuffle(post.lotteryParticipants)
+function buildLotteryDraw(input: { post: LotteryDrawContext; lockedAt: Date }) {
+  const pool = secureShuffle(input.post.lotteryParticipants)
   const winnersToCreate: Prisma.LotteryWinnerCreateManyInput[] = []
   let cursor = 0
 
-  for (const prize of post.lotteryPrizes) {
+  for (const prize of input.post.lotteryPrizes) {
     const redemptionCodes = prize.type === "REDEEM_CODE"
       ? normalizeLotteryRedemptionCodes(prize.codesJson)
       : []
@@ -684,24 +677,24 @@ export async function drawLotteryWinners(postId: string, options?: { force?: boo
       const participant = pool[cursor]
       cursor += 1
       winnersToCreate.push({
-        postId: post.id,
+        postId: input.post.id,
         prizeId: prize.id,
         participantId: participant.id,
         userId: participant.userId,
         redemptionCode: redemptionCodes[count] ?? null,
-        drawnAt: lockedAt,
-        createdAt: lockedAt,
+        drawnAt: input.lockedAt,
+        createdAt: input.lockedAt,
       })
     }
   }
 
-  const prizeSummary = post.lotteryPrizes.map((prize) => ({
+  const prizeSummary = input.post.lotteryPrizes.map((prize) => ({
     title: prize.title,
     quantity: prize.quantity,
     winners: winnersToCreate
       .filter((winner) => winner.prizeId === prize.id)
       .map((winner) => {
-        const matchedParticipant = post.lotteryParticipants.find((participant) => participant.id === winner.participantId)
+        const matchedParticipant = input.post.lotteryParticipants.find((participant) => participant.id === winner.participantId)
         return {
           username: matchedParticipant?.user.username ?? "",
           nickname: matchedParticipant?.user.nickname ?? null,
@@ -709,27 +702,56 @@ export async function drawLotteryWinners(postId: string, options?: { force?: boo
       }),
   }))
 
-  const announcement = buildLotteryAnnouncement({
-    postTitle: post.title,
-    participantCount: post.lotteryParticipants.length,
-    prizes: prizeSummary,
-    drawnAt: lockedAt,
-  })
+  return {
+    winnersToCreate,
+    announcement: buildLotteryAnnouncement({
+      postTitle: input.post.title,
+      participantCount: input.post.lotteryParticipants.length,
+      prizes: prizeSummary,
+      drawnAt: input.lockedAt,
+    }),
+  }
+}
+
+export async function drawLotteryWinners(postId: string, options?: { force?: boolean; actorId?: number | null }) {
+  const post = await findLotteryDrawContext(postId)
+
+  if (!post || post.type !== "LOTTERY" || !isPublicReadablePostStatus(post.status)) {
+    apiError(404, "抽奖帖不存在")
+  }
+
+  if (post.lotteryStatus !== LotteryStatus.ACTIVE || post.lotteryLockedAt || post.lotteryDrawnAt) {
+    apiError(409, post.lotteryStatus === LotteryStatus.DRAWN ? "抽奖已经开奖" : "抽奖正在开奖中")
+  }
+
+  assertLotteryDrawTriggerSatisfied(post)
+
+  const lockedAt = new Date()
   const settings = await getServerSiteSettings()
 
-  const updated = await executeLotteryDrawTransaction({
-    post,
-    lockedAt,
-    winnersToCreate,
-    actorId: options?.actorId,
-    announcement,
-    prizeCostSettings: settings,
-  })
+  let updated: Awaited<ReturnType<typeof executeLotteryDrawTransaction>>
+  try {
+    updated = await executeLotteryDrawTransaction({
+      postId,
+      lockedAt,
+      actorId: options?.actorId,
+      prizeCostSettings: settings,
+      buildDraw: (lockedPost) => {
+        assertLotteryDrawTriggerSatisfied(lockedPost)
+        return buildLotteryDraw({ post: lockedPost, lockedAt })
+      },
+    })
+  } catch (error) {
+    if (error instanceof LotteryDrawClaimConflictError) {
+      apiError(409, "抽奖已由其他请求处理")
+    }
 
+    throw error
+  }
 
   await sendLotteryWinnerEmails({
-    postSlug: post.slug,
-    postTitle: post.title,
+    postSlug: updated.post.slug,
+    postTitle: updated.post.title,
     winners: updated.winners.map((winner) => ({
       email: winner.user.email,
       nickname: winner.user.nickname,

@@ -1,7 +1,7 @@
-import { BoardApplicationStatus, UserRole } from "@/db/types"
-import type { Prisma } from "@/db/types"
+import { BoardApplicationStatus, Prisma, UserRole, UserStatus } from "@/db/types"
 
 import { prisma } from "@/db/client"
+import { apiError } from "@/lib/api-route"
 
 export function findPendingBoardApplicationByApplicantAndSlug(applicantId: number, slug: string) {
   return prisma.boardApplication.findFirst({
@@ -30,8 +30,46 @@ export function findBoardApplicationDuplicateBoard(name: string, slug: string) {
   })
 }
 
-export function createBoardApplication(data: Prisma.BoardApplicationUncheckedCreateInput) {
-  return prisma.boardApplication.create({ data })
+export async function createPendingBoardApplicationIfAbsent(data: {
+  applicantId: number
+  zoneId: string
+  name: string
+  slug: string
+  description: string | null
+  icon: string | null
+  reason: string | null
+}) {
+  return prisma.$transaction(async (tx) => {
+    // The public write guard only deduplicates a short request window. Serialize
+    // this business key as well so retried or parallel requests cannot create
+    // multiple pending applications for the same applicant and slug.
+    await tx.$executeRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(
+        hashtext('board-application-submit'),
+        hashtext(${`${data.applicantId}:${data.slug}`})
+      )
+    `)
+
+    const existing = await tx.boardApplication.findFirst({
+      where: {
+        applicantId: data.applicantId,
+        slug: data.slug,
+        status: BoardApplicationStatus.PENDING,
+      },
+      select: { id: true },
+    })
+
+    if (existing) {
+      return null
+    }
+
+    return tx.boardApplication.create({
+      data: {
+        ...data,
+        status: BoardApplicationStatus.PENDING,
+      },
+    })
+  })
 }
 
 export function findBoardApplicationsByApplicant(applicantId: number, take = 10) {
@@ -206,8 +244,43 @@ export async function approveBoardApplicationWithBoardCreation(params: {
   }) => Promise<void>
 }) {
   return prisma.$transaction(async (tx) => {
-    const nextSortOrder = ((await findBoardSortOrderMaxByZone(params.zoneId, tx))._max.sortOrder ?? 0) + 1
+    // Claim the pending application before any side effect. The conditional
+    // transition is the authority for concurrent approve/reject requests.
+    const claimed = await tx.boardApplication.updateMany({
+      where: {
+        id: params.applicationId,
+        status: BoardApplicationStatus.PENDING,
+      },
+      data: {
+        status: BoardApplicationStatus.APPROVED,
+        reviewNote: params.reviewNote,
+        reviewedById: params.reviewerId,
+        reviewedAt: new Date(),
+      },
+    })
 
+    if (claimed.count !== 1) {
+      apiError(409, "该申请已被其他管理员处理")
+    }
+
+    const applicant = await tx.user.findUniqueOrThrow({
+      where: { id: params.applicantId },
+      select: {
+        id: true,
+        role: true,
+        status: true,
+      },
+    })
+
+    if (applicant.status !== UserStatus.ACTIVE) {
+      apiError(400, "申请人账号当前不是启用状态，不能直接设为节点版主")
+    }
+
+    if (applicant.role === UserRole.ADMIN) {
+      apiError(400, "管理员账号不需要通过申请来绑定节点版主")
+    }
+
+    const nextSortOrder = ((await findBoardSortOrderMaxByZone(params.zoneId, tx))._max.sortOrder ?? 0) + 1
     const board = await tx.board.create({
       data: {
         zoneId: params.zoneId,
@@ -221,15 +294,6 @@ export async function approveBoardApplicationWithBoardCreation(params: {
         id: true,
         name: true,
         slug: true,
-      },
-    })
-
-    const applicant = await tx.user.findUniqueOrThrow({
-      where: { id: params.applicantId },
-      select: {
-        id: true,
-        role: true,
-        status: true,
       },
     })
 
@@ -303,8 +367,11 @@ export function rejectBoardApplication(params: {
 }) {
   const client = params.client ?? prisma
 
-  return client.boardApplication.update({
-    where: { id: params.id },
+  return client.boardApplication.updateMany({
+    where: {
+      id: params.id,
+      status: BoardApplicationStatus.PENDING,
+    },
     data: {
       status: params.nextStatus ?? BoardApplicationStatus.REJECTED,
       reviewNote: params.reviewNote,
@@ -324,8 +391,11 @@ export function updateBoardApplicationByAdmin(params: {
   reason: string | null
   reviewNote: string | null
 }) {
-  return prisma.boardApplication.update({
-    where: { id: params.id },
+  return prisma.boardApplication.updateMany({
+    where: {
+      id: params.id,
+      status: BoardApplicationStatus.PENDING,
+    },
     data: {
       zoneId: params.zoneId,
       name: params.name,

@@ -4,12 +4,11 @@ import { prisma } from "@/db/client"
 import {
   approveBoardApplicationWithBoardCreation,
   countPendingBoardApplications,
-  createBoardApplication,
+  createPendingBoardApplicationIfAbsent,
   findBoardApplicationById,
   findBoardApplicationDuplicateBoard,
   findBoardApplicationsByApplicant,
   findBoardApplicationsForAdmin,
-  findPendingBoardApplicationByApplicantAndSlug,
   findZoneByIdForBoardApplication,
   rejectBoardApplication,
   updateBoardApplicationByAdmin,
@@ -228,12 +227,7 @@ export async function submitBoardApplication(input: BoardApplicationSubmitInput)
     apiError(409, duplicatedBoard.slug === payload.slug ? "该节点 slug 已存在" : "该节点名称已存在")
   }
 
-  const duplicatedPending = await findPendingBoardApplicationByApplicantAndSlug(input.applicantId, payload.slug)
-  if (duplicatedPending) {
-    apiError(409, "你已经提交过同 slug 的待审核申请，请勿重复提交")
-  }
-
-  const application = await createBoardApplication({
+  const application = await createPendingBoardApplicationIfAbsent({
     applicantId: input.applicantId,
     zoneId: payload.zoneId,
     name: payload.name,
@@ -241,8 +235,11 @@ export async function submitBoardApplication(input: BoardApplicationSubmitInput)
     description: payload.description,
     icon: payload.icon,
     reason: payload.reason,
-    status: BoardApplicationStatus.PENDING,
   })
+
+  if (!application) {
+    apiError(409, "你已经提交过同 slug 的待审核申请，请勿重复提交")
+  }
 
   return {
     ...application,
@@ -295,8 +292,12 @@ export async function reviewBoardApplication(input: {
     apiError(409, duplicatedBoard.slug === payload.slug ? "该节点 slug 已存在" : "该节点名称已存在")
   }
 
+  if (application.status !== BoardApplicationStatus.PENDING) {
+    apiError(409, "该申请已处理，不能再次修改或审核")
+  }
+
   if (input.action === "update") {
-    await updateBoardApplicationByAdmin({
+    const updated = await updateBoardApplicationByAdmin({
       id: application.id,
       zoneId: payload.zoneId,
       name: payload.name,
@@ -307,22 +308,26 @@ export async function reviewBoardApplication(input: {
       reviewNote,
     })
 
-    return { message: "节点申请已更新" }
-  }
+    if (updated.count !== 1) {
+      apiError(409, "该申请已被其他管理员处理")
+    }
 
-  if (application.status !== BoardApplicationStatus.PENDING) {
-    apiError(400, "该申请已处理，不能重复审核")
+    return { message: "节点申请已更新" }
   }
 
   if (input.action === "reject") {
     await prisma.$transaction(async (tx) => {
-      await rejectBoardApplication({
+      const rejected = await rejectBoardApplication({
         id: application.id,
         reviewNote,
         reviewerId: input.reviewerId,
         nextStatus: BoardApplicationStatus.REJECTED,
         client: tx,
       })
+
+      if (rejected.count !== 1) {
+        apiError(409, "该申请已被其他管理员处理")
+      }
 
       await createSystemNotification({
         client: tx,

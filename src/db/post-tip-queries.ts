@@ -129,6 +129,20 @@ export function findPostTipRecipient(userId: number, client: Prisma.TransactionC
   })
 }
 
+/**
+ * Serializes outgoing tips for one account while daily/target quotas are read
+ * and the debit is persisted. Every write path that consumes these quotas must
+ * acquire this same row lock before checking usage.
+ */
+export async function lockPostTipSender(client: Prisma.TransactionClient, senderId: number) {
+  await client.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+    SELECT "id"
+    FROM "User"
+    WHERE "id" = ${senderId}
+    FOR UPDATE
+  `)
+}
+
 export function findPostTipSender(senderId: number, client: Prisma.TransactionClient) {
   return client.user.findUnique({
     where: { id: senderId },

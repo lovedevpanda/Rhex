@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache"
 
-import { findFounderAdminId, findUserStatus, findUserUsername } from "@/db/admin-user-action-queries"
+import { findFounderAdminId, findUserStatus, findUserUsername, invalidateUserSessions } from "@/db/admin-user-action-queries"
 import { apiError, apiSuccess, createAdminRouteHandler, readJsonBody, requirePositiveIntegerField } from "@/lib/api-route"
 import { writeAdminLog } from "@/lib/admin"
 import {
@@ -45,6 +45,7 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
   const grants = normalizeAdminPermissionGrantDrafts(body.grants, editablePermissions)
   const persistedGrants = grants.filter((grant) => grant.allowed !== canAdminTier("ADMIN", grant.permissionKey))
   await saveAdminPermissionGrants(userId, persistedGrants)
+  await invalidateUserSessions(userId)
   await writeAdminLog(
     adminUser.id,
     "user.adminPermissions.update",

@@ -1,5 +1,6 @@
 import { apiError, apiSuccess, createRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { verifySmsVerificationCodeWithAddonProviders } from "@/lib/addon-sms-verification"
+import { withPublicWriteGuard } from "@/lib/public-write-guard"
 import { isVerificationChannel, VerificationChannel } from "@/lib/shared/verification-channel"
 import { verifyCode } from "@/lib/verification"
 
@@ -14,18 +15,20 @@ export const POST = createRouteHandler(async ({ request }) => {
     apiError(400, "缺少校验参数")
   }
 
-  if (channel === VerificationChannel.PHONE) {
-    await verifySmsVerificationCodeWithAddonProviders({
-      request,
-      phone: target,
-      code,
-      purpose: "register",
-    })
-  } else {
-    await verifyCode({ channel, target, code })
-  }
+  return withPublicWriteGuard("auth-verify-code", { request }, async () => {
+    if (channel === VerificationChannel.PHONE) {
+      await verifySmsVerificationCodeWithAddonProviders({
+        request,
+        phone: target,
+        code,
+        purpose: "register",
+      })
+    } else {
+      await verifyCode({ channel, target, code })
+    }
 
-  return apiSuccess(undefined, "验证码校验通过")
+    return apiSuccess(undefined, "验证码校验通过")
+  })
 }, {
   errorMessage: "验证码校验失败",
   logPrefix: "[api/auth/verify-code] unexpected error",

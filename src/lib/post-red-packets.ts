@@ -13,6 +13,7 @@ import {
   findJackpotParticipantStats,
   findPostRedPacketSummaryData,
   findPostRewardPoolContentByPostId,
+  lockPostRewardPoolSender,
   rollbackJackpotClaimSettlement,
   runSerializablePostRewardPoolTransaction,
   settleJackpotClaim,
@@ -117,10 +118,19 @@ export interface PostRedPacketSummary {
   records: PostRedPacketClaimRecord[]
 }
 
-export async function assertPostRedPacketDailyLimit(params: { senderId: number; totalPoints: number }) {
+export async function assertPostRedPacketDailyLimit(params: {
+  senderId: number
+  totalPoints: number
+  tx?: Prisma.TransactionClient
+}) {
   const settings = await getSiteSettings()
   const { start, end } = getBusinessDayRange()
-  const aggregate = await sumTodayPostRedPacketPoints(params.senderId, start, end)
+
+  if (params.tx) {
+    await lockPostRewardPoolSender(params.tx, params.senderId)
+  }
+
+  const aggregate = await sumTodayPostRedPacketPoints(params.senderId, start, end, params.tx)
   const usedPoints = aggregate._sum.totalPoints ?? 0
   const totalUsedPoints = addSafeIntegers(usedPoints, params.totalPoints)
   if (totalUsedPoints === null || totalUsedPoints > settings.postRedPacketDailyLimit) {
@@ -467,7 +477,11 @@ export async function createPostRedPacketAfterPostCreated(params: {
   })
   const totalPoolPoints = Math.abs(preparedPublish.finalDelta)
 
-  await assertPostRedPacketDailyLimit({ senderId: params.senderId, totalPoints: totalPoolPoints })
+  await assertPostRedPacketDailyLimit({
+    senderId: params.senderId,
+    totalPoints: totalPoolPoints,
+    tx: params.tx,
+  })
 
   await createPostRewardPoolRecord(params.tx, {
     postId: params.postId,

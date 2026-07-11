@@ -1,10 +1,10 @@
-import { findUserByEmail } from "@/db/password-reset-queries"
 import { apiError, apiSuccess, createRouteHandler, readJsonBody, readOptionalStringField, requireStringField } from "@/lib/api-route"
 import { normalizeEmailAddress } from "@/lib/email"
 import { canSendBusinessEmail } from "@/lib/mailer"
 import { isValidMainlandPhone, normalizePhoneNumber } from "@/lib/phone"
 import { getRequestIp } from "@/lib/request-ip"
 import { sendPasswordResetCode, sendPasswordResetPhoneCode } from "@/lib/password-reset"
+import { shouldMaskPasswordResetSendError } from "@/lib/public-write-guard"
 import { getServerSiteSettings } from "@/lib/site-settings"
 import { verifySmsSendCaptcha } from "@/lib/sms-send-captcha"
 import { SMS_CODE_COOLDOWN_MS, SMS_CODE_COOLDOWN_SECONDS } from "@/lib/sms-verification"
@@ -13,6 +13,15 @@ import { withRequestWriteGuard } from "@/lib/write-guard"
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function passwordResetSendResponse(channel: "EMAIL" | "PHONE") {
+  return apiSuccess({
+    expiresAt: null,
+    ...(channel === "PHONE" ? { cooldownSeconds: SMS_CODE_COOLDOWN_SECONDS } : {}),
+  }, channel === "EMAIL"
+    ? "如该邮箱已绑定可用账号，验证码将发送到邮箱"
+    : "如该手机号已绑定可用账号，验证码将发送到手机")
 }
 
 export const POST = createRouteHandler<unknown>(async ({ request }) => {
@@ -46,17 +55,22 @@ export const POST = createRouteHandler<unknown>(async ({ request }) => {
         settings,
       })
 
-      const result = await sendPasswordResetPhoneCode({
-        phone,
-        request,
-        ip: getRequestIp(request),
-        userAgent: request.headers.get("user-agent"),
-      })
+      try {
+        await sendPasswordResetPhoneCode({
+          phone,
+          request,
+          ip: getRequestIp(request),
+          userAgent: request.headers.get("user-agent"),
+        })
 
-      return apiSuccess({
-        ...result,
-        cooldownSeconds: SMS_CODE_COOLDOWN_SECONDS,
-      }, "验证码已发送到手机")
+        return passwordResetSendResponse("PHONE")
+      } catch (error) {
+        if (shouldMaskPasswordResetSendError(error)) {
+          return passwordResetSendResponse("PHONE")
+        }
+
+        throw error
+      }
     })
   }
 
@@ -80,33 +94,27 @@ export const POST = createRouteHandler<unknown>(async ({ request }) => {
     apiError(400, "当前站点未配置邮件发送能力或已关闭找回密码验证码邮件，暂不可找回密码")
   }
 
-  const user = await findUserByEmail(email)
-
-  if (!user) {
-    apiError(404, "该邮箱未绑定账号")
-  }
-
-  if (user.status === "BANNED") {
-    apiError(403, "该账号已被禁用，无法找回密码")
-  }
-
-  if (user.status === "INACTIVE") {
-    apiError(403, "该账号未激活，无法找回密码")
-  }
-
   return withRequestWriteGuard(createRequestWriteGuardOptions("auth-forgot-password-send-code", {
     request,
     input: {
       email,
     },
   }), async () => {
-    const result = await sendPasswordResetCode({
-      email,
-      ip: getRequestIp(request),
-      userAgent: request.headers.get("user-agent"),
-    })
+    try {
+      await sendPasswordResetCode({
+        email,
+        ip: getRequestIp(request),
+        userAgent: request.headers.get("user-agent"),
+      })
 
-    return apiSuccess(result, "验证码已发送到邮箱")
+      return passwordResetSendResponse("EMAIL")
+    } catch (error) {
+      if (shouldMaskPasswordResetSendError(error)) {
+        return passwordResetSendResponse("EMAIL")
+      }
+
+      throw error
+    }
   })
 }, {
   errorMessage: "验证码发送失败",

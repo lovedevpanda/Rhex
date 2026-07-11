@@ -6,7 +6,7 @@ import type {
   ExternalAuthProvider,
   ExternalOAuthProfile,
 } from "@/lib/external-auth-types"
-import { resolveSiteOrigin } from "@/lib/site-origin"
+import { getConfiguredSiteOrigin } from "@/lib/site-origin-config"
 
 const OAUTH_PROVIDER_LABELS: Record<BuiltinExternalAuthProvider, string> = {
   github: "GitHub",
@@ -74,8 +74,34 @@ function getOAuthProviderCredentials(provider: ExternalAuthProvider, settings: O
   }
 }
 
-async function getOAuthRedirectURI(provider: ExternalAuthProvider) {
-  return `${await resolveSiteOrigin()}/api/auth/oauth/${provider}/callback`
+export function requireConfiguredOAuthOrigin(configuredOrigin = getConfiguredSiteOrigin()) {
+  if (!configuredOrigin) {
+    throw new Error("\u7b2c\u4e09\u65b9\u767b\u5f55\u9700\u8981\u914d\u7f6e SITE_URL \u6216 APP_URL")
+  }
+
+  let url: URL
+  try {
+    url = new URL(configuredOrigin)
+  } catch {
+    throw new Error("SITE_URL / APP_URL \u5fc5\u987b\u662f\u6709\u6548\u7684 HTTP(S) \u7ad9\u70b9 origin")
+  }
+
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:")
+    || url.username
+    || url.password
+    || url.pathname !== "/"
+    || url.search
+    || url.hash
+  ) {
+    throw new Error("SITE_URL / APP_URL \u5fc5\u987b\u662f\u65e0\u8def\u5f84\u3001\u65e0\u8d26\u53f7\u4fe1\u606f\u7684 HTTP(S) \u7ad9\u70b9 origin")
+  }
+
+  return url.origin
+}
+
+function getOAuthRedirectURI(provider: ExternalAuthProvider) {
+  return `${requireConfiguredOAuthOrigin()}/api/auth/oauth/${provider}/callback`
 }
 
 export async function createOAuthAuthorizationRequest(provider: ExternalAuthProvider, settings: OAuthProviderConfigSettings) {

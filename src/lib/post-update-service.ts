@@ -1,4 +1,4 @@
-import { findPostUpdateContext, runPostUpdateTransaction } from "@/db/post-update-queries"
+import { findPostAppendState, findPostUpdateContext, lockPostAppendTarget, runPostUpdateTransaction } from "@/db/post-update-queries"
 import { findPostAttachmentsByPostId } from "@/db/post-attachment-queries"
 
 import type { SessionActor } from "@/lib/auth"
@@ -324,7 +324,6 @@ export async function updatePostFlow(input: {
   const appendedContentWithCards = await processInternalPostCardEmbeds(appendSafety.sanitizedText, {
     ...postCardEmbedOptions,
   })
-  const nextSortOrder = (post.appendices[0]?.sortOrder ?? -1) + 1
   let mentionUserIds = [] as number[]
 
   await executeAddonActionHook("post.update.before", {
@@ -337,6 +336,23 @@ export async function updatePostFlow(input: {
   })
 
   await runPostUpdateTransaction(async (tx) => {
+    if (!await lockPostAppendTarget(tx, input.postId)) {
+      apiError(404, "帖子不存在")
+    }
+
+    const latestAppendState = await findPostAppendState(tx, input.postId)
+    if (!latestAppendState) {
+      apiError(404, "帖子不存在")
+    }
+
+    if (!canManagePost && latestAppendState.lastAppendedAt) {
+      const waitMs = APPEND_INTERVAL_MS - (Date.now() - new Date(latestAppendState.lastAppendedAt).getTime())
+      if (waitMs > 0) {
+        apiError(429, `追加过于频繁，请 ${Math.ceil(waitMs / (60 * 1000))} 分钟后再试`)
+      }
+    }
+
+    const nextSortOrder = (latestAppendState.appendices[0]?.sortOrder ?? -1) + 1
     const activityAt = new Date()
     let nextAppendedContent = appendedContentWithCards
 

@@ -2,7 +2,7 @@
  * @file manifest-loader.ts
  * @responsibility addon server entry 动态 import / manifest 归一化为 runtime descriptor
  * @scope Phase B.6 抽自 runtime/loader.ts: importAddonDefinition / resolveAddonServerEntryPath / buildAddonRuntimeDescriptor
- * @depends-on node:crypto, node:fs, node:path, node:url, ../constants, ../fs, @/addons-host/types
+ * @depends-on node:crypto, node:fs, node:path, node:url, ../constants, ../fs, ../manifest, ../permissions, @/addons-host/types
  * @exports DEFAULT_SERVER_ENTRY_RELATIVE_PATH, importAddonDefinition, resolveAddonServerEntryPath, buildAddonRuntimeDescriptor
  */
 
@@ -22,8 +22,14 @@ import {
   ensureDirectory,
   fileExists,
   getAddonsStateDirectory,
+  readJsonFile,
   resolveSafeAddonChildPath,
 } from "@/addons-host/runtime/fs"
+import { normalizeAddonManifest } from "@/addons-host/runtime/manifest"
+import {
+  assertAddonManifestPermissionDeclarations,
+  assertAddonTrustedCodeExecutionAcknowledged,
+} from "@/addons-host/runtime/permissions"
 import type {
   AddonDefinition,
   AddonManifest,
@@ -100,10 +106,23 @@ async function resolveVersionedAddonImportRoot(rootDir: string) {
   return versionedRootDir
 }
 
+async function assertAddonServerEntryMayExecute(rootDir: string) {
+  const manifestPath = await resolveSafeAddonChildPath(rootDir, "addon.json")
+  const manifest = normalizeAddonManifest(await readJsonFile<unknown>(manifestPath))
+
+  // Importing an ES module executes its top-level code. Validate before this
+  // point so an unacknowledged or misleading addon cannot be evaluated.
+  assertAddonManifestPermissionDeclarations(manifest)
+  assertAddonTrustedCodeExecutionAcknowledged(manifest.id)
+
+  return manifest
+}
+
 export async function importAddonDefinition(
   rootDir: string,
   entryServerPath: string,
 ): Promise<AddonDefinition> {
+  await assertAddonServerEntryMayExecute(rootDir)
   const versionedRootDir = await resolveVersionedAddonImportRoot(rootDir)
   const versionedEntryPath = path.join(
     versionedRootDir,

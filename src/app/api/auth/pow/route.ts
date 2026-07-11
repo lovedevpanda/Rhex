@@ -3,11 +3,12 @@ import { NextResponse } from "next/server"
 import { apiError, createRouteHandler } from "@/lib/api-route"
 import { createPowCaptchaChallenge, hasPowCaptchaSecret, parsePowCaptchaScope } from "@/lib/pow-captcha"
 import { getRequestIp } from "@/lib/request-ip"
+import { withPublicWriteGuard } from "@/lib/public-write-guard"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-export const GET = createRouteHandler(async ({ request }) => {
+export const GET = createRouteHandler(async ({ request }) => withPublicWriteGuard("auth-pow", { request }, async () => {
   if (!hasPowCaptchaSecret()) {
     apiError(503, "当前未配置 PoW 验证码密钥")
   }
@@ -36,7 +37,7 @@ export const GET = createRouteHandler(async ({ request }) => {
       },
     },
   )
-}, {
+}), {
   errorMessage: "获取 PoW 验证码失败",
   logPrefix: "[api/auth/pow] unexpected error",
 })

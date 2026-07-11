@@ -66,6 +66,11 @@ import {
 } from "@/addons-host/runtime/internal/manifest-loader"
 import { buildAddonPermissionCache } from "@/addons-host/runtime/internal/permission-guard"
 import { applyAddonDataMigrations } from "@/addons-host/runtime/internal/data-migrations"
+import {
+  ADDON_TRUST_BOUNDARY_MESSAGE,
+  getAddonManifestPermissionDeclarationErrors,
+  getAddonTrustedCodeExecutionStatus,
+} from "@/addons-host/runtime/permissions"
 
 interface DiscoveredAddonManifestEntry {
   entryName: string
@@ -242,7 +247,9 @@ export async function loadAddonsRuntimeFresh(): Promise<LoadedAddonRuntime[]> {
 
     const manifest = discoveredAddon.manifest
     const state = stateMap[manifest.id] ?? discoveredAddon.state
-    const warnings: string[] = []
+    const warnings: string[] = [ADDON_TRUST_BOUNDARY_MESSAGE]
+    const permissionDeclarationErrors = getAddonManifestPermissionDeclarationErrors(manifest.permissions)
+    warnings.push(...permissionDeclarationErrors)
     const permissionCache = buildAddonPermissionCache(manifest)
     if (!isValidAddonId(manifest.id)) {
       warnings.push(`addon id "${manifest.id}" is not a recommended identifier`)
@@ -293,6 +300,26 @@ export async function loadAddonsRuntimeFresh(): Promise<LoadedAddonRuntime[]> {
       continue
     }
 
+    if (permissionDeclarationErrors.length > 0) {
+      await recordAddonLoadError(runtime, permissionDeclarationErrors.join("; "), {
+        permissionDeclarationErrors,
+        trustModel: "trusted-server-code",
+      })
+      runtimes.push(runtime)
+      continue
+    }
+
+    const trustedCodeStatus = getAddonTrustedCodeExecutionStatus()
+    if (!trustedCodeStatus.acknowledged) {
+      await recordAddonLoadError(runtime, trustedCodeStatus.message, {
+        trustModel: "trusted-server-code",
+        requiredEnvironmentVariable: trustedCodeStatus.environmentVariable,
+        requiredAcknowledgement: trustedCodeStatus.requiredValue,
+      })
+      runtimes.push(runtime)
+      continue
+    }
+
     if (!serverEntryPath) {
       runtime.loadError = "addon server entry not found"
       runtimes.push(runtime)
@@ -300,8 +327,22 @@ export async function loadAddonsRuntimeFresh(): Promise<LoadedAddonRuntime[]> {
     }
 
     try {
+      await createAddonLifecycleLog({
+        addonId: runtime.manifest.id,
+        action: "TRUST_BOUNDARY",
+        status: "ACKNOWLEDGED",
+        message: `Addon "${runtime.manifest.id}" is executing under the trusted-server-code model. ${ADDON_TRUST_BOUNDARY_MESSAGE}`,
+        dedupeWindowMs: ADDON_RUNTIME_LOG_DEDUPE_WINDOW_MS,
+        metadataJson: {
+          trustModel: "trusted-server-code",
+          permissionsAreSandbox: false,
+          resolvedPermissions: runtime.resolvedPermissions,
+        },
+      })
       const { api, snapshot } = createAddonBuildApi(manifest, warnings)
-      const definition = await importAddonDefinition(discoveredAddon.rootDir, serverEntryPath)
+      const definition = await runWithAddonExecutionScope(runtime, {
+        action: "module-import",
+      }, () => importAddonDefinition(discoveredAddon.rootDir, serverEntryPath))
       await runWithAddonExecutionScope(runtime, {
         action: "setup",
       }, async () => {

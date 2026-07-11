@@ -65,28 +65,49 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 
   await prisma.$transaction(async (tx) => {
     if (action === "pin") {
+      const pinned = await tx.comment.updateMany({
+        where: {
+          id: commentId,
+          postId,
+          parentId: null,
+          status: "NORMAL",
+        },
+        data: {
+          isPinnedByAuthor: true,
+        },
+      })
+
+      if (pinned.count !== 1) {
+        apiError(409, "评论状态已变更，请刷新后重试")
+      }
+
       await tx.comment.updateMany({
         where: {
           postId,
           parentId: null,
           isPinnedByAuthor: true,
+          id: { not: commentId },
         },
         data: {
           isPinnedByAuthor: false,
         },
       })
-
-      await tx.comment.update({
-        where: { id: commentId },
-        data: { isPinnedByAuthor: true },
-      })
       return
     }
 
-    await tx.comment.update({
-      where: { id: commentId },
+    const unpinned = await tx.comment.updateMany({
+      where: {
+        id: commentId,
+        postId,
+        parentId: null,
+        status: "NORMAL",
+      },
       data: { isPinnedByAuthor: false },
     })
+
+    if (unpinned.count !== 1) {
+      apiError(409, "评论状态已变更，请刷新后重试")
+    }
   })
 
   revalidatePostCommentCache({ postId })

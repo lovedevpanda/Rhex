@@ -7,7 +7,10 @@ import {
   ADDON_RUNTIME_LOG_DEDUPE_WINDOW_MS,
   createAddonLifecycleLog,
 } from "@/db/addon-registry-queries"
-import { addonHasPermission } from "@/addons-host/runtime/permissions"
+import {
+  ADDON_TRUST_BOUNDARY_MESSAGE,
+  addonHasPermission,
+} from "@/addons-host/runtime/permissions"
 
 interface AddonExecutionScopeState {
   addon: LoadedAddonRuntime
@@ -56,45 +59,10 @@ function resolveFetchUrl(input: RequestInfo | URL) {
   return null
 }
 
-function isRelativeRequest(input: RequestInfo | URL) {
-  return typeof input === "string" && !/^[a-z][a-z0-9+.-]*:/i.test(input)
-}
-
-function shouldAllowNetworkRequest(
-  scope: AddonExecutionScopeState,
-  input: RequestInfo | URL,
-) {
-  if (isRelativeRequest(input)) {
-    return true
-  }
-
-  const resolvedUrl = resolveFetchUrl(input)
-  if (!resolvedUrl) {
-    return true
-  }
-
-  if (
-    resolvedUrl.protocol !== "http:"
-    && resolvedUrl.protocol !== "https:"
-  ) {
-    return true
-  }
-
-  if (
-    scope.requestOrigin
-    && resolvedUrl.origin === scope.requestOrigin
-  ) {
-    return true
-  }
-
-  if (
-    resolvedUrl.hostname === "localhost"
-    || resolvedUrl.hostname === "127.0.0.1"
-    || resolvedUrl.hostname === "::1"
-  ) {
-    return true
-  }
-
+function shouldAllowNetworkRequest(scope: AddonExecutionScopeState) {
+  // Do not make exceptions for localhost, same-origin, or relative paths.
+  // Those targets are still privileged from a server process and the manifest
+  // must explicitly request the host API capability before using global fetch.
   return addonHasPermission(scope.permissions, "network:external")
 }
 
@@ -111,32 +79,37 @@ export function installAddonFetchGuard() {
   ) => {
     const scope = addonExecutionScopeStorage.getStore()
 
-    if (
-      scope
-      && !shouldAllowNetworkRequest(scope, input)
-    ) {
+    if (scope && !shouldAllowNetworkRequest(scope)) {
       const addonId = scope.addon.manifest.id
       const resolvedUrl = resolveFetchUrl(input)
+      const message = `插件 "${addonId}" 未声明 "network:external"，已拒绝通过 globalThis.fetch 发起网络请求。${ADDON_TRUST_BOUNDARY_MESSAGE}`
       await createAddonLifecycleLog({
         addonId,
-        action: "NETWORK_DENIED",
+        action: "SDK_FETCH_DENIED",
         status: "FAILED",
-        message: `addon "${addonId}" is not allowed to access external network resources`,
+        message,
         dedupeWindowMs: ADDON_RUNTIME_LOG_DEDUPE_WINDOW_MS,
         metadataJson: {
           action: scope.action,
           url: resolvedUrl?.toString() ?? null,
+          requestOrigin: scope.requestOrigin,
+          requiredPermission: "network:external",
+          guardScope: "globalThis.fetch only",
+          trustModel: "trusted-server-code",
         },
       })
-      throw new Error(
-        `addon "${addonId}" is not allowed to access external network resources`,
-      )
+      throw new Error(message)
     }
 
     return originalFetch(input, init)
   }) as typeof globalThis.fetch
 }
 
+/**
+ * This scope protects the Rhex-provided global fetch path and preserves addon
+ * attribution for logs. It is intentionally not an isolation boundary: code
+ * imported into this Node.js process can use native modules or mutate globals.
+ */
 export function runWithAddonExecutionScope<T>(
   addon: LoadedAddonRuntime,
   input: {

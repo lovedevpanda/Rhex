@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { ExternalLink, Gift, Heart, Loader2 } from "lucide-react"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 
 import { LevelIcon } from "@/components/level-icon"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -39,26 +39,32 @@ async function readJson<T>(input: RequestInfo | URL, init?: RequestInit) {
   }
 }
 
+type RssUniverseFeedViewProps = {
+  items: RssUniverseFeedPageData["items"]
+  support?: RssSupportConfig
+}
+
 export function RssUniverseFeedView({
   items,
   support = defaultSupportConfig,
-}: {
-  items: RssUniverseFeedPageData["items"]
-  support?: RssSupportConfig
-}) {
+}: RssUniverseFeedViewProps) {
+  const feedKey = useMemo(
+    () => JSON.stringify({ items, currentUserPoints: support.currentUserPoints }),
+    [items, support.currentUserPoints],
+  )
+
+  return <RssUniverseFeedViewContent key={feedKey} items={items} support={support} />
+}
+
+function RssUniverseFeedViewContent({
+  items,
+  support,
+}: Required<RssUniverseFeedViewProps>) {
   const [entries, setEntries] = useState(items)
   const [points, setPoints] = useState(support.currentUserPoints)
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const firstAmount = support.allowedAmounts[0] ?? 0
-
-  useEffect(() => {
-    setEntries(items)
-  }, [items])
-
-  useEffect(() => {
-    setPoints(support.currentUserPoints)
-  }, [support.currentUserPoints])
 
   const giftMap = useMemo(() => new Map(support.gifts.map((gift) => [gift.id, gift])), [support.gifts])
 

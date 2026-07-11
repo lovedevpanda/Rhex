@@ -23,6 +23,22 @@ export function findPostUnlockUserPoints(userId: number, client: PostUnlockQuery
   })
 }
 
+export async function findPostUnlockPurchaseContext(postId: string, client: PostUnlockQueryClient) {
+  const rows = await resolveClient(client).$queryRaw<Array<{
+    id: string
+    authorId: number
+    content: string
+    status: string
+  }>>(Prisma.sql`
+    SELECT "id", "authorId", "content", "status"::text AS "status"
+    FROM "Post"
+    WHERE "id" = ${postId}
+    FOR UPDATE
+  `)
+
+  return rows[0] ?? null
+}
+
 export async function findPurchasedPostBlockPurchase(
   params: {
     userId: number

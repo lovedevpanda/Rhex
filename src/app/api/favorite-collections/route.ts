@@ -1,4 +1,4 @@
-import { apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody } from "@/lib/api-route"
 import {
   addPostToFavoriteCollection,
   createFavoriteCollection,
@@ -10,6 +10,7 @@ import {
   updateFavoriteCollection,
 } from "@/lib/favorite-collections"
 import { revalidatePostDataCache, revalidatePostSidebarCache, revalidatePostViewerCache } from "@/lib/post-detail-cache"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 
 function revalidateFavoriteCollectionPostCaches(input: {
   userId: number
@@ -63,6 +64,21 @@ export const POST = createUserRouteHandler<unknown>(async ({ request, currentUse
   const body = await readJsonBody(request)
   const action = typeof body.action === "string" ? body.action.trim() : ""
 
+  return withRequestWriteGuard({
+    request,
+    userId: currentUser.id,
+    scope: "favorite-collections",
+    cooldownMs: 1_000,
+    dedupeKey: JSON.stringify({
+      action,
+      collectionId: typeof body.collectionId === "string" ? body.collectionId.trim() : "",
+      postId: typeof body.postId === "string" ? body.postId.trim() : "",
+      submissionId: typeof body.submissionId === "string" ? body.submissionId.trim() : "",
+      decision: body.decision,
+    }),
+    dedupeWindowMs: 5_000,
+    releaseOnError: true,
+  }, async () => {
   if (action === "create") {
     const created = await createFavoriteCollection({
       userId: currentUser.id,
@@ -138,7 +154,9 @@ export const POST = createUserRouteHandler<unknown>(async ({ request, currentUse
     const result = await reviewFavoriteCollectionSubmission({
       userId: currentUser.id,
       submissionId: typeof body.submissionId === "string" ? body.submissionId.trim() : "",
-      decision: body.decision === "REJECT" ? "REJECT" : "APPROVE",
+      decision: body.decision === "APPROVE" || body.decision === "REJECT"
+        ? body.decision
+        : apiError(400, "Unsupported submission review decision"),
       reviewNote: typeof body.reviewNote === "string" ? body.reviewNote : undefined,
     })
     revalidateFavoriteCollectionPostCaches({
@@ -149,7 +167,8 @@ export const POST = createUserRouteHandler<unknown>(async ({ request, currentUse
     return apiSuccess(result, result.status === "APPROVED" ? "投稿已通过" : "投稿已驳回")
   }
 
-  return apiSuccess(undefined, "未执行任何操作")
+  apiError(400, "Unsupported collection action")
+  })
 }, {
   errorMessage: "合集操作失败",
   logPrefix: "[api/favorite-collections:POST] unexpected error",

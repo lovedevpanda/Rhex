@@ -210,34 +210,42 @@ async function ensurePostExists(postId: string) {
   return post
 }
 
+async function lockFavoriteCollection(tx: Prisma.TransactionClient, collectionId: string) {
+  const rows = await tx.$queryRaw<Array<{
+    id: string
+    ownerId: number
+    title: string
+    visibility: "PUBLIC" | "PRIVATE"
+    allowOtherUsersToContribute: boolean
+    requireContributionApproval: boolean
+  }>>`
+    SELECT
+      "id", "ownerId", "title", "visibility",
+      "allowOtherUsersToContribute", "requireContributionApproval"
+    FROM "favorite_collection"
+    WHERE "id" = ${collectionId}
+    FOR UPDATE
+  `
+
+  return rows[0] ?? null
+}
+
 async function createCollectionItemInTransaction(tx: Prisma.TransactionClient, params: {
   collectionId: string
   postId: string
   userId: number
 }) {
-  const existing = await tx.favoriteCollectionItem.findUnique({
-    where: {
-      collectionId_postId: {
-        collectionId: params.collectionId,
-        postId: params.postId,
-      },
-    },
-    select: {
-      id: true,
-    },
-  })
-
-  if (existing) {
-    apiError(409, "这个帖子已经在该合集里了")
-  }
-
-  await tx.favoriteCollectionItem.create({
+  const created = await tx.favoriteCollectionItem.createMany({
     data: {
       collectionId: params.collectionId,
       postId: params.postId,
       addedById: params.userId,
     },
+    skipDuplicates: true,
   })
+  if (created.count !== 1) {
+    apiError(409, "This post is already in the collection")
+  }
 
   await tx.favoriteCollection.update({
     where: { id: params.collectionId },
@@ -247,6 +255,26 @@ async function createCollectionItemInTransaction(tx: Prisma.TransactionClient, p
       },
     },
   })
+}
+
+async function ensureUserFavoriteInTransaction(tx: Prisma.TransactionClient, userId: number, postId: string) {
+  const created = await tx.favorite.createMany({
+    data: { userId, postId },
+    skipDuplicates: true,
+  })
+  if (created.count !== 1) {
+    return false
+  }
+
+  await tx.post.update({
+    where: { id: postId },
+    data: {
+      favoriteCount: {
+        increment: 1,
+      },
+    },
+  })
+  return true
 }
 
 async function findFavoriteCollectionItemPostIds(collectionId: string) {
@@ -261,49 +289,19 @@ async function findFavoriteCollectionItemPostIds(collectionId: string) {
 }
 
 export async function ensureUserFavorite(userId: number, postId: string) {
-  const existing = await prisma.favorite.findUnique({
-    where: {
-      userId_postId: {
-        userId,
-        postId,
-      },
-    },
-    select: {
-      id: true,
-    },
-  })
+  const favoriteCreated = await prisma.$transaction((tx) => ensureUserFavoriteInTransaction(tx, userId, postId))
 
-  if (existing) {
-    return false
+  if (favoriteCreated) {
+    void recordFavoritePostTaskEvent({
+      type: "FAVORITE_POST",
+      userId,
+      postId,
+    }).catch((error) => {
+      console.error("[favorite-collections] record favorite task event failed", error)
+    })
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.favorite.create({
-      data: {
-        userId,
-        postId,
-      },
-    })
-
-    await tx.post.update({
-      where: { id: postId },
-      data: {
-        favoriteCount: {
-          increment: 1,
-        },
-      },
-    })
-  })
-
-  void recordFavoritePostTaskEvent({
-    type: "FAVORITE_POST",
-    userId,
-    postId,
-  }).catch((error) => {
-    console.error("[favorite-collections] record favorite task event failed", error)
-  })
-
-  return true
+  return favoriteCreated
 }
 
 export async function getFavoriteCollectionModalData(params: {
@@ -510,30 +508,20 @@ export async function addPostToFavoriteCollection(params: {
   collectionId: string
 }) {
   await ensurePostExists(params.postId)
-  const collection = await prisma.favoriteCollection.findUnique({
-    where: { id: params.collectionId },
-    select: {
-      id: true,
-      ownerId: true,
-      title: true,
-      visibility: true,
-      allowOtherUsersToContribute: true,
-      requireContributionApproval: true,
-    },
-  })
 
-  if (!collection) {
-    apiError(404, "合集不存在")
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    // Lock the collection before checking its contribution policy or queue. This
+    // makes policy changes, duplicate submissions, and post counts atomic.
+    const collection = await lockFavoriteCollection(tx, params.collectionId)
+    if (!collection) {
+      apiError(404, "Collection does not exist")
+    }
+    if (!canContributeToCollection(collection, params.userId)) {
+      apiError(403, "You cannot add posts to this collection")
+    }
 
-  if (!canContributeToCollection(collection, params.userId)) {
-    apiError(403, "无权将帖子加入这个合集")
-  }
-
-  const favoriteCreated = await ensureUserFavorite(params.userId, params.postId)
-
-  if (collection.ownerId === params.userId || !collection.requireContributionApproval) {
-    await prisma.$transaction(async (tx) => {
+    const favoriteCreated = await ensureUserFavoriteInTransaction(tx, params.userId, params.postId)
+    if (collection.ownerId === params.userId || !collection.requireContributionApproval) {
       await createCollectionItemInTransaction(tx, params)
       await tx.favoriteCollectionSubmission.deleteMany({
         where: {
@@ -542,50 +530,57 @@ export async function addPostToFavoriteCollection(params: {
           status: "PENDING",
         },
       })
-    })
+      return {
+        status: "APPROVED" as const,
+        message: "Post added to collection",
+        collectionTitle: collection.title,
+        postId: params.postId,
+        favoriteCreated,
+        affectedPostIds: [params.postId],
+      }
+    }
 
+    const existingPending = await tx.favoriteCollectionSubmission.findFirst({
+      where: {
+        collectionId: params.collectionId,
+        postId: params.postId,
+        status: "PENDING",
+      },
+      select: { id: true },
+    })
+    if (existingPending) {
+      apiError(409, "This post is already pending review")
+    }
+
+    await tx.favoriteCollectionSubmission.create({
+      data: {
+        collectionId: params.collectionId,
+        postId: params.postId,
+        submittedById: params.userId,
+        status: "PENDING",
+      },
+    })
     return {
-      status: "APPROVED" as const,
-      message: "帖子已加入合集",
+      status: "PENDING" as const,
+      message: "Submission is pending review",
       collectionTitle: collection.title,
       postId: params.postId,
       favoriteCreated,
-      affectedPostIds: [params.postId],
+      affectedPostIds: [],
     }
-  }
-
-  const existingPending = await prisma.favoriteCollectionSubmission.findFirst({
-    where: {
-      collectionId: params.collectionId,
-      postId: params.postId,
-      status: "PENDING",
-    },
-    select: {
-      id: true,
-    },
   })
 
-  if (existingPending) {
-    apiError(409, "这个帖子已经在该合集的待审核列表中了")
-  }
-
-  await prisma.favoriteCollectionSubmission.create({
-    data: {
-      collectionId: params.collectionId,
+  if (result.favoriteCreated) {
+    void recordFavoritePostTaskEvent({
+      type: "FAVORITE_POST",
+      userId: params.userId,
       postId: params.postId,
-      submittedById: params.userId,
-      status: "PENDING",
-    },
-  })
-
-  return {
-    status: "PENDING" as const,
-    message: "已提交到合集，等待审核",
-    collectionTitle: collection.title,
-    postId: params.postId,
-    favoriteCreated,
-    affectedPostIds: [],
+    }).catch((error) => {
+      console.error("[favorite-collections] record favorite task event failed", error)
+    })
   }
+
+  return result
 }
 
 export async function createFavoriteCollection(params: {
@@ -708,42 +703,27 @@ export async function removePostFromFavoriteCollection(params: {
   collectionId: string
   postId: string
 }) {
-  const collection = await prisma.favoriteCollection.findUnique({
-    where: { id: params.collectionId },
-    select: {
-      id: true,
-      ownerId: true,
-      title: true,
-    },
-  })
+  const collection = await prisma.$transaction(async (tx) => {
+    const locked = await lockFavoriteCollection(tx, params.collectionId)
+    if (!locked || locked.ownerId !== params.userId) {
+      apiError(404, "Collection does not exist or cannot be modified")
+    }
 
-  if (!collection || collection.ownerId !== params.userId) {
-    apiError(404, "合集不存在或无权操作")
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.favoriteCollectionItem.delete({
+    const deleted = await tx.favoriteCollectionItem.deleteMany({
       where: {
-        collectionId_postId: {
-          collectionId: params.collectionId,
-          postId: params.postId,
-        },
+        collectionId: params.collectionId,
+        postId: params.postId,
       },
     })
+    if (deleted.count !== 1) {
+      apiError(404, "Post is not in this collection")
+    }
 
     await tx.favoriteCollection.update({
       where: { id: params.collectionId },
-      data: {
-        postCount: {
-          decrement: 1,
-        },
-      },
+      data: { postCount: { decrement: 1 } },
     })
-  }).catch((error) => {
-    if (error instanceof Error && error.message) {
-      throw error
-    }
-    apiError(404, "帖子不在当前合集里")
+    return locked
   })
 
   return {
@@ -759,72 +739,60 @@ export async function reviewFavoriteCollectionSubmission(params: {
   decision: "APPROVE" | "REJECT"
   reviewNote?: string
 }) {
-  const submission = await prisma.favoriteCollectionSubmission.findUnique({
+  const candidate = await prisma.favoriteCollectionSubmission.findUnique({
     where: { id: params.submissionId },
-    include: {
-      collection: {
-        select: {
-          id: true,
-          ownerId: true,
-          title: true,
-        },
-      },
-    },
+    select: { collectionId: true },
   })
-
-  if (!submission || submission.collection.ownerId !== params.userId) {
-    apiError(404, "待审核投稿不存在或无权操作")
-  }
-
-  if (submission.status !== "PENDING") {
-    apiError(400, "这条投稿已经处理过了")
+  if (!candidate) {
+    apiError(404, "Submission does not exist")
   }
 
   const normalizedReviewNote = normalizeTrimmedText(params.reviewNote, 300) || null
+  return prisma.$transaction(async (tx) => {
+    const collection = await lockFavoriteCollection(tx, candidate.collectionId)
+    if (!collection || collection.ownerId !== params.userId) {
+      apiError(404, "Submission does not exist or cannot be reviewed")
+    }
 
-  if (params.decision === "APPROVE") {
-    await prisma.$transaction(async (tx) => {
+    const submission = await tx.favoriteCollectionSubmission.findUnique({
+      where: { id: params.submissionId },
+      select: { id: true, collectionId: true, postId: true, submittedById: true, status: true },
+    })
+    if (!submission || submission.collectionId !== collection.id) {
+      apiError(404, "Submission does not exist")
+    }
+    if (submission.status !== "PENDING") {
+      apiError(409, "Submission state changed; refresh and retry")
+    }
+
+    const claimed = await tx.favoriteCollectionSubmission.updateMany({
+      where: { id: submission.id, status: "PENDING" },
+      data: {
+        status: params.decision === "APPROVE" ? "APPROVED" : "REJECTED",
+        reviewNote: normalizedReviewNote,
+        reviewedById: params.userId,
+        reviewedAt: new Date(),
+      },
+    })
+    if (claimed.count !== 1) {
+      apiError(409, "Submission state changed; refresh and retry")
+    }
+
+    if (params.decision === "APPROVE") {
       await createCollectionItemInTransaction(tx, {
         collectionId: submission.collectionId,
         postId: submission.postId,
         userId: submission.submittedById,
       })
-
-      await tx.favoriteCollectionSubmission.update({
-        where: { id: params.submissionId },
-        data: {
-          status: "APPROVED",
-          reviewNote: normalizedReviewNote,
-          reviewedById: params.userId,
-          reviewedAt: new Date(),
-        },
-      })
-    })
+    }
 
     return {
-      status: "APPROVED" as const,
-      collectionTitle: submission.collection.title,
+      status: params.decision === "APPROVE" ? "APPROVED" as const : "REJECTED" as const,
+      collectionTitle: collection.title,
       postId: submission.postId,
-      affectedPostIds: [submission.postId],
+      affectedPostIds: params.decision === "APPROVE" ? [submission.postId] : [],
     }
-  }
-
-  await prisma.favoriteCollectionSubmission.update({
-    where: { id: params.submissionId },
-    data: {
-      status: "REJECTED",
-      reviewNote: normalizedReviewNote,
-      reviewedById: params.userId,
-      reviewedAt: new Date(),
-    },
   })
-
-  return {
-    status: "REJECTED" as const,
-    collectionTitle: submission.collection.title,
-    postId: submission.postId,
-    affectedPostIds: [],
-  }
 }
 
 export async function getUserFavoriteCollectionManageData(

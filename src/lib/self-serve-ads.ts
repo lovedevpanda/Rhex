@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto"
 
+import { prisma } from "@/db/client"
+
 import { revalidateTag, unstable_cache } from "next/cache"
 
 export { SelfServeAdsIntroPage } from "@/components/self-serve-ads-intro-page"
@@ -226,7 +228,55 @@ export async function reviewSelfServeAdOrder(input: {
     const startsAt = new Date()
     const endsAt = new Date(startsAt)
     endsAt.setMonth(endsAt.getMonth() + durationMonths)
-    const updated = await updateSelfServeOrder(existing.id, { slotIndex, title: sanitizedTitle, linkUrl, imageUrl, textColor, backgroundColor, durationMonths, status: "APPROVED", reviewNote, startsAt, endsAt })
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`self-serve-ads:slot:${existing.appCode}:${existing.slotType}:${slotIndex}`}))`
+
+      const latest = await tx.selfServeAdOrder.findUnique({
+        where: { id: existing.id },
+        select: { id: true, status: true },
+      })
+      if (!latest) {
+        throw new Error("广告订单不存在")
+      }
+      if (latest.status !== "PENDING") {
+        throw new Error("广告订单状态已变更，请刷新后再试")
+      }
+
+      const occupied = await tx.selfServeAdOrder.findFirst({
+        where: {
+          appCode: existing.appCode,
+          slotType: existing.slotType,
+          slotIndex,
+          status: "APPROVED",
+          id: { not: existing.id },
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: startsAt } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gte: startsAt } }] },
+          ],
+        },
+        select: { id: true },
+      })
+      if (occupied) {
+        throw new Error("该广告位已被租用，请调整广告位后再审核")
+      }
+
+      return tx.selfServeAdOrder.update({
+        where: { id: existing.id },
+        data: {
+          slotIndex,
+          title: sanitizedTitle,
+          linkUrl,
+          imageUrl,
+          textColor,
+          backgroundColor,
+          durationMonths,
+          status: "APPROVED",
+          reviewNote,
+          startsAt,
+          endsAt,
+        },
+      })
+    })
     await createSystemNotification({
       userId: existing.userId,
       relatedId: existing.id,

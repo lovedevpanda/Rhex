@@ -5,96 +5,112 @@ import { prepareUploadedFile, saveUploadedFile } from "@/lib/upload"
 import { isAllowedUploadMimeType, normalizeUploadExtension, normalizeUploadFolder } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
-import { createUploadRecord, findExistingUpload } from "@/db/upload-queries"
+import { createUploadWithinDailyQuota, withUserUploadRateLimit } from "@/lib/user-upload-quota"
+import { isUploadRequestContentLengthWithinLimit } from "@/lib/upload-limit-policy"
 
 export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
-  const settings = await getSiteSettings()
-
-  const formData = await request.formData()
-  const file = formData.get("file")
-  const folder = normalizeUploadFolder(formData.get("folder"))
-
-  if (!(file instanceof File)) {
-    apiError(400, "缺少上传文件")
-  }
-
-  if (file.size <= 0) {
-    apiError(400, "上传文件不能为空")
-  }
-
-  const extension = normalizeUploadExtension(file.name)
-  const allowedExtensions = Array.from(new Set([
-    ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
-    ...(folder === "icon" ? ["svg"] : []),
-  ]))
-  const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
-  const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
-  const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
-
-  if (!extension || !allowedExtensions.includes(extension)) {
-    apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
-  }
-
-  if (file.type && !file.type.startsWith("image/")) {
-    apiError(400, "仅允许上传图片文件")
-  }
-
-  if (file.size > maxSizeBytes) {
-    apiError(400, `上传文件不能超过 ${maxSizeMb}MB`)
-  }
-
-  const preparedFile = await prepareUploadedFile(file, {
-    folder,
-    settings,
-  })
-
-  if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
-    apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
-  }
-
-  return withRequestWriteGuard(createRequestWriteGuardOptions("upload-file", {
+  return withUserUploadRateLimit({
     request,
     userId: currentUser.id,
-    input: {
-      folder,
-      fileHash: preparedFile.fileHash,
-    },
-  }), async () => {
-    // 同用户、同 bucket、相同内容 → 直接复用已有记录，跳过写盘和入库
-    const existing = await findExistingUpload(currentUser.id, folder, preparedFile.fileHash)
-    if (existing) {
-      return apiSuccess({ urlPath: existing.urlPath }, "上传成功")
-    }
+    task: async () => {
+      const settings = await getSiteSettings()
+      const configuredImageMaxSizeMb = Math.max(
+        settings.uploadAvatarMaxFileSizeMb,
+        settings.uploadMaxFileSizeMb,
+      )
+      const requestMaxFileBytes = (Number.isFinite(configuredImageMaxSizeMb) && configuredImageMaxSizeMb > 0
+        ? configuredImageMaxSizeMb
+        : 5) * 1024 * 1024
+      if (!isUploadRequestContentLengthWithinLimit(request.headers.get("content-length"), requestMaxFileBytes)) {
+        apiError(413, "上传请求大小不合法或超过允许范围")
+      }
 
-    const saved = await saveUploadedFile(file, preparedFile, folder, {
-      request,
-      actor: {
-        id: currentUser.id,
-        username: currentUser.username,
-        kind: "user",
-      },
-    })
+      const formData = await request.formData()
+      const file = formData.get("file")
+      const folder = normalizeUploadFolder(formData.get("folder"))
 
-    await createUploadRecord({
-      userId: currentUser.id,
-      bucketType: folder,
-      originalName: file.name,
-      saved,
-    })
+      if (!(file instanceof File)) {
+        apiError(400, "缺少上传文件")
+      }
 
-    logRouteWriteSuccess({
-      scope: "upload-file",
-      action: "upload-file",
-    }, {
-      userId: currentUser.id,
-      targetId: saved.fileName,
-      extra: {
+      if (file.size <= 0) {
+        apiError(400, "上传文件不能为空")
+      }
+
+      const extension = normalizeUploadExtension(file.name)
+      const allowedExtensions = Array.from(new Set([
+        ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
+        ...(folder === "icon" ? ["svg"] : []),
+      ]))
+      const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
+      const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
+      const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
+
+      if (!extension || !allowedExtensions.includes(extension)) {
+        apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
+      }
+
+      if (file.type && !file.type.startsWith("image/")) {
+        apiError(400, "仅允许上传图片文件")
+      }
+
+      if (file.size > maxSizeBytes) {
+        apiError(400, `上传文件不能超过 ${maxSizeMb}MB`)
+      }
+
+      const preparedFile = await prepareUploadedFile(file, {
         folder,
-        urlPath: saved.urlPath,
-      },
-    })
+        settings,
+      })
 
-    return apiSuccess({ urlPath: saved.urlPath }, "上传成功")
+      if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
+        apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
+      }
+
+      return withRequestWriteGuard(createRequestWriteGuardOptions("upload-file", {
+        request,
+        userId: currentUser.id,
+        input: {
+          folder,
+          fileHash: preparedFile.fileHash,
+        },
+      }), async () => {
+        const result = await createUploadWithinDailyQuota({
+          userId: currentUser.id,
+          bucketType: folder,
+          originalName: file.name,
+          fileHash: preparedFile.fileHash,
+          fileSize: preparedFile.fileSize,
+          save: () => saveUploadedFile(file, preparedFile, folder, {
+            request,
+            actor: {
+              id: currentUser.id,
+              username: currentUser.username,
+              kind: "user",
+            },
+          }),
+        })
+
+        if (result.reused) {
+          return apiSuccess({ urlPath: result.upload.urlPath }, "上传成功")
+        }
+
+        const saved = result.upload
+        logRouteWriteSuccess({
+          scope: "upload-file",
+          action: "upload-file",
+        }, {
+          userId: currentUser.id,
+          targetId: saved.fileName,
+          extra: {
+            folder,
+            urlPath: saved.urlPath,
+          },
+        })
+
+        return apiSuccess({ urlPath: saved.urlPath }, "上传成功")
+      })
+    },
   })
 }, {
   errorMessage: "上传失败",

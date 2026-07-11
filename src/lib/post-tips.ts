@@ -14,6 +14,7 @@ import {
   findPostTipUserPoints,
   incrementCommentTipTotals,
   incrementPostTipTotals,
+  lockPostTipSender,
   listCommentTipSupportAggregates,
   listPostTipSupportAggregates,
   type CommentTipSupportCommentRecord,
@@ -190,6 +191,10 @@ async function createPostSupportBaseTransaction(params: {
   })
 
   return runPostTipTransaction(async (tx) => {
+    // Daily and per-target limits are derived from event counts. Lock the sender
+    // before reading them so concurrent requests cannot both consume the last slot.
+    await lockPostTipSender(tx, params.senderId)
+
     const [targetRecord, senderRecord] = await Promise.all([
       params.commentId ? findCommentTipSupportComment(params.commentId, tx) : findPostTipSupportPost(params.postId, tx),
       findPostTipSender(params.senderId, tx),
@@ -217,6 +222,12 @@ async function createPostSupportBaseTransaction(params: {
             relatedId: (targetRecord as PostTipSupportPostRecord).id,
           }
         : null
+
+    if (params.commentId && target && target.post.id !== params.postId) {
+      // The route carries both IDs; never let a public comment ID silently select
+      // a target from a different post and invalidate/categorize the wrong resource.
+      postTipError(404, "评论不属于指定帖子")
+    }
 
     validateSupportContext({
       target,

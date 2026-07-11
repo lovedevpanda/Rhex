@@ -55,9 +55,51 @@ export async function findFriendLinkByUrl(url: string) {
 }
 
 export async function createFriendLink(data: Prisma.FriendLinkCreateInput) {
-
   return prisma.friendLink.create({
     data,
+    select: friendLinkListSelect,
+  })
+}
+
+export async function createFriendLinkIfAbsent(data: Prisma.FriendLinkCreateInput) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(
+        hashtext('friend-link-submit'),
+        hashtext(${data.url.toLowerCase()})
+      )
+    `)
+
+    const existing = await tx.friendLink.findFirst({
+      where: { url: { equals: data.url, mode: "insensitive" } },
+      select: { id: true },
+    })
+    if (existing) {
+      return null
+    }
+
+    return tx.friendLink.create({
+      data,
+      select: friendLinkListSelect,
+    })
+  })
+}
+
+export async function updateFriendLinkIfStatus(
+  id: string,
+  expectedStatuses: FriendLinkStatus[],
+  data: Prisma.FriendLinkUpdateInput,
+) {
+  const updated = await prisma.friendLink.updateMany({
+    where: { id, status: { in: expectedStatuses } },
+    data,
+  })
+  if (updated.count !== 1) {
+    return null
+  }
+
+  return prisma.friendLink.findUnique({
+    where: { id },
     select: friendLinkListSelect,
   })
 }

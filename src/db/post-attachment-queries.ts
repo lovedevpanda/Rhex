@@ -178,9 +178,9 @@ export function createPostAttachmentPurchase(
   tx?: Prisma.TransactionClient,
 ) {
   const client = tx ?? prisma
-  return client.postAttachmentPurchase.create({
+  return client.postAttachmentPurchase.createMany({
     data,
-    select: postAttachmentPurchaseSelect,
+    skipDuplicates: true,
   })
 }
 

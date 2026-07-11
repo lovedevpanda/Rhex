@@ -1,9 +1,20 @@
 import { apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { unbindCurrentUserVerification } from "@/lib/verifications"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 
-export const POST = createUserRouteHandler(async ({ currentUser }) => {
-  await unbindCurrentUserVerification(currentUser.id)
+export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
+  await withRequestWriteGuard({
+    request,
+    userId: currentUser.id,
+    scope: "verifications-unbind",
+    cooldownMs: 1_500,
+    dedupeKey: "unbind",
+    dedupeWindowMs: 10_000,
+    releaseOnError: true,
+  }, async () => {
+    await unbindCurrentUserVerification(currentUser.id)
+  })
 
   logRouteWriteSuccess({
     scope: "verifications-unbind",

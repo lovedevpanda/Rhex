@@ -123,6 +123,20 @@ async function lockPostRewardPoolByPostId(
   `)
 }
 
+// A sender can publish several reward pools concurrently. The daily limit is
+// enforced from a count/sum, so lock this sender before reading that aggregate.
+export async function lockPostRewardPoolSender(
+  tx: Prisma.TransactionClient,
+  senderId: number,
+) {
+  await tx.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+    SELECT "id"
+    FROM "User"
+    WHERE "id" = ${senderId}
+    FOR UPDATE
+  `)
+}
+
 async function findPostRedPacketEligibleCandidates(
   tx: Prisma.TransactionClient,
   input: {
@@ -215,8 +229,13 @@ async function findExistingPostRedPacketClaim(
   })
 }
 
-export function sumTodayPostRedPacketPoints(senderId: number, start: Date, end: Date) {
-  return prisma.postRedPacket.aggregate({
+export function sumTodayPostRedPacketPoints(
+  senderId: number,
+  start: Date,
+  end: Date,
+  client?: Prisma.TransactionClient,
+) {
+  return (client ?? prisma).postRedPacket.aggregate({
     where: {
       senderId,
       createdAt: {

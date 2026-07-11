@@ -159,7 +159,11 @@ export function PostTipPanel({
   const [pendingGiftConfirmation, setPendingGiftConfirmation] = useState<PendingGiftConfirmation | null>(null)
   const [isPending, startTransition] = useTransition()
   const fallbackLoginRedirectTarget = loginRedirectTarget ?? (postSlug ? `/posts/${postSlug}` : "/")
-  const [currentLoginRedirectTarget, setCurrentLoginRedirectTarget] = useState(fallbackLoginRedirectTarget)
+  const currentLoginRedirectTarget = useSyncExternalStore(
+    () => () => undefined,
+    () => getCurrentBrowserAuthRedirectTarget(fallbackLoginRedirectTarget),
+    () => fallbackLoginRedirectTarget,
+  )
   const isClient = useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -464,10 +468,6 @@ export function PostTipPanel({
       clearAnimationTimers()
     }
   }, [clearAnimationTimers])
-
-  useEffect(() => {
-    setCurrentLoginRedirectTarget(getCurrentBrowserAuthRedirectTarget(fallbackLoginRedirectTarget))
-  }, [fallbackLoginRedirectTarget])
 
   return (
     <>

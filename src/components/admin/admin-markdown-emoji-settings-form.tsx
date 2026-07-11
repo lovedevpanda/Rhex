@@ -13,7 +13,7 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useMemo, useRef, useState, useTransition } from "react"
 
 import { SettingsInputField, SettingsSection } from "@/components/admin/admin-settings-fields"
 import { LevelIcon } from "@/components/level-icon"
@@ -158,18 +158,33 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
   const router = useRouter()
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const [items, setItems] = useState<MarkdownEmojiItem[]>(() => normalizeMarkdownEmojiItems(initialItems))
-  const [activeGroup, setActiveGroup] = useState(() => normalizeMarkdownEmojiGroup(initialItems[0]?.group))
+  const [requestedActiveGroup, setActiveGroup] = useState(() => normalizeMarkdownEmojiGroup(initialItems[0]?.group))
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(() => new Set())
   const [groupDraft, setGroupDraft] = useState("")
-  const [groupDisplaySizeDraft, setGroupDisplaySizeDraft] = useState("")
+  const [groupDisplaySizeDraftSelection, setGroupDisplaySizeDraftSelection] = useState(() => ({
+    scope: "",
+    value: "",
+  }))
   const [itemDisplaySizeDrafts, setItemDisplaySizeDrafts] = useState<Record<number, string>>({})
-  const [moveTargetGroup, setMoveTargetGroup] = useState(() => normalizeMarkdownEmojiGroup(initialItems[0]?.group))
+  const [moveTargetGroupSelection, setMoveTargetGroupSelection] = useState(() => ({
+    sourceGroup: normalizeMarkdownEmojiGroup(initialItems[0]?.group),
+    value: normalizeMarkdownEmojiGroup(initialItems[0]?.group),
+  }))
   const [searchQuery, setSearchQuery] = useState("")
   const [isUploadPending, startUploadTransition] = useTransition()
   const [isPending, startTransition] = useTransition()
 
   const groups = useMemo(() => buildGroupSummaries(items), [items])
+  const activeGroup = requestedActiveGroup === ALL_GROUPS_VALUE || groups.some((group) => group.name === requestedActiveGroup)
+    ? requestedActiveGroup
+    : (groups[0]?.name ?? DEFAULT_MARKDOWN_EMOJI_GROUP)
   const activeConcreteGroup = activeGroup === ALL_GROUPS_VALUE ? DEFAULT_MARKDOWN_EMOJI_GROUP : normalizeMarkdownEmojiGroup(activeGroup)
+  const moveTargetGroup = moveTargetGroupSelection.sourceGroup === activeGroup
+    ? moveTargetGroupSelection.value
+    : activeConcreteGroup
+  const setMoveTargetGroup = (value: string) => {
+    setMoveTargetGroupSelection({ sourceGroup: activeGroup, value })
+  }
   const visibleEntries = useMemo<VisibleEmojiEntry[]>(() => {
     const query = searchQuery.trim().toLowerCase()
 
@@ -205,46 +220,13 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
   const activeGroupDisplaySize = useMemo(() => getUnifiedDisplaySize(activeGroupItems), [activeGroupItems])
   const activeGroupHasMixedDisplaySizes = useMemo(() => hasMixedDisplaySizes(activeGroupItems), [activeGroupItems])
 
-  useEffect(() => {
-    if (activeGroup === ALL_GROUPS_VALUE || groups.some((group) => group.name === activeGroup)) {
-      return
-    }
-
-    setActiveGroup(groups[0]?.name ?? DEFAULT_MARKDOWN_EMOJI_GROUP)
-  }, [activeGroup, groups])
-
-  useEffect(() => {
-    setSelectedIndexes((current) => {
-      const next = new Set(Array.from(current).filter((index) => index >= 0 && index < items.length))
-      return next.size === current.size ? current : next
-    })
-  }, [items.length])
-
-  useEffect(() => {
-    if (activeGroup === ALL_GROUPS_VALUE) {
-      return
-    }
-
-    const group = normalizeMarkdownEmojiGroup(activeGroup)
-    setMoveTargetGroup(group)
-  }, [activeGroup])
-
-  useEffect(() => {
-    setGroupDisplaySizeDraft(activeGroupDisplaySize)
-  }, [activeGroup, activeGroupDisplaySize])
-
-  useEffect(() => {
-    setItemDisplaySizeDrafts((current) => {
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([index]) => {
-          const numericIndex = Number(index)
-          return Number.isInteger(numericIndex) && numericIndex >= 0 && numericIndex < items.length
-        }),
-      )
-
-      return Object.keys(next).length === Object.keys(current).length ? current : next
-    })
-  }, [items.length])
+  const activeGroupScope = `${activeGroup}:${activeGroupDisplaySize}`
+  const groupDisplaySizeDraft = groupDisplaySizeDraftSelection.scope === activeGroupScope
+    ? groupDisplaySizeDraftSelection.value
+    : activeGroupDisplaySize
+  const setGroupDisplaySizeDraft = (value: string) => {
+    setGroupDisplaySizeDraftSelection({ scope: activeGroupScope, value })
+  }
 
   function clearUploadInput() {
     if (uploadInputRef.current) {
@@ -422,6 +404,7 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
 
     setItems((current) => current.filter((item) => getEmojiGroup(item) !== activeConcreteGroup))
     setSelectedIndexes(new Set())
+    setItemDisplaySizeDrafts({})
     toast.success("分组表情已删除", "分组管理")
   }
 
@@ -473,6 +456,7 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
 
     setItems((current) => current.filter((_, rowIndex) => rowIndex !== index))
     setSelectedIndexes(new Set())
+    setItemDisplaySizeDrafts({})
   }
 
   function toggleSelectedIndex(index: number, checked: boolean) {
@@ -534,6 +518,7 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
 
     setItems((current) => current.filter((_, index) => !selectedIndexes.has(index)))
     setSelectedIndexes(new Set())
+    setItemDisplaySizeDrafts({})
     toast.success(`已删除 ${selectedCount} 个表情`, "批量删除")
   }
 
@@ -545,6 +530,7 @@ export function AdminMarkdownEmojiSettingsForm({ initialItems }: AdminMarkdownEm
     setItems(cloneDefaultMarkdownEmojiItems())
     setActiveGroup(DEFAULT_MARKDOWN_EMOJI_GROUP)
     setSelectedIndexes(new Set())
+    setItemDisplaySizeDrafts({})
     setGroupDraft("")
     setMoveTargetGroup(DEFAULT_MARKDOWN_EMOJI_GROUP)
   }

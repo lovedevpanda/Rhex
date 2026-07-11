@@ -1,4 +1,3 @@
-import { getCurrentUserRecord } from "@/db/current-user"
 import { prisma } from "@/db/client"
 import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
@@ -28,16 +27,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       requestId,
     },
   }), async () => {
-    const dbUser = await getCurrentUserRecord()
-
-    if (!dbUser) {
-      apiError(404, "用户不存在")
-    }
-
     const settings = await getSiteSettings()
-    const vipWasActive = Boolean(dbUser.vipExpiresAt && dbUser.vipExpiresAt.getTime() > Date.now())
-    const currentExpiresAt = vipWasActive && dbUser.vipExpiresAt ? dbUser.vipExpiresAt : new Date()
-
     const vipPlanMap = {
       "purchase.month": { days: 30, level: 1, points: settings.vipMonthlyPrice, label: "月卡 VIP1" },
       "purchase.quarter": { days: 90, level: 2, points: settings.vipQuarterlyPrice, label: "季卡 VIP2" },
@@ -49,23 +39,30 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       const preparedPurchase = await prepareScopedPointDelta({
         scopeKey: "VIP_PURCHASE",
         baseDelta: -plan.points,
-        userId: dbUser.id,
+        userId: currentUser.id,
       })
 
-      if (preparedPurchase.finalDelta < 0 && dbUser.points < Math.abs(preparedPurchase.finalDelta)) {
-        apiError(400, `${settings.pointName}不足，无法购买${plan.label}`)
-      }
-
-      const nextExpiresAt = addDays(currentExpiresAt, plan.days)
-
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: dbUser.id },
-          data: {
-            vipLevel: Math.max(dbUser.vipLevel || 0, plan.level),
-            vipExpiresAt: nextExpiresAt,
+      const purchase = await prisma.$transaction(async (tx) => {
+        // Use the latest committed expiry and balance, not the request-time user snapshot.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vip:user:${currentUser.id}`}))`
+        const dbUser = await tx.user.findUnique({
+          where: { id: currentUser.id },
+          select: {
+            id: true,
+            points: true,
+            vipLevel: true,
+            vipExpiresAt: true,
           },
         })
+        if (!dbUser) {
+          apiError(404, "用户不存在")
+        }
+
+        const vipWasActive = Boolean(dbUser.vipExpiresAt && dbUser.vipExpiresAt.getTime() > Date.now())
+        const currentExpiresAt = vipWasActive && dbUser.vipExpiresAt ? dbUser.vipExpiresAt : new Date()
+        const nextExpiresAt = addDays(currentExpiresAt, plan.days)
+        const nextVipLevel = Math.max(dbUser.vipLevel || 0, plan.level)
+
         await applyPointDelta({
           tx,
           userId: dbUser.id,
@@ -75,25 +72,34 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
           insufficientMessage: `${settings.pointName}不足，无法购买${plan.label}`,
           reason: `购买${plan.label}`,
         })
+        await tx.user.update({
+          where: { id: dbUser.id },
+          data: {
+            vipLevel: nextVipLevel,
+            vipExpiresAt: nextExpiresAt,
+          },
+        })
         await tx.vipOrder.create({
           data: {
             userId: dbUser.id,
             orderType: action,
             pointsCost: Math.max(0, -preparedPurchase.finalDelta),
             days: plan.days,
-            vipLevel: Math.max(dbUser.vipLevel || 0, plan.level),
+            vipLevel: nextVipLevel,
             expiresAt: nextExpiresAt,
             remark: `${settings.pointName}购买 / 续费 ${plan.label}`,
           },
         })
+
+        return { nextExpiresAt, vipWasActive }
       })
 
-      revalidateUserSurfaceCache(dbUser.id)
+      revalidateUserSurfaceCache(currentUser.id)
 
       return apiSuccess({
-        expiresAt: nextExpiresAt.toISOString(),
-        mode: vipWasActive ? "renew" : "activate",
-      }, vipWasActive ? "续费成功" : "开通成功")
+        expiresAt: purchase.nextExpiresAt.toISOString(),
+        mode: purchase.vipWasActive ? "renew" : "activate",
+      }, purchase.vipWasActive ? "续费成功" : "开通成功")
     }
 
     apiError(400, "不支持的 VIP 操作")

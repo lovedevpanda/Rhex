@@ -1,5 +1,7 @@
 import BigNumber from "bignumber.js"
 
+import type { Prisma } from "@prisma/client"
+
 export { YinYangContractPage } from "@/components/yinyang-contract-page"
 
 export { YinYangContractAdminPage } from "@/components/admin/yinyang-contract-admin-page"
@@ -8,12 +10,9 @@ import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
 import {
   countUserAcceptedChallengesInRange,
   countUserCreatedChallengesInRange,
-  createDailyStatRecord,
   createYinYangChallengeAttempt,
   createYinYangChallengeRecord,
-  findChallengeById,
   findYinYangUserPointSnapshot,
-  getOrCreateDailyStat,
   getYinYangUserSummaryStats,
   listOpenYinYangChallenges,
   listRecentYinYangChallengesByUser,
@@ -25,7 +24,6 @@ import {
   lockOpenChallenge,
   runYinYangTransaction,
   settleChallengeRecord,
-  updateDailyStat,
   type YinYangChallengeDetailRow,
 } from "@/db/yinyang-contract-queries"
 import { getBusinessDayRange } from "@/lib/formatters"
@@ -153,9 +151,20 @@ async function getConfigAndSettings() {
   }
 }
 
-async function ensureCreateAllowance(userId: number, config: AppConfig) {
+async function acquireYinYangTransactionLock(tx: Prisma.TransactionClient, key: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+}
+
+async function ensureCreateAllowance(userId: number, config: AppConfig, tx?: Prisma.TransactionClient) {
   const { start, end } = getBusinessDayRange()
-  const createdToday = await countUserCreatedChallengesInRange(userId, start, end)
+  const createdToday = tx
+    ? await tx.yinYangChallenge.count({
+        where: {
+          creatorId: userId,
+          createdAt: { gte: start, lt: end },
+        },
+      })
+    : await countUserCreatedChallengesInRange(userId, start, end)
   if (createdToday >= Number(config.dailyCreateLimit ?? 5)) {
     businessRuleError("今日发起挑战次数已达上限")
   }
@@ -163,35 +172,53 @@ async function ensureCreateAllowance(userId: number, config: AppConfig) {
   return createdToday
 }
 
-async function ensureAcceptAllowance(userId: number, config: AppConfig) {
+async function ensureAcceptAllowance(userId: number, config: AppConfig, tx?: Prisma.TransactionClient) {
   const { start, end } = getBusinessDayRange()
-  const acceptedToday = await countUserAcceptedChallengesInRange(userId, start, end)
+  const acceptedToday = tx
+    ? await tx.yinYangChallengeAttempt.count({
+        where: {
+          challengerId: userId,
+          createdAt: { gte: start, lt: end },
+        },
+      })
+    : await countUserAcceptedChallengesInRange(userId, start, end)
   if (acceptedToday >= Number(config.dailyAcceptLimit ?? 10)) {
     businessRuleError("今日应战次数已达上限")
   }
 
   return acceptedToday
 }
-async function bumpDailyStats(userId: number, patch: { winCount?: number; loseCount?: number; todayProfitPoints?: number; todayLossPoints?: number }) {
+
+async function bumpDailyStats(
+  tx: Prisma.TransactionClient,
+  patches: Array<{ userId: number; winCount?: number; loseCount?: number; todayProfitPoints?: number; todayLossPoints?: number }>,
+) {
   const { dayKey: dateKey } = getBusinessDayRange()
-  const existing = await getOrCreateDailyStat(userId, dateKey)
-  if (!existing) {
-    await createDailyStatRecord({
-      userId,
-      dateKey,
-      winCount: patch.winCount ?? 0,
-      loseCount: patch.loseCount ?? 0,
-      todayProfitPoints: patch.todayProfitPoints ?? 0,
-      todayLossPoints: patch.todayLossPoints ?? 0,
+
+  for (const patch of [...patches].sort((left, right) => left.userId - right.userId)) {
+    await tx.yinYangChallengeDailyStat.upsert({
+      where: {
+        userId_dateKey: {
+          userId: patch.userId,
+          dateKey,
+        },
+      },
+      create: {
+        userId: patch.userId,
+        dateKey,
+        winCount: patch.winCount ?? 0,
+        loseCount: patch.loseCount ?? 0,
+        todayProfitPoints: patch.todayProfitPoints ?? 0,
+        todayLossPoints: patch.todayLossPoints ?? 0,
+      },
+      update: {
+        winCount: { increment: patch.winCount ?? 0 },
+        loseCount: { increment: patch.loseCount ?? 0 },
+        todayProfitPoints: { increment: patch.todayProfitPoints ?? 0 },
+        todayLossPoints: { increment: patch.todayLossPoints ?? 0 },
+      },
     })
-    return
   }
-  await updateDailyStat(existing.id, {
-    winCount: (patch.winCount ?? 0) + existing.winCount,
-    loseCount: (patch.loseCount ?? 0) + existing.loseCount,
-    todayProfitPoints: (patch.todayProfitPoints ?? 0) + existing.todayProfitPoints,
-    todayLossPoints: (patch.todayLossPoints ?? 0) + existing.todayLossPoints,
-  })
 }
 
 async function buildSummary(user: CurrentUser): Promise<YinYangMyStats> {
@@ -341,7 +368,6 @@ export async function createYinYangChallenge(user: CurrentUser, input: CreateCha
     businessRuleError(`积分彩头必须在${minStakePoints}-${maxStakePoints}之间`)
   }
 
-  await ensureCreateAllowance(user.id, config)
   const { rewardPoints, taxPoints } = calculateRewardPoints(stakePoints, Number(config.taxRateBps ?? 1000))
   const challengeId = createUuid()
   const preparedStakeDelta = await prepareScopedPointDelta({
@@ -350,12 +376,12 @@ export async function createYinYangChallenge(user: CurrentUser, input: CreateCha
     userId: user.id,
   })
 
-  if (preparedStakeDelta.finalDelta < 0 && (user.points ?? 0) < Math.abs(preparedStakeDelta.finalDelta)) {
-    businessRuleError("积分不足，无法发起挑战")
-  }
   await runYinYangTransaction(async (tx) => {
-    const latestUser = await findYinYangUserPointSnapshot(user.id, tx)
+    // Serialize daily quota evaluation and the escrow debit for one creator.
+    await acquireYinYangTransactionLock(tx, `yinyang:user:${user.id}`)
+    await ensureCreateAllowance(user.id, config, tx)
 
+    const latestUser = await findYinYangUserPointSnapshot(user.id, tx)
     if (!latestUser) {
       businessRuleError("用户不存在")
     }
@@ -368,7 +394,6 @@ export async function createYinYangChallenge(user: CurrentUser, input: CreateCha
       question: sanitizedQuestion,
       optionA: sanitizedOptionA,
       optionB: sanitizedOptionB,
-
       correctOption: input.correctOption,
       stakePoints,
       rewardPoints,
@@ -393,36 +418,53 @@ export async function createYinYangChallenge(user: CurrentUser, input: CreateCha
 }
 
 export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptChallengeInput) {
-  const challenge = await findChallengeById(input.challengeId)
-  if (!challenge) {
-    businessRuleError("挑战不存在")
-  }
-  if (challenge.creatorId === user.id) {
-    businessRuleError("不能应战自己的挑战")
-  }
-  if (challenge.status !== "OPEN") {
-    businessRuleError("该挑战已不可应战")
-  }
-
   const { config, pointName: rewardPointName } = await getConfigAndSettings()
-  await ensureAcceptAllowance(user.id, config)
-  const preparedStakeDelta = await prepareScopedPointDelta({
-    scopeKey: "YINYANG_STAKE_OUTGOING",
-    baseDelta: -challenge.stakePoints,
-    userId: user.id,
-  })
-
-  if (preparedStakeDelta.finalDelta < 0 && (user.points ?? 0) < Math.abs(preparedStakeDelta.finalDelta)) {
-    businessRuleError("积分不足，无法应战")
+  if (!Boolean(config.enabled)) {
+    businessRuleError("阴阳契应用暂未开启")
   }
-  await runYinYangTransaction(async (tx) => {
+
+  const settlement = await runYinYangTransaction(async (tx) => {
+    // Lock users before challenges so quota checks and concurrent accepts remain serialized.
+    await acquireYinYangTransactionLock(tx, `yinyang:user:${user.id}`)
+    await acquireYinYangTransactionLock(tx, `yinyang:challenge:${input.challengeId}`)
+
+    const challenge = await tx.yinYangChallenge.findUnique({
+      where: { id: input.challengeId },
+      select: {
+        id: true,
+        creatorId: true,
+        status: true,
+        question: true,
+        correctOption: true,
+        stakePoints: true,
+        rewardPoints: true,
+        taxPoints: true,
+      },
+    })
+    if (!challenge) {
+      businessRuleError("挑战不存在")
+    }
+    if (challenge.creatorId === user.id) {
+      businessRuleError("不能应战自己的挑战")
+    }
+    if (challenge.status !== "OPEN") {
+      businessRuleError("该挑战已不可应战")
+    }
+
+    await ensureAcceptAllowance(user.id, config, tx)
     const locked = await lockOpenChallenge(tx, challenge.id, user.id)
     if (!locked) {
       businessRuleError("该挑战已被其他用户抢先应战")
     }
 
-    const challenger = await findYinYangUserPointSnapshot(user.id, tx)
-
+    const [challenger, preparedStakeDelta] = await Promise.all([
+      findYinYangUserPointSnapshot(user.id, tx),
+      prepareScopedPointDelta({
+        scopeKey: "YINYANG_STAKE_OUTGOING",
+        baseDelta: -challenge.stakePoints,
+        userId: user.id,
+      }),
+    ])
     if (!challenger) {
       businessRuleError("用户不存在")
     }
@@ -443,7 +485,6 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     const winnerId = isCorrect ? user.id : challenge.creatorId
     const loserId = isCorrect ? challenge.creatorId : user.id
     const winnerSettlement = challenge.stakePoints + challenge.rewardPoints
-
     const preparedWinnerSettlement = await prepareScopedPointDelta({
       scopeKey: "YINYANG_SETTLEMENT_INCOMING",
       baseDelta: winnerSettlement,
@@ -452,7 +493,6 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     const winner = winnerId === challenger.id
       ? challenger
       : await findYinYangUserPointSnapshot(winnerId, tx)
-
     if (!winner) {
       businessRuleError("用户不存在")
     }
@@ -472,7 +512,6 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
     await createYinYangChallengeAttempt({
       tx,
       id: createUuid(),
-
       challengeId: challenge.id,
       challengerId: user.id,
       selectedOption: input.selectedOption,
@@ -481,41 +520,37 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
       rewardPoints: challenge.rewardPoints,
       taxPoints: challenge.taxPoints,
     })
-
     await settleChallengeRecord({
       tx,
       challengeId: challenge.id,
       winnerId,
       loserId,
     })
+    await bumpDailyStats(tx, isCorrect
+      ? [
+          { userId: user.id, winCount: 1, todayProfitPoints: challenge.rewardPoints },
+          { userId: challenge.creatorId, loseCount: 1, todayLossPoints: challenge.stakePoints },
+        ]
+      : [
+          { userId: challenge.creatorId, winCount: 1, todayProfitPoints: challenge.rewardPoints },
+          { userId: user.id, loseCount: 1, todayLossPoints: challenge.stakePoints },
+        ])
+
+    return { challenge, isCorrect }
   })
 
-  if (input.selectedOption === challenge.correctOption) {
-    await Promise.all([
-      bumpDailyStats(user.id, { winCount: 1, todayProfitPoints: challenge.rewardPoints }),
-      bumpDailyStats(challenge.creatorId, { loseCount: 1, todayLossPoints: challenge.stakePoints }),
-    ])
-  } else {
-    await Promise.all([
-      bumpDailyStats(challenge.creatorId, { winCount: 1, todayProfitPoints: challenge.rewardPoints }),
-      bumpDailyStats(user.id, { loseCount: 1, todayLossPoints: challenge.stakePoints }),
-    ])
-  }
-
   const challengerName = getUserDisplayName(user)
-  const creatorWon = challenge.creatorId !== user.id && input.selectedOption !== challenge.correctOption
+  const creatorWon = !settlement.isCorrect
   const resultTitle = creatorWon ? "你发起的阴阳契获胜了" : "你发起的阴阳契被破解了"
   const resultContent = creatorWon
-    ? `${challengerName} 应战了你的问题“${challenge.question}”，结果答错。你已守擂成功，获得 ${challenge.rewardPoints} ${rewardPointName}。`
-    : `${challengerName} 应战了你的问题“${challenge.question}”，结果答对。你的本局彩头 ${challenge.stakePoints} ${rewardPointName} 已结算。`
-
-
+    ? `${challengerName} 应战了你的问题“${settlement.challenge.question}”，结果答错。你已守擂成功，获得 ${settlement.challenge.rewardPoints} ${rewardPointName}。`
+    : `${challengerName} 应战了你的问题“${settlement.challenge.question}”，结果答对。你的本局彩头 ${settlement.challenge.stakePoints} ${rewardPointName} 已结算。`
 
   await createSystemNotification({
-    userId: challenge.creatorId,
+    userId: settlement.challenge.creatorId,
     senderId: user.id,
     relatedType: "YINYANG_CHALLENGE",
-    relatedId: challenge.id,
+    relatedId: settlement.challenge.id,
     title: resultTitle,
     content: resultContent,
   })
@@ -523,7 +558,6 @@ export async function acceptYinYangChallenge(user: CurrentUser, input: AcceptCha
   if (!refreshedUser) {
     businessRuleError("用户状态已失效")
   }
-
 
   return getYinYangLobbyData(refreshedUser)
 }

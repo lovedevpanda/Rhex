@@ -100,7 +100,15 @@ function buildPageTokens(page: number, totalPages: number) {
   return result
 }
 
-export function FavoriteCollectionDialog({
+export function FavoriteCollectionDialog(props: FavoriteCollectionDialogProps) {
+  if (!props.open) {
+    return null
+  }
+
+  return <FavoriteCollectionDialogContent key={`${props.postId}:${props.openMode}`} {...props} />
+}
+
+function FavoriteCollectionDialogContent({
   open,
   postId,
   favored,
@@ -115,10 +123,16 @@ export function FavoriteCollectionDialog({
   const [draftVisibility, setDraftVisibility] = useState<"PUBLIC" | "PRIVATE">("PRIVATE")
   const [draftAllowOtherUsersToContribute, setDraftAllowOtherUsersToContribute] = useState(false)
   const [draftRequireContributionApproval, setDraftRequireContributionApproval] = useState(false)
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null)
+  const [feedback, setFeedback] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(
+    openMode === "newly-favored"
+      ? { tone: "success", message: "收藏成功，可选择加入合集；也可以直接关闭，仅保留默认收藏。" }
+      : null,
+  )
   const [searchDraft, setSearchDraft] = useState("")
   const [searchKeyword, setSearchKeyword] = useState("")
-  const [activeTab, setActiveTab] = useState<"existing" | "create">("existing")
+  const [activeTab, setActiveTab] = useState<"existing" | "create">(
+    openMode === "newly-favored" ? "create" : "existing",
+  )
   const [isPending, startTransition] = useTransition()
 
   const publicCreateEnabled = draftVisibility === "PUBLIC"
@@ -154,18 +168,10 @@ export function FavoriteCollectionDialog({
   }, [postId])
 
   useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    setFeedback(openMode === "newly-favored"
-      ? { tone: "success", message: "收藏成功，可选择加入合集；也可以直接关闭，仅保留默认收藏。" }
-      : null)
-    setActiveTab(openMode === "newly-favored" ? "create" : "existing")
-    setSearchDraft("")
-    setSearchKeyword("")
-    void loadModalData(1, "")
-  }, [loadModalData, open, openMode, postId])
+    queueMicrotask(() => {
+      void loadModalData(1, "")
+    })
+  }, [loadModalData])
 
   function resetCreateDraft() {
     setDraftTitle("")

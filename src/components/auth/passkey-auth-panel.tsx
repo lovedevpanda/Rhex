@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { browserSupportsWebAuthn, startAuthentication, startRegistration } from "@simplewebauthn/browser"
 
 import { Button } from "@/components/ui/rbutton"
@@ -16,15 +16,28 @@ function isValidUsername(value: string) {
   return /^[a-zA-Z0-9_]{3,20}$/.test(value)
 }
 
+function subscribeToWebAuthnSupport() {
+  return () => undefined
+}
+
+function getWebAuthnSupportSnapshot() {
+  return browserSupportsWebAuthn()
+}
+
+function getServerWebAuthnSupportSnapshot() {
+  return true
+}
+
 export function PasskeyAuthPanel({ mode, redirectTarget = "/" }: PasskeyAuthPanelProps) {
-  const [supported, setSupported] = useState(true)
+  const supported = useSyncExternalStore(
+    subscribeToWebAuthnSupport,
+    getWebAuthnSupportSnapshot,
+    getServerWebAuthnSupportSnapshot,
+  )
   const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
 
-  useEffect(() => {
-    setSupported(browserSupportsWebAuthn())
-  }, [])
 
   async function handleLogin() {
     setLoading(true)

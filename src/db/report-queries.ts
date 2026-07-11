@@ -1,10 +1,12 @@
 import { RelatedType, ReportStatus, TargetType } from "@/db/types"
 import { Prisma } from "@/db/types"
+import type { Prisma as PrismaTypes } from "@/db/types"
 
 import { prisma } from "@/db/client"
 import { createReportResultNotification as createReportResultNotificationEntry } from "@/lib/notification-writes"
 
 type NumericLike = bigint | number | null | undefined
+type ReportQueryClient = PrismaTypes.TransactionClient | typeof prisma
 
 function toNumber(value: NumericLike) {
   if (typeof value === "bigint") {
@@ -21,7 +23,7 @@ export function findReportTargetPost(targetId: string) {
       id: true,
       slug: true,
       title: true,
-      author: { select: { username: true, nickname: true } },
+      author: { select: { id: true, username: true, nickname: true } },
     },
   })
 }
@@ -43,7 +45,7 @@ export function findReportTargetPosts(targetIds: string[]) {
       id: true,
       slug: true,
       title: true,
-      author: { select: { username: true, nickname: true } },
+      author: { select: { id: true, username: true, nickname: true } },
     },
   })
 }
@@ -119,8 +121,17 @@ export function findReportTargetUsers(targetIds: string[]) {
   })
 }
 
-export function findDuplicatedPendingReport(reporterId: number, targetType: TargetType, targetId: string) {
-  return prisma.report.findFirst({
+export function lockReportSubmission(tx: PrismaTypes.TransactionClient, reporterId: number, targetType: TargetType, targetId: string) {
+  return tx.$executeRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(
+      hashtext('report-submit'),
+      hashtext(${`${reporterId}:${targetType}:${targetId}`})
+    )
+  `)
+}
+
+export function findDuplicatedPendingReport(reporterId: number, targetType: TargetType, targetId: string, client: ReportQueryClient = prisma) {
+  return client.report.findFirst({
     where: {
       reporterId,
       targetType,
@@ -139,9 +150,11 @@ export function createReportRecord(data: {
   targetId: string
   reasonType: string
   reasonDetail: string | null
+  client?: ReportQueryClient
 }) {
-  return prisma.report.create({
-    data,
+  const { client = prisma, ...record } = data
+  return client.report.create({
+    data: record,
   })
 }
 

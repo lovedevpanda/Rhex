@@ -5,6 +5,15 @@ import path from "node:path"
 import AdmZip from "adm-zip"
 
 import {
+  assertAddonZipArchiveSize,
+  assertAddonZipEntryLimits,
+  createAddonZipExtractionBudget,
+  normalizeAddonZipEntryPath,
+  resolveAddonZipLimits,
+  type AddonZipLimits,
+} from "@/lib/addon-zip-limits"
+
+import {
   createAddonLifecycleLog,
   upsertAddonRegistryRecord,
 } from "@/db/addon-registry-queries"
@@ -21,6 +30,10 @@ import {
   cleanupAddonBackgroundJobs,
 } from "@/addons-host/runtime/background-jobs"
 import { normalizeAddonManifest } from "@/addons-host/runtime/manifest"
+import {
+  getAddonManifestPermissionDeclarationErrors,
+  getAddonTrustedCodeExecutionStatus,
+} from "@/addons-host/runtime/permissions"
 import {
   buildAddonRelationCatalog,
   collectDependentAddonIssues,
@@ -77,25 +90,86 @@ function normalizeManifestProvidesPreview(manifest: AddonManifest) {
   }
 }
 
-function normalizeZipEntryName(entryName: string) {
-  return entryName
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "")
+function validateZipEntryName(entryName: string) {
+  return normalizeAddonZipEntryPath(entryName)
 }
 
-function validateZipEntryName(entryName: string) {
-  const normalized = normalizeZipEntryName(entryName)
+function normalizeZipTargetKey(entryName: string) {
+  return entryName.replace(/\/+$/, "").toLocaleLowerCase("en-US")
+}
 
-  if (!normalized || normalized.startsWith("__MACOSX/")) {
-    return null
+function validateAddonZipArchive(zip: AdmZip, archiveBytes: number, limits: AddonZipLimits) {
+  assertAddonZipArchiveSize(archiveBytes, limits)
+
+  const entries = zip.getEntries()
+  assertAddonZipEntryLimits(entries.map((entry) => ({
+    entryName: entry.entryName,
+    isDirectory: entry.isDirectory,
+    compressedSize: entry.header.compressedSize,
+    uncompressedSize: entry.header.size,
+    encrypted: entry.header.encripted,
+  })), limits)
+
+  // A duplicate or file-vs-directory target makes archive contents
+  // order-dependent. Reject it before extracting rather than allowing a later
+  // entry to replace a file or create a child beneath a file.
+  const seenTargets = new Set<string>()
+  const fileTargets = new Set<string>()
+  for (const entry of entries) {
+    const normalized = validateZipEntryName(entry.entryName)
+    if (!normalized) continue
+
+    const comparisonKey = normalizeZipTargetKey(normalized)
+    if (!comparisonKey || seenTargets.has(comparisonKey)) {
+      throw new Error(`Plugin archive contains a duplicate path: ${entry.entryName}`)
+    }
+
+    const segments = comparisonKey.split("/")
+    for (let index = 1; index < segments.length; index += 1) {
+      if (fileTargets.has(segments.slice(0, index).join("/"))) {
+        throw new Error(`Plugin archive contains a file/directory conflict: ${entry.entryName}`)
+      }
+    }
+
+    if (!entry.isDirectory) {
+      for (const existingTarget of seenTargets) {
+        if (existingTarget.startsWith(`${comparisonKey}/`)) {
+          throw new Error(`Plugin archive contains a file/directory conflict: ${entry.entryName}`)
+        }
+      }
+      fileTargets.add(comparisonKey)
+    }
+
+    seenTargets.add(comparisonKey)
   }
 
-  const segments = normalized.split("/").filter(Boolean)
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    throw new Error(`插件压缩包包含非法路径：${entryName}`)
-  }
+  return entries
+}
 
-  return normalized
+async function extractValidatedAddonZip(zip: AdmZip, targetDirectory: string, limits: AddonZipLimits) {
+  const extractionBudget = createAddonZipExtractionBudget(limits)
+
+  for (const entry of zip.getEntries()) {
+    const normalizedEntryName = validateZipEntryName(entry.entryName)
+    if (!normalizedEntryName) continue
+
+    const targetPath = await resolveSafeAddonChildPath(targetDirectory, normalizedEntryName)
+    if (entry.isDirectory) {
+      await ensureDirectory(targetPath)
+      continue
+    }
+
+    const content = entry.getData()
+    extractionBudget.consume(entry.entryName, content.byteLength)
+    if (content.byteLength !== entry.header.size) {
+      throw new Error(`Plugin archive entry decompressed size mismatch: ${entry.entryName}`)
+    }
+
+    await ensureDirectory(path.dirname(targetPath))
+    // `wx` prevents a malformed archive from overwriting an earlier entry.
+    // Writing buffers ourselves also avoids honoring archive symlink metadata.
+    await fs.writeFile(targetPath, content, { flag: "wx" })
+  }
 }
 
 function resolveManifestRelativePathFromZip(zip: AdmZip) {
@@ -269,13 +343,33 @@ function resolveAddonActivationRelations(input: {
     catalog,
   })
 
+  const permissionDeclarationErrors = getAddonManifestPermissionDeclarationErrors(
+    input.manifest.permissions,
+  )
+  for (const issue of permissionDeclarationErrors) {
+    pushUniqueIssue(relationCheck.blockingIssues, issue)
+  }
+
   if (input.enableAfterInstall) {
     for (const issue of reverseConflictIssues) {
       pushUniqueIssue(relationCheck.blockingIssues, issue)
     }
+
+    const trustedCodeStatus = getAddonTrustedCodeExecutionStatus()
+    if (!trustedCodeStatus.acknowledged) {
+      pushUniqueIssue(relationCheck.blockingIssues, trustedCodeStatus.message)
+    }
   } else {
     for (const issue of reverseConflictIssues) {
       pushUniqueIssue(relationCheck.warnings, issue)
+    }
+
+    const trustedCodeStatus = getAddonTrustedCodeExecutionStatus()
+    if (!trustedCodeStatus.acknowledged) {
+      pushUniqueIssue(
+        relationCheck.warnings,
+        `Plugin will be installed disabled and cannot execute until ${trustedCodeStatus.environmentVariable} is explicitly acknowledged by the deployment owner.`,
+      )
     }
   }
 
@@ -295,14 +389,17 @@ export async function inspectAddonZip(input: {
   }
 
   await ensureDirectory(getAddonsStagingDirectory())
+  const zipLimits = resolveAddonZipLimits()
+  assertAddonZipArchiveSize(input.zipBuffer.byteLength, zipLimits)
 
   const zip = new AdmZip(input.zipBuffer)
+  validateAddonZipArchive(zip, input.zipBuffer.byteLength, zipLimits)
   const manifestRelativePath = resolveManifestRelativePathFromZip(zip)
   const extractedWorkingDir = path.join(getAddonsStagingDirectory(), `inspect-${Date.now()}-${randomUUID().slice(0, 8)}`)
   await ensureDirectory(extractedWorkingDir)
 
   try {
-    zip.extractAllTo(extractedWorkingDir, true)
+    await extractValidatedAddonZip(zip, extractedWorkingDir, zipLimits)
 
     const manifestAbsolutePath = await resolveSafeAddonChildPath(extractedWorkingDir, manifestRelativePath)
     const manifestDirectory = path.dirname(manifestAbsolutePath)
@@ -367,19 +464,38 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
 
   await ensureDirectory(getAddonsStagingDirectory())
   await ensureDirectory(getAddonsTrashDirectory())
+  const zipLimits = resolveAddonZipLimits()
+  assertAddonZipArchiveSize(input.zipBuffer.byteLength, zipLimits)
 
   const zip = new AdmZip(input.zipBuffer)
+  validateAddonZipArchive(zip, input.zipBuffer.byteLength, zipLimits)
   const manifestRelativePath = resolveManifestRelativePathFromZip(zip)
   const extractedWorkingDir = path.join(getAddonsStagingDirectory(), `install-${Date.now()}-${randomUUID().slice(0, 8)}`)
   await ensureDirectory(extractedWorkingDir)
 
   try {
-    zip.extractAllTo(extractedWorkingDir, true)
+    await extractValidatedAddonZip(zip, extractedWorkingDir, zipLimits)
 
     const manifestAbsolutePath = await resolveSafeAddonChildPath(extractedWorkingDir, manifestRelativePath)
     const manifestDirectory = path.dirname(manifestAbsolutePath)
-    const stagedAddon = await importAddonLifecycleTargetFromDirectory(manifestDirectory)
-    const manifest = stagedAddon.manifest
+    const manifest = await readAddonManifestFromDirectory(manifestDirectory)
+    const enableAfterInstall = input.enableAfterInstall !== false
+    const permissionDeclarationErrors = getAddonManifestPermissionDeclarationErrors(manifest.permissions)
+    if (permissionDeclarationErrors.length > 0) {
+      throw new Error(permissionDeclarationErrors.join("; "))
+    }
+
+    const trustedCodeStatus = getAddonTrustedCodeExecutionStatus()
+    if (enableAfterInstall && !trustedCodeStatus.acknowledged) {
+      throw new Error(trustedCodeStatus.message)
+    }
+
+    // A disabled addon may be staged without evaluating its server module.
+    // This avoids executing package top-level code before the deployment owner
+    // has made the trusted-code acknowledgement.
+    const stagedAddon = trustedCodeStatus.acknowledged
+      ? await importAddonLifecycleTargetFromDirectory(manifestDirectory)
+      : null
 
     if (!isValidAddonId(manifest.id)) {
       throw new Error(`插件标识不合法：${manifest.id}`)
@@ -390,7 +506,6 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
     const existingVersion = targetExists
       ? (await readAddonManifestFromDirectory(targetDirectory)).version
       : null
-    const enableAfterInstall = input.enableAfterInstall !== false
     const relationState = resolveAddonActivationRelations({
       manifest,
       enableAfterInstall,
@@ -437,7 +552,7 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
       : null
     const previousVersion = previousManifest?.version ?? null
 
-    if (targetExists && previousManifest && previousRootDir && previousVersion) {
+    if (stagedAddon && targetExists && previousManifest && previousRootDir && previousVersion) {
       await runAddonLifecycle(stagedAddon, {
         action: "upgrade",
         previousManifest,
@@ -449,7 +564,7 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
           replaceExisting: true,
         },
       })
-    } else {
+    } else if (stagedAddon) {
       try {
         await runAddonLifecycle(stagedAddon, {
           action: "install",
@@ -559,6 +674,9 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
           previousVersion,
           nextVersion: installedAddon.manifest.version,
           installAction,
+          trustModel: "trusted-server-code",
+          trustedCodeAcknowledged: trustedCodeStatus.acknowledged,
+          lifecycleModuleEvaluated: Boolean(stagedAddon),
         },
       })
 
@@ -580,9 +698,8 @@ export async function installAddonFromZip(input: InstallAddonFromZipInput) {
           ? "overwritten" as const
           : "installed" as const,
     }
-  } catch (error) {
+  } finally {
     await removeDirectoryIfExists(extractedWorkingDir)
-    throw error
   }
 }
 

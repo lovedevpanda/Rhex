@@ -50,7 +50,7 @@ const LINK_CANDIDATE_PATTERN = new RegExp(
   "giu",
 )
 
-export const MARKDOWN_RENDER_OUTPUT_VERSION = "raw-html-sanitize-2026-06-12-image-flow-attrs-safe"
+export const MARKDOWN_RENDER_OUTPUT_VERSION = "raw-html-sanitize-2026-07-10-multiline-safe"
 
 type CalloutType = (typeof CALLOUT_TYPES)[number]
 const MARKDOWN_RENDERER_CACHE_LIMIT = 8
@@ -917,71 +917,113 @@ function restoreEscapedHtmlPlaceholders(html: string, placeholders: EscapedHtmlP
   )
 }
 
-function sanitizeMarkdownHtmlLine(line: string, placeholders: EscapedHtmlPlaceholder[]) {
-  return line.replace(/<(\/)?([a-zA-Z][\w-]*)([^>]*)>/g, (raw, closingSlash: string | undefined, rawTagName: string, rawAttributes: string) => {
-    const tagName = rawTagName.toLowerCase()
+function sanitizeMarkdownHtmlTag(raw: string, placeholders: EscapedHtmlPlaceholder[]) {
+  const match = raw.match(/^<(\/)?([a-zA-Z][\w-]*)([\s\S]*?)>$/)
+  if (!match) {
+    return createEscapedHtmlPlaceholder(raw, placeholders)
+  }
 
-    if (closingSlash) {
-      if (tagName === "center" || tagName === "p" || tagName === "u" || ALLOWED_MARKDOWN_HTML_INLINE_TAGS.has(tagName)) {
-        return `</${tagName}>`
-      }
-      return createEscapedHtmlPlaceholder(raw, placeholders)
+  const [, closingSlash, rawTagName, rawAttributes] = match
+  const tagName = rawTagName.toLowerCase()
+  const attributes = rawAttributes ?? ""
+
+  if (closingSlash) {
+    if (
+      attributes.trim().length === 0
+      && (tagName === "center" || tagName === "p" || tagName === "u" || ALLOWED_MARKDOWN_HTML_INLINE_TAGS.has(tagName))
+    ) {
+      return `</${tagName}>`
     }
 
-    if (tagName === "center") {
-      return "<center>"
-    }
+    return createEscapedHtmlPlaceholder(raw, placeholders)
+  }
 
-    if (tagName === "u") {
-      return "<u>"
-    }
+  if (tagName === "center" || tagName === "u" || (ALLOWED_MARKDOWN_HTML_INLINE_TAGS.has(tagName) && tagName !== "span")) {
+    return attributes.trim().length === 0
+      ? `<${tagName}>`
+      : createEscapedHtmlPlaceholder(raw, placeholders)
+  }
 
-    if (tagName === "a") {
-      return createEscapedHtmlPlaceholder(raw, placeholders)
-    }
+  if (tagName === "span") {
+    const classMatch = attributes.match(/^\s+class\s*=\s*(["'])md-wavy\1\s*$/i)
+    return classMatch
+      ? '<span class="md-wavy">'
+      : createEscapedHtmlPlaceholder(raw, placeholders)
+  }
 
-    if (tagName === "span") {
-      const classMatch = rawAttributes.match(/\bclass\s*=\s*(["'])([^"']+)\1/i)
-      const className = classMatch?.[2]?.trim()
-      if (className === "md-wavy") {
-        return '<span class="md-wavy">'
-      }
-      return createEscapedHtmlPlaceholder(raw, placeholders)
-    }
-
-    if (ALLOWED_MARKDOWN_HTML_INLINE_TAGS.has(tagName)) {
-      return `<${tagName}>`
-    }
-
-    if (tagName !== "p") {
-      return createEscapedHtmlPlaceholder(raw, placeholders)
-    }
-
-    const alignMatch = rawAttributes.match(/\balign\s*=\s*(["']?)(left|center|right|justify)\1/i)
+  if (tagName === "p") {
+    const alignMatch = attributes.match(/^\s+align\s*=\s*(["']?)(left|center|right|justify)\1\s*$/i)
     const alignment = alignMatch?.[2]?.toLowerCase()
-    if (!alignment || !ALLOWED_MARKDOWN_HTML_ALIGNMENTS.has(alignment)) {
-      return createEscapedHtmlPlaceholder(raw, placeholders)
+    if (alignment && ALLOWED_MARKDOWN_HTML_ALIGNMENTS.has(alignment)) {
+      return `<p align="${alignment}">`
+    }
+  }
+
+  return createEscapedHtmlPlaceholder(raw, placeholders)
+}
+
+function sanitizeMarkdownHtmlFragment(input: string, placeholders: EscapedHtmlPlaceholder[]) {
+  let output = ""
+  let cursor = 0
+
+  while (cursor < input.length) {
+    const tagStart = input.indexOf("<", cursor)
+    if (tagStart === -1) {
+      output += input.slice(cursor)
+      break
     }
 
-    return `<p align="${alignment}">`
-  })
+    output += input.slice(cursor, tagStart)
+    const tagEnd = input.indexOf(">", tagStart + 1)
+    if (tagEnd === -1) {
+      output += createEscapedHtmlPlaceholder("<", placeholders)
+      cursor = tagStart + 1
+      continue
+    }
+
+    output += sanitizeMarkdownHtmlTag(input.slice(tagStart, tagEnd + 1), placeholders)
+    cursor = tagEnd + 1
+  }
+
+  return output
 }
 
 function sanitizeMarkdownInlineHtml(input: string, placeholders: EscapedHtmlPlaceholder[]) {
-  const lines = input.split("\n")
   const output: string[] = []
+  const markdownBuffer: string[] = []
   let inFence = false
 
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence
+  function flushMarkdownBuffer() {
+    if (markdownBuffer.length === 0) {
+      return
+    }
+
+    output.push(sanitizeMarkdownHtmlFragment(markdownBuffer.join("\n"), placeholders))
+    markdownBuffer.length = 0
+  }
+
+  for (const line of input.split("\n")) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      if (!inFence) {
+        flushMarkdownBuffer()
+        inFence = true
+      } else {
+        inFence = false
+      }
+
       output.push(line)
       continue
     }
 
-    output.push(inFence ? line : sanitizeMarkdownHtmlLine(line, placeholders))
+    if (inFence) {
+      output.push(line)
+      continue
+    }
+
+    markdownBuffer.push(line)
   }
 
+  flushMarkdownBuffer()
   return output.join("\n")
 }
 

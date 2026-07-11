@@ -1,6 +1,7 @@
 import { requireActiveCurrentUserRecord } from "@/db/current-user"
 import { apiError, apiSuccess, createCustomRouteHandler, readJsonBody, requireNumberField, requireStringField } from "@/lib/api-route"
 import { createGobangMatch, getGobangPlayerSummary, listGobangMatches, makeGobangMove } from "@/lib/gobang"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 
 
 async function buildGobangContext(): Promise<Awaited<ReturnType<typeof requireActiveCurrentUserRecord>>> {
@@ -31,16 +32,38 @@ export const POST = createCustomRouteHandler<unknown, Awaited<ReturnType<typeof 
   const action = requireStringField(body, "action", "不支持的操作")
 
   if (action === "create") {
-    const result = await createGobangMatch(user)
-    return apiSuccess(result, result.policy.mode === "FREE" ? "已开始免费挑战" : "已开始付费挑战")
+    return withRequestWriteGuard({
+      request,
+      userId: user.id,
+      scope: "gobang-create",
+      cooldownMs: 1_500,
+      cooldownMessage: "创建对局过于频繁，请稍后再试",
+      dedupeKey: "create",
+      dedupeWindowMs: 10_000,
+      releaseOnError: true,
+    }, async () => {
+      const result = await createGobangMatch(user)
+      return apiSuccess(result, result.policy.mode === "FREE" ? "已开始免费挑战" : "已开始付费挑战")
+    })
   }
 
   if (action === "move") {
     const matchId = requireStringField(body, "matchId", "缺少对局参数")
     const x = requireNumberField(body, "x", "缺少落子坐标")
     const y = requireNumberField(body, "y", "缺少落子坐标")
-    const data = await makeGobangMove({ matchId, user, x, y })
-    return apiSuccess(data, data.winnerId === user.id ? "你赢了，奖励已到账" : data.winnerId === 0 ? "AI 获胜，再接再厉" : "落子成功")
+    return withRequestWriteGuard({
+      request,
+      userId: user.id,
+      scope: "gobang-move",
+      cooldownMs: 300,
+      cooldownMessage: "落子过于频繁，请稍后再试",
+      dedupeKey: `${matchId}:${x}:${y}`,
+      dedupeWindowMs: 5_000,
+      releaseOnError: true,
+    }, async () => {
+      const data = await makeGobangMove({ matchId, user, x, y })
+      return apiSuccess(data, data.winnerId === user.id ? "你赢了，奖励已到账" : data.winnerId === 0 ? "AI 获胜，再接再厉" : "落子成功")
+    })
   }
 
   apiError(400, "不支持的操作")

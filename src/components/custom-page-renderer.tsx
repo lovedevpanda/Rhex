@@ -82,6 +82,7 @@ export async function CustomPageRenderer({
               <main className={page.includeHeader ? "py-1 pb-12 mt-6" : "py-3 pb-12"}>
                 <AddonSlotRenderer slot="custom-page.content.before" props={customPageSlotProps} />
                 <AddonSurfaceRenderer surface="custom-page.content" props={{ ...customPageSlotProps, htmlContent: page.htmlContent }}>
+                  {/* Custom-page HTML is a trusted administrator capability. It is deliberately not sanitized; never bind ordinary user content here. */}
                   <div
                     className="custom-page-html min-w-0 [&_iframe]:max-w-full [&_img]:max-w-full [&_table]:max-w-full"
                     dangerouslySetInnerHTML={{ __html: page.htmlContent }}

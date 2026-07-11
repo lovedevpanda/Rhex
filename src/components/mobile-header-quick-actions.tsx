@@ -90,20 +90,26 @@ export function MobileHeaderQuickActions({
   const [selectedZoneSlug, setSelectedZoneSlug] = useState(currentZone?.slug ?? zones[0]?.slug ?? "")
 
   useEffect(() => {
-    setCheckedInToday(initialCheckedInToday)
+    queueMicrotask(() => {
+      setCheckedInToday(initialCheckedInToday)
+    })
   }, [initialCheckedInToday])
 
   useEffect(() => {
     if (!navOpen) {
-      setView("main")
-      setKeyword("")
-      setSelectedZoneSlug(currentZone?.slug ?? zones[0]?.slug ?? "")
+      queueMicrotask(() => {
+        setView("main")
+        setKeyword("")
+        setSelectedZoneSlug(currentZone?.slug ?? zones[0]?.slug ?? "")
+      })
     }
   }, [currentZone?.slug, navOpen, zones])
 
   useEffect(() => {
-    setNavOpen(false)
-    setSearchOpen(false)
+    queueMicrotask(() => {
+      setNavOpen(false)
+      setSearchOpen(false)
+    })
   }, [pathname])
 
   const visibleAppLinks = useMemo(() => appLinks.filter((item) => item.href !== "/write"), [appLinks])

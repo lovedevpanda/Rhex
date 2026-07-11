@@ -25,8 +25,25 @@ export function isImageSource(value: string | null | undefined) {
   )
 }
 
+const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|iframe|object|embed|audio|video|image|animate(?:color|motion|transform)?|set)\b|\s(?:on[a-z]+|style|src)\s*=|\s(?:xlink:)?href\s*=\s*(?!(?:["']#|#))|(?:javascript|vbscript)\s*:|@import|url\s*\(\s*(?!["']?\s*#)|&#/i
+
 export function stripSvgDocumentPrefix(value: string) {
   return value.trim().replace(SVG_PREFIX_PATTERN, "")
+}
+
+/**
+ * SVG markup is rendered inline for level icons, so it must not contain browser-executable
+ * elements, event handlers, CSS, or external references. Unsupported markup is rejected
+ * rather than partially rewritten to avoid creating a sanitizer bypass surface.
+ */
+export function sanitizeInlineSvgMarkup(value: string) {
+  const markup = stripSvgDocumentPrefix(value)
+
+  if (!isSvgMarkup(markup) || UNSAFE_SVG_CONTENT_PATTERN.test(markup)) {
+    return null
+  }
+
+  return markup
 }
 
 export function describeIconSource(value: string | null | undefined) {

@@ -162,9 +162,12 @@ export function ProfileEditForm({
     () => (availableSections.length > 0 ? availableSections : ["basic"]),
     [availableSections],
   )
-  const [activeSection, setActiveSection] = useState<ProfileSectionKey>(
+  const [requestedActiveSection, setRequestedActiveSection] = useState<ProfileSectionKey>(
     normalizedSections.includes(initialSection) ? initialSection : normalizedSections[0],
   )
+  const activeSection = normalizedSections.includes(requestedActiveSection)
+    ? requestedActiveSection
+    : normalizedSections.includes(initialSection) ? initialSection : normalizedSections[0]
   const [nickname, setNickname] = useState(initialNickname)
   const [bio, setBio] = useState(initialBio)
   const [introduction, setIntroduction] = useState(initialIntroduction)
@@ -230,15 +233,7 @@ export function ProfileEditForm({
     "若发现违规头像，将视情况做封禁账号处理。",
   ]
 
-  useEffect(() => {
-    setActiveSection((current) => {
-      if (normalizedSections.includes(current)) {
-        return current
-      }
 
-      return normalizedSections.includes(initialSection) ? initialSection : normalizedSections[0]
-    })
-  }, [initialSection, normalizedSections])
 
   useEffect(() => {
     return () => {
@@ -626,7 +621,7 @@ export function ProfileEditForm({
               key={section}
               label={profileSectionLabels[section]}
               active={activeSection === section}
-              onClick={() => setActiveSection(section)}
+              onClick={() => setRequestedActiveSection(section)}
             />
           ))}
         </div>

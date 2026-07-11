@@ -1,7 +1,19 @@
 import { prisma } from "@/db/client"
+import { Prisma as PrismaClient } from "@/db/types"
 import type { Prisma } from "@/db/types"
 
 type VerificationQueryClient = Prisma.TransactionClient | typeof prisma
+
+export async function lockUserVerificationState(tx: Prisma.TransactionClient, userId: number) {
+  const rows = await tx.$queryRaw<Array<{ id: number; points: number; username: string }>>(PrismaClient.sql`
+    SELECT "id", "points", "username"
+    FROM "User"
+    WHERE "id" = ${userId}
+    FOR UPDATE
+  `)
+
+  return rows[0] ?? null
+}
 
 const verificationApplicationTypeSelect = {
   id: true,

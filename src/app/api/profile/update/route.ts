@@ -15,7 +15,9 @@ import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
 import { findUsernameSensitiveWord } from "@/lib/username-sensitive-words"
 import { revalidateUserProfileMutation } from "@/lib/user-profile-revalidation"
+import { isPrismaUniqueConstraintError } from "@/lib/prisma-errors"
 import { isUserProfileVisibility, mapLegacyVisibilityBoolean, mergeUserProfileSettings, resolveUserProfileSettings, type UserProfileVisibility } from "@/lib/user-profile-settings"
+import { withRequestWriteGuard } from "@/lib/write-guard"
 import { VerificationChannel } from "@/lib/shared/verification-channel"
 import { resolveVipTierPrice } from "@/lib/vip-tier-pricing"
 
@@ -114,8 +116,19 @@ function mapAddonUserProfileRecord(input: {
 export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ request, currentUser }) => {
 
   const body = await readJsonBody(request)
-  const requestUrl = new URL(request.url)
-  const settings = await getSiteSettings()
+
+  return withRequestWriteGuard({
+    scope: "profile-update",
+    request,
+    userId: currentUser.id,
+    cooldownMs: 750,
+    cooldownMessage: "资料保存操作过于频繁，请稍后再试",
+    dedupeKey: JSON.stringify(body),
+    dedupeWindowMs: 10_000,
+    releaseOnError: true,
+  }, async () => {
+    const requestUrl = new URL(request.url)
+    const settings = await getSiteSettings()
   const profileIntroductionEditPermission = settings.userProfileIntroductionEnabled
     ? await resolveUserProfileIntroductionPermission({
         action: "edit",
@@ -522,6 +535,20 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
         points: true,
       },
     })
+  }).catch((error: unknown) => {
+    if (isPrismaUniqueConstraintError(error, "email")) {
+      apiError(409, "邮箱已被使用")
+    }
+
+    if (isPrismaUniqueConstraintError(error, "phone")) {
+      apiError(409, "手机号已被使用")
+    }
+
+    if (isPrismaUniqueConstraintError(error, "nickname")) {
+      apiError(409, "昵称已被使用")
+    }
+
+    throw error
   })
 
   const messageParts: string[] = []
@@ -588,9 +615,8 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
     searchParams: requestUrl.searchParams,
   })
 
-  return apiSuccess(toProfileUpdateResponse(updatedProfile, avatarPointCost), messageParts.join("，"))
-
-
+    return apiSuccess(toProfileUpdateResponse(updatedProfile, avatarPointCost), messageParts.join("，"))
+  })
 }, {
   errorMessage: "保存资料失败",
   logPrefix: "[api/profile/update] unexpected error",

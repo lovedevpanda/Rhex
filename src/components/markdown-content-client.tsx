@@ -194,6 +194,8 @@ const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbo
     }
   }, [collapseLongCodeBlocks, html, onOpenLightbox])
 
+  // `html` is produced by the Markdown renderer or an explicitly trusted add-on render hook.
+  // Do not pass persisted or user-supplied HTML directly.
   return (
     <div
       ref={containerRef}
@@ -204,7 +206,13 @@ const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbo
   )
 })
 
-export function MarkdownContentClient({ content, html, className, emptyText, markdownEmojiMap, expandImagesWhenImageOnly = false, imageOnly, collapseLongCodeBlocks = false }: MarkdownContentClientProps) {
+export function MarkdownContentClient(props: MarkdownContentClientProps) {
+  const renderKey = `${props.content}:${props.html ?? ""}:${JSON.stringify(props.markdownEmojiMap ?? {})}`
+
+  return <MarkdownContentClientContent key={renderKey} {...props} />
+}
+
+function MarkdownContentClientContent({ content, html, className, emptyText, markdownEmojiMap, expandImagesWhenImageOnly = false, imageOnly, collapseLongCodeBlocks = false }: MarkdownContentClientProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null)
   const [clientRenderedHtml, setClientRenderedHtml] = useState("")
   const [clientRenderedImageOnly, setClientRenderedImageOnly] = useState(false)
@@ -215,14 +223,10 @@ export function MarkdownContentClient({ content, html, className, emptyText, mar
 
   useEffect(() => {
     if (hasProvidedHtml || !normalized) {
-      setClientRenderedHtml("")
-      setClientRenderedImageOnly(false)
       return
     }
 
     let cancelled = false
-    setClientRenderedHtml("")
-    setClientRenderedImageOnly(false)
 
     void import("@/lib/markdown/render").then(({ renderMarkdown, isImageOnlyMarkdownHtml }) => {
       if (cancelled) {

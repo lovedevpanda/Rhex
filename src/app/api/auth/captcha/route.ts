@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { apiError, createRouteHandler } from "@/lib/api-route"
 import { createBuiltinCaptchaToken, hasBuiltinCaptchaSecret } from "@/lib/builtin-captcha"
+import { withPublicWriteGuard } from "@/lib/public-write-guard"
 
 
 export const dynamic = "force-dynamic"
@@ -77,7 +78,7 @@ function buildSvg(text: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><filter id="captcha-noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" /><feComponentTransfer><feFuncA type="table" tableValues="0 0.04" /></feComponentTransfer></filter></defs><rect width="${width}" height="${height}" rx="14" fill="#f8fafc" stroke="#dbe4f0" /><rect width="${width}" height="${height}" rx="14" filter="url(#captcha-noise)" opacity="0.7" />${dots}${curves}${slashes}${letters}</svg>`
 }
 
-export const GET = createRouteHandler(async () => {
+export const GET = createRouteHandler(async ({ request }) => withPublicWriteGuard("auth-captcha", { request }, async () => {
   if (!hasBuiltinCaptchaSecret()) {
     apiError(503, "当前未配置内建验证码密钥")
   }
@@ -104,9 +105,7 @@ export const GET = createRouteHandler(async () => {
       },
     },
   )
-}, {
+}), {
   errorMessage: "获取验证码失败",
   logPrefix: "[api/auth/captcha] unexpected error",
 })
-
-

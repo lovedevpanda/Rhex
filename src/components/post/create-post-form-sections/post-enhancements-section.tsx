@@ -2,8 +2,10 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -274,9 +276,34 @@ export function PostEnhancementsSection({
   actions,
 }: PostEnhancementsSectionProps) {
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
-  const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false)
-  const [desktopPanelPosition, setDesktopPanelPosition] = useState<DesktopPanelPosition | null>(null)
+  const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState<boolean | null>(null)
+  const [desktopPanelPositionOverride, setDesktopPanelPosition] = useState<DesktopPanelPosition | null>(null)
   const desktopPanelRef = useRef<HTMLDivElement | null>(null)
+  const desktopPanelStorageSnapshot = useSyncExternalStore(
+    () => () => undefined,
+    () => `${window.localStorage.getItem(DESKTOP_PANEL_STORAGE_KEY) ?? ""}\u0000${window.localStorage.getItem(DESKTOP_PANEL_COLLAPSED_STORAGE_KEY) ?? ""}`,
+    () => "",
+  )
+  const persistedDesktopPanelPreferences = useMemo(() => {
+    const [storedPosition, storedCollapsed] = desktopPanelStorageSnapshot.split("\u0000")
+    let position: DesktopPanelPosition | null = null
+
+    if (storedPosition) {
+      try {
+        const parsedPosition = JSON.parse(storedPosition) as Partial<DesktopPanelPosition>
+        if (typeof parsedPosition.left === "number" && typeof parsedPosition.top === "number") {
+          position = parsedPosition as DesktopPanelPosition
+        }
+      } catch {
+        window.localStorage.removeItem(DESKTOP_PANEL_STORAGE_KEY)
+      }
+    }
+
+    return {
+      position,
+      collapsed: storedCollapsed === "true",
+    }
+  }, [desktopPanelStorageSnapshot])
   const desktopPanelDragRef = useRef<{
     pointerId: number
     startX: number
@@ -389,6 +416,12 @@ export function PostEnhancementsSection({
       top: Math.min(Math.max(DESKTOP_PANEL_MARGIN, position.top), maxTop),
     }
   }
+  const desktopPanelPosition = desktopPanelPositionOverride
+    ?? (persistedDesktopPanelPreferences.position
+      ? clampDesktopPanelPosition(persistedDesktopPanelPreferences.position)
+      : null)
+  const isDesktopPanelCollapsed = desktopPanelCollapsed ?? persistedDesktopPanelPreferences.collapsed
+
   const resetDesktopPanelPosition = () => {
     const nextPosition = clampDesktopPanelPosition(getDefaultDesktopPanelPosition())
     setDesktopPanelPosition(nextPosition)
@@ -463,35 +496,15 @@ export function PostEnhancementsSection({
     : undefined
 
   useEffect(() => {
-    let nextPosition = clampDesktopPanelPosition(getDefaultDesktopPanelPosition())
-    const storedPosition = window.localStorage.getItem(DESKTOP_PANEL_STORAGE_KEY)
-    if (storedPosition) {
-      try {
-        const parsedPosition = JSON.parse(storedPosition) as Partial<DesktopPanelPosition>
-        if (typeof parsedPosition.left === "number" && typeof parsedPosition.top === "number") {
-          nextPosition = clampDesktopPanelPosition(parsedPosition as DesktopPanelPosition)
-        }
-      } catch {
-        window.localStorage.removeItem(DESKTOP_PANEL_STORAGE_KEY)
-      }
-    }
-
-    setDesktopPanelPosition(nextPosition)
-
-    const storedCollapsed = window.localStorage.getItem(DESKTOP_PANEL_COLLAPSED_STORAGE_KEY)
-    setDesktopPanelCollapsed(storedCollapsed === "true")
-  }, [])
-
-  useEffect(() => {
     function handleResize() {
       setDesktopPanelPosition((current) =>
-        clampDesktopPanelPosition(current ?? getDefaultDesktopPanelPosition()),
+        clampDesktopPanelPosition(current ?? desktopPanelPosition ?? getDefaultDesktopPanelPosition()),
       )
     }
 
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
-  }, [])
+  }, [desktopPanelPosition])
 
   useEffect(() => {
     if (!desktopPanelPosition) {
@@ -505,13 +518,13 @@ export function PostEnhancementsSection({
   }, [desktopPanelPosition])
 
   useEffect(() => {
-    if (desktopPanelCollapsed) {
+    if (isDesktopPanelCollapsed) {
       window.localStorage.setItem(DESKTOP_PANEL_COLLAPSED_STORAGE_KEY, "true")
       return
     }
 
     window.localStorage.removeItem(DESKTOP_PANEL_COLLAPSED_STORAGE_KEY)
-  }, [desktopPanelCollapsed])
+  }, [isDesktopPanelCollapsed])
 
   return (
     <div
@@ -718,7 +731,7 @@ export function PostEnhancementsSection({
           </div>
         ) : null}
 
-        {desktopPanelCollapsed ? (
+        {isDesktopPanelCollapsed ? (
           <button
             type="button"
             aria-label="展开功能区"

@@ -1,6 +1,6 @@
 import { BadgeGrantSource, PointEffectDirection, PointEffectRuleKind, PointEffectTargetType } from "@/db/types"
 
-import { createSelfClaimUserBadge, findAllBadgesWithRules, findBadgeEffectRulesByBadgeIds, findBadgeEligibilityUserSnapshot, findBadgeUserPoints, findDisplayedUserBadges, findGrantedBadgeIdsForUser, findGrantedBadgesForUserRecord, findGrantedUserBadgeWithTx, findUserBadgeDisplayStates, findUserBadgeWithBadge, runBadgeTransaction, updateUserBadgeDisplayById } from "@/db/badge-queries"
+import { createSelfClaimUserBadge, findAllBadgesWithRules, findBadgeEffectRulesByBadgeIds, findBadgeEligibilityUserSnapshot, findBadgeUserPoints, findDisplayedUserBadges, findGrantedBadgeIdsForUser, findGrantedBadgesForUserRecord, findGrantedUserBadgeWithTx, findUserBadgeDisplayStates, findUserBadgeWithBadge, lockUserBadgeDisplayState, runBadgeTransaction, updateUserBadgeDisplayById } from "@/db/badge-queries"
 import { apiError } from "./api-route"
 import {
   describeBadgeRule,
@@ -424,45 +424,48 @@ export async function claimBadge(userId: number, badgeId: string) {
 }
 
 export async function toggleDisplayedBadge(userId: number, badgeId: string) {
-  const userBadge = await findUserBadgeWithBadge(userId, badgeId)
+  return runBadgeTransaction(async (tx) => {
+    // Counting and setting the display state must share one per-user lock;
+    // otherwise two concurrent toggles can both observe one remaining slot.
+    await lockUserBadgeDisplayState(tx, userId)
 
-  if (!userBadge || !userBadge.badge.status) {
-    apiError(400, "请先领取勋章后再设置展示")
-  }
+    const userBadge = await findUserBadgeWithBadge(userId, badgeId, tx)
 
-  if (userBadge.isDisplayed) {
+    if (!userBadge || !userBadge.badge.status) {
+      apiError(400, "请先领取勋章后再设置展示")
+    }
+
+    if (userBadge.isDisplayed) {
+      await updateUserBadgeDisplayById(userBadge.id, {
+        isDisplayed: false,
+        displayOrder: 0,
+      }, tx)
+
+      return {
+        badgeId,
+        isDisplayed: false,
+        message: `已取消佩戴勋章：${userBadge.badge.name}`,
+      }
+    }
+
+    const displayedBadges = await findDisplayedUserBadges(userId, tx)
+
+    if (displayedBadges.length >= MAX_DISPLAYED_BADGES) {
+      apiError(409, `最多只能展示 ${MAX_DISPLAYED_BADGES} 个勋章，请先取消其他已佩戴勋章`)
+    }
+
+    const nextOrder = displayedBadges.length === 0 ? 1 : Math.max(...displayedBadges.map((item) => item.displayOrder), 0) + 1
+
     await updateUserBadgeDisplayById(userBadge.id, {
-      isDisplayed: false,
-      displayOrder: 0,
-    })
-
+      isDisplayed: true,
+      displayOrder: nextOrder,
+    }, tx)
 
     return {
       badgeId,
-      isDisplayed: false,
-      message: `已取消佩戴勋章：${userBadge.badge.name}`,
+      isDisplayed: true,
+      displayOrder: nextOrder,
+      message: `已设置展示勋章：${userBadge.badge.name}`,
     }
-  }
-
-  const displayedBadges = await findDisplayedUserBadges(userId)
-
-  if (displayedBadges.length >= MAX_DISPLAYED_BADGES) {
-    apiError(409, `最多只能展示 ${MAX_DISPLAYED_BADGES} 个勋章，请先取消其他已佩戴勋章`)
-  }
-
-
-  const nextOrder = displayedBadges.length === 0 ? 1 : Math.max(...displayedBadges.map((item) => item.displayOrder), 0) + 1
-
-  await updateUserBadgeDisplayById(userBadge.id, {
-    isDisplayed: true,
-    displayOrder: nextOrder,
   })
-
-
-  return {
-    badgeId,
-    isDisplayed: true,
-    displayOrder: nextOrder,
-    message: `已设置展示勋章：${userBadge.badge.name}`,
-  }
 }

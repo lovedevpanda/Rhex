@@ -1,21 +1,20 @@
+import { findUserByPhone } from "@/db/password-reset-queries"
+import { getSessionActorFromRequest } from "@/lib/auth"
+import { sendSmsVerificationCodeWithAddonProviders } from "@/lib/addon-sms-verification"
 import { apiError, apiSuccess, createRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { isEmailInWhitelist, normalizeEmailAddress } from "@/lib/email"
 import { canSendBusinessEmail, sendRegisterVerificationEmail } from "@/lib/mailer"
-import { findUserByPhone } from "@/db/password-reset-queries"
 import { isValidMainlandPhone, normalizePhoneNumber } from "@/lib/phone"
 import { getRequestIp } from "@/lib/request-ip"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
-import { getSessionActorFromRequest } from "@/lib/auth"
 import { isVerificationChannel, VerificationChannel } from "@/lib/shared/verification-channel"
 import { getServerSiteSettings } from "@/lib/site-settings"
-import { sendSmsVerificationCodeWithAddonProviders } from "@/lib/addon-sms-verification"
+import { canSendSms } from "@/lib/sms"
 import { verifySmsSendCaptcha } from "@/lib/sms-send-captcha"
 import { SMS_CODE_COOLDOWN_MS, SMS_CODE_COOLDOWN_SECONDS } from "@/lib/sms-verification"
 import { sendVerificationCode } from "@/lib/verification"
-import { canSendSms } from "@/lib/sms"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
-
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -48,8 +47,6 @@ export const POST = createRouteHandler(async ({ request }) => {
     ? normalizeEmailAddress(requireStringField(body, "target", "缺少验证码参数"))
     : normalizePhoneNumber(requireStringField(body, "target", "缺少验证码参数"))
   let smsSettings: Awaited<ReturnType<typeof getServerSiteSettings>> | null = null
-  let smsUserId: number | null = null
-
 
   if (!channel || !target) {
     apiError(400, "缺少验证码参数")
@@ -77,33 +74,6 @@ export const POST = createRouteHandler(async ({ request }) => {
     if (!(await canSendSms())) {
       apiError(400, "当前站点未配置短信发送能力")
     }
-
-    if (purpose === "login") {
-      const user = await findUserByPhone(target)
-
-      if (!user) {
-        apiError(404, "该手机号未绑定账号")
-      }
-
-      if (user.status === "BANNED") {
-        apiError(403, "该账号已被禁用，无法登录")
-      }
-
-      if (user.status === "INACTIVE") {
-        apiError(403, "该账号未激活，无法登录")
-      }
-
-      if (!user.phoneVerifiedAt) {
-        apiError(403, "该手机号尚未完成绑定验证")
-      }
-
-      smsUserId = user.id
-    }
-
-    if (!smsUserId) {
-      const requestUser = await getSessionActorFromRequest(request)
-      smsUserId = requestUser?.id ?? null
-    }
   }
 
   const guardOptions = createRequestWriteGuardOptions("auth-send-verification-code", {
@@ -123,12 +93,34 @@ export const POST = createRouteHandler(async ({ request }) => {
     : guardOptions
 
   return withRequestWriteGuard(smsGuardOptions, async () => {
+    let smsUserId: number | null = null
+    let phoneLoginAccountUnavailable = false
+
     if (channel === VerificationChannel.PHONE) {
       await verifySmsSendCaptcha({
         body,
         request,
         settings: smsSettings ?? await getServerSiteSettings(),
       })
+
+      if (purpose === "login") {
+        const user = await findUserByPhone(target)
+        phoneLoginAccountUnavailable = !user
+          || user.status === "BANNED"
+          || user.status === "INACTIVE"
+          || !user.phoneVerifiedAt
+        smsUserId = user?.id ?? null
+      } else {
+        const requestUser = await getSessionActorFromRequest(request)
+        smsUserId = requestUser?.id ?? null
+      }
+
+      if (phoneLoginAccountUnavailable) {
+        return apiSuccess({
+          expiresAt: null,
+          cooldownSeconds: SMS_CODE_COOLDOWN_SECONDS,
+        }, "如该手机号已绑定可用账号，验证码将发送到手机")
+      }
     }
 
     if (channel === VerificationChannel.EMAIL && !(await canSendBusinessEmail("registerVerification"))) {
@@ -178,10 +170,11 @@ export const POST = createRouteHandler(async ({ request }) => {
     })
 
     return apiSuccess({
-      expiresAt,
+      expiresAt: channel === VerificationChannel.PHONE && purpose === "login" ? null : expiresAt,
       ...(channel === VerificationChannel.PHONE ? { cooldownSeconds: SMS_CODE_COOLDOWN_SECONDS } : {}),
-    }, channel === VerificationChannel.EMAIL ? "验证码已发送到邮箱" : "验证码已发送到手机")
-
+    }, channel === VerificationChannel.PHONE && purpose === "login"
+      ? "如该手机号已绑定可用账号，验证码将发送到手机"
+      : channel === VerificationChannel.EMAIL ? "验证码已发送到邮箱" : "验证码已发送到手机")
   })
 }, {
   errorMessage: "验证码发送失败",

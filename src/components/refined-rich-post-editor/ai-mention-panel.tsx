@@ -88,7 +88,15 @@ export function buildMentionInsertText(choice: MentionChoice) {
   return `@${choice.nickname?.trim() || choice.username} `
 }
 
-export function AiMentionPanel({
+export function AiMentionPanel(props: AiMentionPanelProps) {
+  if (!props.open) {
+    return null
+  }
+
+  return <AiMentionPanelContent key={props.query} {...props} />
+}
+
+function AiMentionPanelContent({
   open,
   query,
   position,
@@ -103,13 +111,6 @@ export function AiMentionPanel({
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    if (!open) {
-      setData(DEFAULT_MENTION_DATA)
-      setLoading(false)
-      setMessage("")
-      return
-    }
-
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setLoading(true)

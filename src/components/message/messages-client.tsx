@@ -171,10 +171,12 @@ export function MessagesClient({
       return
     }
 
-    setConversationDetailsById((current) => ({
-      ...current,
-      [activeConversation.id]: activeConversation,
-    }))
+    queueMicrotask(() => {
+      setConversationDetailsById((current) => ({
+        ...current,
+        [activeConversation.id]: activeConversation,
+      }))
+    })
   }, [initialData])
 
   const updateConversationUrl = useCallback((nextConversationId?: string, options?: { replace?: boolean }) => {
@@ -271,43 +273,45 @@ export function MessagesClient({
   }, [activeConversationId, requestedConversationId, updateConversationUrl])
 
   useEffect(() => {
-    if (!requestedConversationId || activeConversationSource || !currentUserId) {
-      setLoadingConversationId("")
-      return
-    }
-
-    const requestToken = ++conversationRequestTokenRef.current
-    setLoadingConversationId(requestedConversationId)
-    setConversationErrors((current) => ({
-      ...current,
-      [requestedConversationId]: "",
-    }))
-
-    void requestConversationDetail(requestedConversationId)
-      .then((detail) => {
-        if (conversationRequestTokenRef.current !== requestToken) {
+    queueMicrotask(() => {
+        if (!requestedConversationId || activeConversationSource || !currentUserId) {
+          setLoadingConversationId("")
           return
         }
 
-        setLoadingConversationId("")
-        if (!detail) {
-          setConversationErrors((current) => ({
-            ...current,
-            [requestedConversationId]: "会话不存在或已不可用",
-          }))
-        }
-      })
-      .catch((error) => {
-        if (conversationRequestTokenRef.current !== requestToken) {
-          return
-        }
-
-        setLoadingConversationId("")
+        const requestToken = ++conversationRequestTokenRef.current
+        setLoadingConversationId(requestedConversationId)
         setConversationErrors((current) => ({
           ...current,
-          [requestedConversationId]: error instanceof Error ? error.message : "加载会话失败",
+          [requestedConversationId]: "",
         }))
-      })
+
+        void requestConversationDetail(requestedConversationId)
+          .then((detail) => {
+            if (conversationRequestTokenRef.current !== requestToken) {
+              return
+            }
+
+            setLoadingConversationId("")
+            if (!detail) {
+              setConversationErrors((current) => ({
+                ...current,
+                [requestedConversationId]: "会话不存在或已不可用",
+              }))
+            }
+          })
+          .catch((error) => {
+            if (conversationRequestTokenRef.current !== requestToken) {
+              return
+            }
+
+            setLoadingConversationId("")
+            setConversationErrors((current) => ({
+              ...current,
+              [requestedConversationId]: error instanceof Error ? error.message : "加载会话失败",
+            }))
+          })
+    })
   }, [activeConversationSource, currentUserId, requestConversationDetail, requestedConversationId])
 
   useEffect(() => {
@@ -315,15 +319,17 @@ export function MessagesClient({
       return
     }
 
-    setConversationErrors((current) => {
-      if (!current[requestedConversationId]) {
-        return current
-      }
+    queueMicrotask(() => {
+      setConversationErrors((current) => {
+        if (!current[requestedConversationId]) {
+          return current
+        }
 
-      return {
-        ...current,
-        [requestedConversationId]: "",
-      }
+        return {
+          ...current,
+          [requestedConversationId]: "",
+        }
+      })
     })
   }, [activeConversationSource, requestedConversationId])
 

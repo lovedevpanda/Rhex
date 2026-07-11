@@ -15,6 +15,9 @@ import {
   verifyAlipayNotifySignature,
 } from "@/lib/payment-gateway-alipay"
 import { getPaymentGatewayConfig, getServerPaymentGatewayConfig } from "@/lib/payment-gateway-config"
+import { PaymentCallbackUrlError, resolvePaymentCallbackUrl } from "@/lib/payment-callback-origin"
+import { getPaymentOrderTransitionSourceStatuses } from "@/lib/payment-order-transition"
+import { matchesConfiguredPaymentIdentity, parsePositiveCnyAmountFen, validatePaidNotificationAmount } from "@/lib/payment-notification-validation"
 import { maybeEnqueuePaymentGatewayOrderSuccessEmail, type PaymentGatewayOrderSuccessEmailSnapshot } from "@/lib/payment-gateway-email-notifications"
 import {
   createAddonPaymentCheckout,
@@ -41,7 +44,6 @@ import type {
   ServerPaymentGatewayConfigData,
 } from "@/lib/payment-gateway.types"
 import { getSiteSettings } from "@/lib/site-settings"
-import { toAbsoluteSiteUrl } from "@/lib/site-origin"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
 import { requireSiteAdminActor } from "@/lib/moderator-permissions"
 
@@ -242,7 +244,7 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
   return toPrismaJsonValue(value)
 }
 
-function mapTradeStatusToOrderStatus(currentStatus: PaymentOrderStatus, tradeStatus: string) {
+function mapTradeStatusToOrderStatus(tradeStatus: string): PaymentOrderStatus | null {
   switch (tradeStatus) {
     case "WAIT_BUYER_PAY":
       return PaymentOrderStatus.WAIT_BUYER_PAY
@@ -250,20 +252,61 @@ function mapTradeStatusToOrderStatus(currentStatus: PaymentOrderStatus, tradeSta
     case "TRADE_FINISHED":
       return PaymentOrderStatus.PAID
     case "TRADE_CLOSED":
-      return currentStatus === PaymentOrderStatus.PAID || currentStatus === PaymentOrderStatus.REFUNDING
-        ? PaymentOrderStatus.REFUNDED
-        : PaymentOrderStatus.CLOSED
+      // A generic closed callback is not a refund ledger. In particular it
+      // must never turn an already-fulfilled top-up into REFUNDED.
+      return PaymentOrderStatus.CLOSED
     default:
-      return currentStatus
+      return null
   }
 }
 
-async function resolveAbsoluteUrl(target: string) {
-  if (/^https?:\/\//i.test(target)) {
-    return target
+async function advancePaymentOrderStatus(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string
+    requestedStatus: PaymentOrderStatus
+    data: Omit<Prisma.PaymentOrderUpdateManyMutationInput, "status">
+  },
+) {
+  const sourceStatuses = getPaymentOrderTransitionSourceStatuses(input.requestedStatus)
+  if (sourceStatuses.length === 0) {
+    return false
   }
 
-  return toAbsoluteSiteUrl(target)
+  const result = await tx.paymentOrder.updateMany({
+    where: {
+      id: input.orderId,
+      status: {
+        in: [...sourceStatuses] as PaymentOrderStatus[],
+      },
+    },
+    data: {
+      ...input.data,
+      status: input.requestedStatus,
+    },
+  })
+
+  return result.count === 1
+}
+
+function resolvePaymentAbsoluteUrl(target: string) {
+  // Do not use toAbsoluteSiteUrl here: its development fallback trusts request
+  // Host headers, which must never determine a payment provider callback URL.
+  const configuredOrigin = process.env.SITE_URL?.trim() || process.env.APP_URL?.trim() || null
+
+  try {
+    return resolvePaymentCallbackUrl(target, configuredOrigin)
+  } catch (error) {
+    if (error instanceof PaymentCallbackUrlError) {
+      if (error.code === "MISSING_CANONICAL_ORIGIN" || error.code === "INVALID_CANONICAL_ORIGIN") {
+        apiError(500, "Payment gateway requires SITE_URL or APP_URL to be a pathless HTTP(S) canonical origin")
+      }
+
+      apiError(400, "Payment callback and return URLs must belong to the configured canonical site origin")
+    }
+
+    throw error
+  }
 }
 
 function normalizeRuntimeClientType(value: unknown): PaymentGatewayClientType {
@@ -657,6 +700,16 @@ export async function createPaymentCheckout(input: {
         ? input.returnPath.trim()
         : providerPaths.returnPath || config.defaultReturnPath)
 
+  // Validate before creating an order: a bad canonical origin is a deployment
+  // configuration error, not a payment attempt to preserve as FAILED.
+  const notifyTarget = providerPaths.notifyPath?.trim()
+  if (!notifyTarget) {
+    apiError(400, `支付提供方 ${route.providerCode} 未提供异步通知地址`)
+  }
+
+  const notifyUrl = resolvePaymentAbsoluteUrl(notifyTarget)
+  const returnUrl = resolvePaymentAbsoluteUrl(effectiveReturnTarget)
+
   const order = await prisma.paymentOrder.create({
     data: {
       merchantOrderNo,
@@ -685,13 +738,6 @@ export async function createPaymentCheckout(input: {
   })
 
   try {
-    const notifyTarget = providerPaths.notifyPath?.trim()
-    if (!notifyTarget) {
-      apiError(400, `支付提供方 ${route.providerCode} 未提供异步通知地址`)
-    }
-
-    const notifyUrl = await resolveAbsoluteUrl(notifyTarget)
-    const returnUrl = await resolveAbsoluteUrl(effectiveReturnTarget)
     const presentation = route.providerCode === "alipay"
       ? await createAlipayCheckoutPresentation({
           channelCode: route.channelCode as "alipay.page" | "alipay.wap" | "alipay.precreate",
@@ -1031,28 +1077,59 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
     }
 
     const tradeStatus = typeof result.tradeStatus === "string" ? result.tradeStatus : ""
-    const nextStatus = mapTradeStatusToOrderStatus(order.status, tradeStatus)
+    const requestedStatus = mapTradeStatusToOrderStatus(tradeStatus)
+    // The synchronous query path can fulfill an order before its callback is
+    // delivered, so it must enforce the same exact amount binding as callbacks.
+    const totalAmountFen = parsePositiveCnyAmountFen(
+      typeof result.totalAmount === "string" ? result.totalAmount : null,
+    )
+    const amountError = requestedStatus === PaymentOrderStatus.PAID
+      ? validatePaidNotificationAmount(totalAmountFen, order.amountFen)
+      : null
+
+    if (amountError) {
+      await createCheckoutAttempt({
+        orderId: order.id,
+        providerCode: order.providerCode,
+        channelCode: order.channelCode,
+        attemptNo,
+        action: "query",
+        status: PaymentAttemptStatus.FAILED,
+        responsePayloadJson: toJsonValue(result),
+        providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
+        providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
+        errorCode: "AMOUNT_MISMATCH",
+        errorMessage: amountError,
+      })
+      return result
+    }
+
     const paidAt = typeof result.sendPayDate === "string"
       ? new Date(result.sendPayDate.replace(" ", "T"))
       : null
 
-    await prisma.$transaction([
-      prisma.paymentOrder.update({
-        where: { id: order.id },
-        data: {
-          status: nextStatus,
-          providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
-          providerBuyerId: typeof result.buyerUserId === "string"
-            ? result.buyerUserId
-            : (typeof result.buyerOpenId === "string" ? result.buyerOpenId : null),
-          paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined,
-          closedAt: tradeStatus === "TRADE_CLOSED" ? new Date() : undefined,
-          rawSuccessPayloadJson: toJsonValue(result),
-          lastErrorCode: null,
-          lastErrorMessage: null,
-        },
-      }),
-      prisma.paymentAttempt.create({
+    const transitionedToPaid = await prisma.$transaction(async (tx) => {
+      const didTransition = requestedStatus
+        ? await advancePaymentOrderStatus(tx, {
+            orderId: order.id,
+            requestedStatus,
+            data: {
+              providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
+              providerBuyerId: typeof result.buyerUserId === "string"
+                ? result.buyerUserId
+                : (typeof result.buyerOpenId === "string" ? result.buyerOpenId : null),
+              paidAt: requestedStatus === PaymentOrderStatus.PAID && paidAt && !Number.isNaN(paidAt.getTime())
+                ? paidAt
+                : undefined,
+              closedAt: requestedStatus === PaymentOrderStatus.CLOSED ? new Date() : undefined,
+              rawSuccessPayloadJson: toJsonValue(result),
+              lastErrorCode: null,
+              lastErrorMessage: null,
+            },
+          })
+        : false
+
+      await tx.paymentAttempt.create({
         data: {
           orderId: order.id,
           attemptNo,
@@ -1064,12 +1141,14 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
           providerTraceId: typeof result.traceId === "string" ? result.traceId : null,
           providerTradeNo: typeof result.tradeNo === "string" ? result.tradeNo : null,
         },
-      }),
-    ])
+      })
 
-    if (nextStatus === PaymentOrderStatus.PAID) {
+      return didTransition
+    })
+
+    if (requestedStatus === PaymentOrderStatus.PAID) {
       await fulfillPaymentOrderIfNeeded(order.id)
-      if (order.status !== PaymentOrderStatus.PAID) {
+      if (transitionedToPaid) {
         await emitAddonPaymentPaidEvent({
           orderId: order.id,
           merchantOrderNo: order.merchantOrderNo,
@@ -1108,23 +1187,25 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
     return result.responsePayload ?? result
   }
 
-  const nextStatus = result.orderStatus ?? order.status
+  const requestedStatus = result.orderStatus
+  const transitionedToPaid = await prisma.$transaction(async (tx) => {
+    const didTransition = requestedStatus
+      ? await advancePaymentOrderStatus(tx, {
+          orderId: order.id,
+          requestedStatus,
+          data: {
+            providerTradeNo: result.providerTradeNo,
+            providerBuyerId: result.providerBuyerId,
+            paidAt: requestedStatus === PaymentOrderStatus.PAID ? (result.paidAt ?? new Date()) : undefined,
+            closedAt: requestedStatus === PaymentOrderStatus.CLOSED ? (result.closedAt ?? new Date()) : undefined,
+            rawSuccessPayloadJson: toJsonValue(result.responsePayload ?? undefined),
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          },
+        })
+      : false
 
-  await prisma.$transaction([
-    prisma.paymentOrder.update({
-      where: { id: order.id },
-      data: {
-        status: nextStatus,
-        providerTradeNo: result.providerTradeNo,
-        providerBuyerId: result.providerBuyerId,
-        paidAt: result.paidAt ?? undefined,
-        closedAt: result.closedAt ?? undefined,
-        rawSuccessPayloadJson: toJsonValue(result.responsePayload ?? undefined),
-        lastErrorCode: null,
-        lastErrorMessage: null,
-      },
-    }),
-    prisma.paymentAttempt.create({
+    await tx.paymentAttempt.create({
       data: {
         orderId: order.id,
         attemptNo,
@@ -1136,12 +1217,14 @@ export async function syncPaymentOrderStatusByQuery(merchantOrderNo: string) {
         providerTraceId: result.providerTraceId,
         providerTradeNo: result.providerTradeNo,
       },
-    }),
-  ])
+    })
 
-  if (nextStatus === PaymentOrderStatus.PAID) {
+    return didTransition
+  })
+
+  if (requestedStatus === PaymentOrderStatus.PAID) {
     await fulfillPaymentOrderIfNeeded(order.id)
-    if (order.status !== PaymentOrderStatus.PAID) {
+    if (transitionedToPaid) {
       await emitAddonPaymentPaidEvent({
         orderId: order.id,
         merchantOrderNo: order.merchantOrderNo,
@@ -1220,8 +1303,18 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
     return false
   }
 
+  if (order.providerCode !== "alipay") {
+    await prisma.paymentNotification.update({
+      where: { id: notification.id },
+      data: {
+        errorMessage: "异步通知的支付提供方与订单记录不匹配",
+      },
+    })
+    return false
+  }
+
   const appId = payload.app_id?.trim() || ""
-  if (config.alipay.appId && appId && appId !== config.alipay.appId) {
+  if (!matchesConfiguredPaymentIdentity(config.alipay.appId, appId)) {
     await prisma.paymentNotification.update({
       where: { id: notification.id },
       data: {
@@ -1232,7 +1325,7 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
   }
 
   const sellerId = payload.seller_id?.trim() || ""
-  if (config.alipay.sellerId && sellerId && sellerId !== config.alipay.sellerId) {
+  if (!matchesConfiguredPaymentIdentity(config.alipay.sellerId, sellerId)) {
     await prisma.paymentNotification.update({
       where: { id: notification.id },
       data: {
@@ -1242,9 +1335,13 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
     return false
   }
 
-  const totalAmount = Number(payload.total_amount ?? "0")
-  const totalAmountFen = Number.isFinite(totalAmount) ? Math.round(totalAmount * 100) : -1
-  if (totalAmountFen > 0 && totalAmountFen !== order.amountFen) {
+  const totalAmountFen = parsePositiveCnyAmountFen(payload.total_amount)
+  const tradeStatus = readAlipayNotifyTradeStatus(payload)
+  const requestedStatus = mapTradeStatusToOrderStatus(tradeStatus)
+  const amountError = requestedStatus === PaymentOrderStatus.PAID
+    ? validatePaidNotificationAmount(totalAmountFen, order.amountFen)
+    : null
+  if (amountError) {
     await prisma.paymentNotification.update({
       where: { id: notification.id },
       data: {
@@ -1254,41 +1351,44 @@ export async function handleAlipayPaymentNotification(payload: Record<string, st
     return false
   }
 
-  const tradeStatus = readAlipayNotifyTradeStatus(payload)
-  const nextStatus = mapTradeStatusToOrderStatus(order.status, tradeStatus)
   const tradeTime = readAlipayNotifyTradeTime(payload)
 
-  await prisma.$transaction([
-    prisma.paymentOrder.update({
-      where: { id: order.id },
-      data: {
-        status: nextStatus,
-        providerTradeNo: payload.trade_no?.trim() || null,
-        providerBuyerId: payload.buyer_id?.trim() || payload.buyer_open_id?.trim() || null,
-        paidAt: tradeStatus === "TRADE_SUCCESS" || tradeStatus === "TRADE_FINISHED"
-          ? (tradeTime ?? new Date())
-          : undefined,
-        closedAt: tradeStatus === "TRADE_CLOSED"
-          ? (tradeTime ?? new Date())
-          : undefined,
-        rawSuccessPayloadJson: toJsonValue(payload),
-        lastErrorCode: null,
-        lastErrorMessage: null,
-      },
-    }),
-    prisma.paymentNotification.update({
+  const transitionedToPaid = await prisma.$transaction(async (tx) => {
+    const didTransition = requestedStatus
+      ? await advancePaymentOrderStatus(tx, {
+          orderId: order.id,
+          requestedStatus,
+          data: {
+            providerTradeNo: payload.trade_no?.trim() || null,
+            providerBuyerId: payload.buyer_id?.trim() || payload.buyer_open_id?.trim() || null,
+            paidAt: requestedStatus === PaymentOrderStatus.PAID
+              ? (tradeTime ?? new Date())
+              : undefined,
+            closedAt: requestedStatus === PaymentOrderStatus.CLOSED
+              ? (tradeTime ?? new Date())
+              : undefined,
+            rawSuccessPayloadJson: toJsonValue(payload),
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          },
+        })
+      : false
+
+    await tx.paymentNotification.update({
       where: { id: notification.id },
       data: {
         handled: true,
         handledAt: new Date(),
-        errorMessage: null,
+        errorMessage: requestedStatus ? null : "Unsupported payment status",
       },
-    }),
-  ])
+    })
 
-  if (nextStatus === PaymentOrderStatus.PAID) {
+    return didTransition
+  })
+
+  if (requestedStatus === PaymentOrderStatus.PAID) {
     await fulfillPaymentOrderIfNeeded(order.id)
-    if (order.status !== PaymentOrderStatus.PAID) {
+    if (transitionedToPaid) {
       await emitAddonPaymentPaidEvent({
         orderId: order.id,
         merchantOrderNo: order.merchantOrderNo,
@@ -1385,7 +1485,10 @@ export async function handleAddonPaymentProviderNotification(providerCode: strin
     return false
   }
 
-  if (notificationResult.amountFen !== null && notificationResult.amountFen > 0 && notificationResult.amountFen !== order.amountFen) {
+  const amountError = notificationResult.orderStatus === PaymentOrderStatus.PAID
+    ? validatePaidNotificationAmount(notificationResult.amountFen, order.amountFen)
+    : null
+  if (amountError) {
     await prisma.paymentNotification.update({
       where: { id: notification.id },
       data: {
@@ -1405,39 +1508,43 @@ export async function handleAddonPaymentProviderNotification(providerCode: strin
     return false
   }
 
-  const nextStatus = notificationResult.orderStatus ?? order.status
+  const requestedStatus = notificationResult.orderStatus
+  const transitionedToPaid = await prisma.$transaction(async (tx) => {
+    const didTransition = requestedStatus
+      ? await advancePaymentOrderStatus(tx, {
+          orderId: order.id,
+          requestedStatus,
+          data: {
+            providerTradeNo: notificationResult.providerTradeNo,
+            providerBuyerId: notificationResult.providerBuyerId,
+            paidAt: requestedStatus === PaymentOrderStatus.PAID
+              ? (notificationResult.paidAt ?? new Date())
+              : undefined,
+            closedAt: requestedStatus === PaymentOrderStatus.CLOSED
+              ? (notificationResult.closedAt ?? new Date())
+              : undefined,
+            rawSuccessPayloadJson: toJsonValue(notificationResult.payload),
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          },
+        })
+      : false
 
-  await prisma.$transaction([
-    prisma.paymentOrder.update({
-      where: { id: order.id },
-      data: {
-        status: nextStatus,
-        providerTradeNo: notificationResult.providerTradeNo,
-        providerBuyerId: notificationResult.providerBuyerId,
-        paidAt: nextStatus === PaymentOrderStatus.PAID
-          ? (notificationResult.paidAt ?? new Date())
-          : undefined,
-        closedAt: nextStatus === PaymentOrderStatus.CLOSED || nextStatus === PaymentOrderStatus.REFUNDED
-          ? (notificationResult.closedAt ?? new Date())
-          : undefined,
-        rawSuccessPayloadJson: toJsonValue(notificationResult.payload),
-        lastErrorCode: null,
-        lastErrorMessage: null,
-      },
-    }),
-    prisma.paymentNotification.update({
+    await tx.paymentNotification.update({
       where: { id: notification.id },
       data: {
         handled: true,
         handledAt: new Date(),
-        errorMessage: null,
+        errorMessage: requestedStatus ? null : "Unsupported payment status",
       },
-    }),
-  ])
+    })
 
-  if (nextStatus === PaymentOrderStatus.PAID) {
+    return didTransition
+  })
+
+  if (requestedStatus === PaymentOrderStatus.PAID) {
     await fulfillPaymentOrderIfNeeded(order.id)
-    if (order.status !== PaymentOrderStatus.PAID) {
+    if (transitionedToPaid) {
       await emitAddonPaymentPaidEvent({
         orderId: order.id,
         merchantOrderNo: order.merchantOrderNo,

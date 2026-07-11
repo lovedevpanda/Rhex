@@ -5,6 +5,7 @@ import { readFile } from "fs/promises"
 import { isIP } from "net"
 
 import { buildUploadStoragePath } from "@/lib/upload-path"
+import { safeOutboundFetch } from "@/lib/safe-outbound-http"
 
 const WATERMARK_LOGO_FETCH_TIMEOUT_MS = 8_000
 const WATERMARK_LOGO_MAX_BYTES = 3 * 1024 * 1024
@@ -91,7 +92,7 @@ async function fetchWatermarkLogoBuffer(logoPath: string) {
         return null
       }
 
-      const response = await fetch(currentUrl, {
+      const response = await safeOutboundFetch(currentUrl, {
         signal: controller.signal,
         redirect: "manual",
         headers: {

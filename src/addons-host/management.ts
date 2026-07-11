@@ -34,6 +34,7 @@ import { deleteAddonConfigValues } from "@/addons-host/runtime/config"
 import { deleteAddonDataStore } from "@/addons-host/runtime/data"
 import { deleteAddonSecretValues } from "@/addons-host/runtime/secrets"
 import { executeAddonActionHook } from "@/addons-host/runtime/hooks"
+import { assertAddonTrustedCodeExecutionAcknowledged } from "@/addons-host/runtime/permissions"
 import { ensureAdminActorPermission } from "@/lib/admin-scope-permissions"
 import { requireSiteAdminActor } from "@/lib/moderator-permissions"
 
@@ -378,6 +379,10 @@ export async function runAddonManagementAction(action: AddonManagementAction, ad
 
   switch (action) {
     case "enable": {
+      // Enabling evaluates server-side addon code in the host process. Fail
+      // before persisting state so the admin UI never reports a false success.
+      assertAddonTrustedCodeExecutionAcknowledged(addon.manifest.id)
+
       relationCatalog.set(addon.manifest.id, {
         manifest: addon.manifest,
         enabled: true,

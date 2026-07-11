@@ -63,16 +63,12 @@ export function PostAuctionPanel({
   }>>([])
   const [bidValue, setBidValue] = useState<number>(auction.minNextBidAmount)
   const fallbackLoginRedirectTarget = `/posts/${postSlug}`
-  const [currentLoginRedirectTarget, setCurrentLoginRedirectTarget] = useState(fallbackLoginRedirectTarget)
+  const currentLoginRedirectTarget = useSyncExternalStore(
+    subscribeToHydration,
+    () => getCurrentBrowserAuthRedirectTarget(fallbackLoginRedirectTarget),
+    () => fallbackLoginRedirectTarget,
+  )
   const timing = useAuctionTiming(auction, router)
-
-  useEffect(() => {
-    setBidValue(auction.minNextBidAmount)
-  }, [auction.minNextBidAmount])
-
-  useEffect(() => {
-    setCurrentLoginRedirectTarget(getCurrentBrowserAuthRedirectTarget(fallbackLoginRedirectTarget))
-  }, [fallbackLoginRedirectTarget])
 
   const sliderMin = auction.minNextBidAmount
   const sliderStep = Math.max(1, auction.incrementStep)
@@ -244,7 +240,10 @@ export function PostAuctionPanel({
               </div>
 
               {viewerCanBid ? (
-                <Button type="button" className="h-11 w-full rounded-[16px] px-4 text-sm sm:h-12 sm:w-auto sm:px-5 sm:text-base" onClick={() => setShowBidModal(true)}>
+                <Button type="button" className="h-11 w-full rounded-[16px] px-4 text-sm sm:h-12 sm:w-auto sm:px-5 sm:text-base" onClick={() => {
+              setBidValue(auction.minNextBidAmount)
+              setShowBidModal(true)
+            }}>
                   <Gavel data-icon="inline-start" />
                   {isLeadingOpenAuctionBidder ? "加价" : "出价"}
                 </Button>

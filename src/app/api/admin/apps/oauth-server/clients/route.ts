@@ -1,15 +1,11 @@
-import { apiError, apiSuccess, createAdminRouteHandler, readJsonBody } from "@/lib/api-route"
+import { apiError, apiSuccess, createAdminRouteHandler, readJsonBody, requireStringField } from "@/lib/api-route"
 import { getRequestIp, writeAdminLog } from "@/lib/admin"
 import { reviewOAuthClient, rotateOAuthClientSecretByAdmin, updateOAuthClientByAdmin, type OAuthClientListItem } from "@/lib/oauth-server"
 
 export const POST = createAdminRouteHandler<OAuthClientListItem | { clientSecret: string }>(async ({ request, adminUser }) => {
   const body = await readJsonBody(request)
   const action = typeof body.action === "string" ? body.action : ""
-  const id = typeof body.id === "string" ? body.id : ""
-
-  if (!id) {
-    apiError(400, "缺少 OAuth 应用 ID")
-  }
+  const id = requireStringField(body, "id", "缺少 OAuth 应用 ID")
 
   if (action === "edit") {
     const client = await updateOAuthClientByAdmin({

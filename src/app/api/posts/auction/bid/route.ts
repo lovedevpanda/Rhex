@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache"
 
-import { apiSuccess, createUserRouteHandler, readJsonBody, requireNumberField, requireStringField } from "@/lib/api-route"
+import { apiError, apiSuccess, createUserRouteHandler, readJsonBody, requireNumberField, requireStringField } from "@/lib/api-route"
 import { getPostAuctionSummary, placePostAuctionBid } from "@/lib/post-auctions"
 import { revalidatePostDataCache, revalidatePostViewerCache } from "@/lib/post-detail-cache"
 import { revalidateUserSurfaceCache } from "@/lib/user-surface"
@@ -11,6 +11,10 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
   const body = await readJsonBody(request)
   const postId = requireStringField(body, "postId", "缺少帖子参数")
   const amount = requireNumberField(body, "amount", "缺少出价金额")
+
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    apiError(400, "出价金额必须为正整数")
+  }
 
   return withRequestWriteGuard(createRequestWriteGuardOptions("posts-auction-bid", {
     request,

@@ -11,6 +11,7 @@ import { prepareUploadedFile, saveUploadedFile } from "@/lib/upload"
 import { isAllowedUploadMimeType, normalizeUploadFolder } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
+import { safeOutboundFetch } from "@/lib/safe-outbound-http"
 
 const REMOTE_IMAGE_FETCH_TIMEOUT_MS = 12_000
 const REMOTE_IMAGE_MAX_REDIRECTS = 5
@@ -100,7 +101,7 @@ async function fetchRemoteImage(url: URL, maxSizeBytes: number) {
     for (let redirectCount = 0; redirectCount <= REMOTE_IMAGE_MAX_REDIRECTS; redirectCount += 1) {
       await assertPublicRemoteImageUrl(currentUrl)
 
-      const response = await fetch(currentUrl, {
+      const response = await safeOutboundFetch(currentUrl, {
         signal: controller.signal,
         redirect: "manual",
         headers: {

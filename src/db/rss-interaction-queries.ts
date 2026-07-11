@@ -1,5 +1,5 @@
 import { prisma } from "@/db/client"
-import type { Prisma } from "@/db/types"
+import { Prisma } from "@/db/types"
 
 export type RssInteractionTx = Prisma.TransactionClient
 
@@ -33,6 +33,18 @@ export type RssTipSenderRecord = Prisma.UserGetPayload<{ select: typeof rssTipSe
 
 export function runRssInteractionTransaction<T>(task: (tx: RssInteractionTx) => Promise<T>) {
   return prisma.$transaction(task)
+}
+
+// RSS tips have per-sender daily and per-entry limits. Locking the sender row
+// makes the count-and-create sequence a single concurrency boundary without
+// serializing unrelated senders.
+export async function lockRssTipSender(tx: RssInteractionTx, senderId: number) {
+  await tx.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+    SELECT "id"
+    FROM "User"
+    WHERE "id" = ${senderId}
+    FOR UPDATE
+  `)
 }
 
 export function findRssEntryForInteraction(entryId: string, client: RssInteractionTx = prisma) {
