@@ -2,6 +2,9 @@ node_modules
 .next
 out
 dist
+.DS_Store
+.trae/
+artifacts/
 .env
 .pnpm-store
 .env.local
@@ -10,9 +13,6 @@ dist
 .env.production.local
 tsconfig.tsbuildinfo
 /public/uploads/
-addons/.runtime/
-addons/.staging/
-addons/.trash/
-!addons/*/dist/
+/addons/
 /uploads/
 /backups/

@@ -374,7 +374,7 @@ Rhex/
 
 ## 贡献者
 
-感谢所有通过 Pull Request 参与改进 Rhex 的贡献者。贡献值按已合并 PR 数统计。
+感谢所有通过 Pull Request 参与改进 Rhex 的贡献者。
 
 <table>
   <tr>
@@ -384,10 +384,6 @@ Rhex/
         <br />
         <sub><b>@momofa</b></sub>
       </a>
-      <br />
-      <a href="https://github.com/lovedevpanda/Rhex/pulls?q=is%3Apr+is%3Amerged+author%3Amomofa">
-        <img src="https://img.shields.io/badge/%E8%B4%A1%E7%8C%AE%E5%80%BC-4-2ea44f?style=flat-square" alt="贡献值 4" />
-      </a>
     </td>
     <td align="center">
       <a href="https://github.com/Jasper4860">
@@ -395,20 +391,12 @@ Rhex/
         <br />
         <sub><b>@Jasper4860</b></sub>
       </a>
-      <br />
-      <a href="https://github.com/lovedevpanda/Rhex/pulls?q=is%3Apr+is%3Amerged+author%3AJasper4860">
-        <img src="https://img.shields.io/badge/%E8%B4%A1%E7%8C%AE%E5%80%BC-1-2ea44f?style=flat-square" alt="贡献值 1" />
-      </a>
     </td>
     <td align="center">
       <a href="https://github.com/josephxzy">
         <img src="https://avatars.githubusercontent.com/u/288314161?v=4" width="72" height="72" alt="@josephxzy" />
         <br />
         <sub><b>@josephxzy</b></sub>
-      </a>
-      <br />
-      <a href="https://github.com/lovedevpanda/Rhex/pulls?q=is%3Apr+is%3Amerged+author%3Ajosephxzy">
-        <img src="https://img.shields.io/badge/%E8%B4%A1%E7%8C%AE%E5%80%BC-1-2ea44f?style=flat-square" alt="贡献值 1" />
       </a>
     </td>
   </tr>

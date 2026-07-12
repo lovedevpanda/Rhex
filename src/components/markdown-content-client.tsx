@@ -7,6 +7,7 @@ import type { Slide } from "yet-another-react-lightbox"
 import { useMarkdownEmojiMap } from "@/components/site-settings-provider"
 import { bindBase64Inspector, bindBrokenImagePlaceholders, bindImageLightbox, enhanceMarkdown, type LightboxImage } from "@/lib/markdown/enhance"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
+import type { PostContentImageMode } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
 interface MarkdownContentClientProps {
@@ -16,6 +17,7 @@ interface MarkdownContentClientProps {
   emptyText?: string
   markdownEmojiMap?: MarkdownEmojiItem[]
   expandImagesWhenImageOnly?: boolean
+  imageDisplayMode?: PostContentImageMode
   imageOnly?: boolean
   collapseLongCodeBlocks?: boolean
 }
@@ -24,6 +26,7 @@ interface MarkdownBodyProps {
   html: string
   className?: string
   onOpenLightbox: (images: LightboxImage[], index: number) => void
+  imageDisplayMode?: PostContentImageMode
   isImageOnly?: boolean
   collapseLongCodeBlocks?: boolean
 }
@@ -156,7 +159,7 @@ function LightboxPortal({ lightbox, onClose, onChange }: LightboxPortalProps) {
   )
 }
 
-const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbox, isImageOnly = false, collapseLongCodeBlocks = false }: MarkdownBodyProps) {
+const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbox, imageDisplayMode = "auto", isImageOnly = false, collapseLongCodeBlocks = false }: MarkdownBodyProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -200,7 +203,13 @@ const MarkdownBody = memo(function MarkdownBody({ html, className, onOpenLightbo
     <div
       ref={containerRef}
       suppressHydrationWarning
-      className={cn("markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1", isImageOnly && "markdown-body--image-only", className)}
+      className={cn(
+        "markdown-body prose prose-sm max-w-none prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1",
+        imageDisplayMode === "large" && "markdown-body--large-images",
+        imageDisplayMode === "small" && "markdown-body--small-images",
+        isImageOnly && "markdown-body--image-only",
+        className,
+      )}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
@@ -212,7 +221,7 @@ export function MarkdownContentClient(props: MarkdownContentClientProps) {
   return <MarkdownContentClientContent key={renderKey} {...props} />
 }
 
-function MarkdownContentClientContent({ content, html, className, emptyText, markdownEmojiMap, expandImagesWhenImageOnly = false, imageOnly, collapseLongCodeBlocks = false }: MarkdownContentClientProps) {
+function MarkdownContentClientContent({ content, html, className, emptyText, markdownEmojiMap, expandImagesWhenImageOnly = false, imageDisplayMode = "auto", imageOnly, collapseLongCodeBlocks = false }: MarkdownContentClientProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null)
   const [clientRenderedHtml, setClientRenderedHtml] = useState("")
   const [clientRenderedImageOnly, setClientRenderedImageOnly] = useState(false)
@@ -268,7 +277,7 @@ function MarkdownContentClientContent({ content, html, className, emptyText, mar
 
   return (
     <>
-      <MarkdownBody html={resolvedHtml} className={className} onOpenLightbox={handleOpenLightbox} isImageOnly={isImageOnly} collapseLongCodeBlocks={collapseLongCodeBlocks} />
+      <MarkdownBody html={resolvedHtml} className={className} onOpenLightbox={handleOpenLightbox} imageDisplayMode={imageDisplayMode} isImageOnly={isImageOnly} collapseLongCodeBlocks={collapseLongCodeBlocks} />
       {lightbox ? (
         <LightboxPortal
           lightbox={lightbox}

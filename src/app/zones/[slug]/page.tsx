@@ -19,6 +19,7 @@ import { buildAddonHookSearchParams, buildHookedPostStreamDisplayItems } from "@
 import { DEFAULT_TAXONOMY_POST_SORT, normalizeTaxonomyPostSort, type TaxonomyPostSort } from "@/lib/forum-taxonomy-sort"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 
+import { POST_LIST_DISPLAY_MODE_GALLERY } from "@/lib/post-list-display"
 import { DEFAULT_ALLOWED_POST_TYPES } from "@/lib/post-types"
 import { POST_LIST_LOAD_MODE_INFINITE } from "@/lib/post-list-load-mode"
 import { readSearchParam } from "@/lib/search-params"
@@ -164,6 +165,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
     featuredHref: buildZonePageHref(params.slug, 1, "featured"),
   }
   const zonePostsApiPath = buildZonePostsApiPath(params.slug, currentSort)
+  const shouldShowRightSidebar = zone.postListDisplayMode !== POST_LIST_DISPLAY_MODE_GALLERY
   const zoneSlotProps = {
     zoneId: zone.id,
     zoneSlug: zone.slug,
@@ -202,6 +204,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
                   description={zone.description}
                   summary={`当前分区共覆盖 ${zoneBoards.length} 个节点，累计 ${zone.count} 篇内容`}
                   summaryActions={<RssSubscribeButton href={`/zones/${zone.slug}/rss.xml`} label="RSS" />}
+                  defaultVisibleCount={zoneBoards.length + 1}
                   pills={[
 
                     {
@@ -271,7 +274,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
               </div>
               </main>
             )}
-            rightSidebar={(
+            rightSidebar={shouldShowRightSidebar ? (
               <aside className="mt-6 hidden pb-12 lg:block">
               <AddonSlotRenderer slot="zone.sidebar.before" props={zoneSlotProps} />
               <AddonSurfaceRenderer surface="zone.sidebar" props={zoneSlotProps}>
@@ -290,7 +293,7 @@ export default async function ZonePage(props: PageProps<"/zones/[slug]">) {
               </AddonSurfaceRenderer>
               <AddonSlotRenderer slot="zone.sidebar.after" props={zoneSlotProps} />
               </aside>
-            )}
+            ) : null}
           />
         </AddonSurfaceRenderer>
         <AddonSlotRenderer slot="zone.page.after" props={zoneSlotProps} />

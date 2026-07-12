@@ -129,6 +129,191 @@ export const POST = createUserRouteHandler<ProfileUpdateResponse>(async ({ reque
   }, async () => {
     const requestUrl = new URL(request.url)
     const settings = await getSiteSettings()
+    const updateScope = typeof body.updateScope === "string" ? body.updateScope.trim() : ""
+
+    if (updateScope === "avatar") {
+      const avatarPath = typeof body.avatarPath === "string" ? body.avatarPath.trim() : ""
+
+      if (avatarPath.length > 1024) {
+        apiError(400, "头像地址过长")
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: {
+          id: true,
+          username: true,
+          nickname: true,
+          bio: true,
+          gender: true,
+          avatarPath: true,
+          email: true,
+          emailVerifiedAt: true,
+          phone: true,
+          phoneVerifiedAt: true,
+          signature: true,
+          points: true,
+        },
+      })
+
+      if (!dbUser) {
+        apiError(404, "用户不存在")
+      }
+
+      const currentProfileSettings = resolveUserProfileSettings(dbUser.signature)
+      const currentProfile = mapAddonUserProfileRecord({
+        id: dbUser.id,
+        username: dbUser.username,
+        nickname: dbUser.nickname,
+        bio: dbUser.bio,
+        introduction: currentProfileSettings.introduction,
+        gender: dbUser.gender,
+        avatarPath: dbUser.avatarPath,
+        email: dbUser.email,
+        emailVerifiedAt: dbUser.emailVerifiedAt,
+        phone: dbUser.phone,
+        phoneVerifiedAt: dbUser.phoneVerifiedAt,
+        activityVisibility: currentProfileSettings.activityVisibility,
+        introductionVisibility: currentProfileSettings.introductionVisibility,
+        points: dbUser.points,
+      })
+      const currentAvatarPath = (dbUser.avatarPath ?? "").trim()
+      const avatarChanged = currentAvatarPath !== avatarPath
+      const avatarRequiresPointCost = avatarChanged && currentAvatarPath.length > 0
+      const avatarChangePointCost = Math.max(0, resolveVipTierPrice(currentUser, {
+        normal: settings.avatarChangePointCost,
+        vip1: settings.avatarChangeVip1PointCost,
+        vip2: settings.avatarChangeVip2PointCost,
+        vip3: settings.avatarChangeVip3PointCost,
+      }))
+      const avatarCostDelta = avatarRequiresPointCost
+        ? await prepareScopedPointDelta({
+            scopeKey: "AVATAR_CHANGE",
+            baseDelta: -avatarChangePointCost,
+            userId: currentUser.id,
+          })
+        : { scopeKey: "AVATAR_CHANGE" as const, baseDelta: 0, finalDelta: 0, appliedRules: [] }
+      const avatarPointCost = Math.max(0, -avatarCostDelta.finalDelta)
+      const pointName = settings.pointName?.trim() || "积分"
+
+      if (avatarPointCost > 0 && dbUser.points < avatarPointCost) {
+        apiError(400, `保存头像需要 ${avatarPointCost} ${pointName}，当前余额不足`)
+      }
+
+      await executeAddonActionHook("user.update.before", {
+        userId: currentUser.id,
+        username: dbUser.username,
+        currentProfile,
+        nickname: dbUser.nickname ?? "",
+        bio: dbUser.bio ?? "",
+        introduction: currentProfileSettings.introduction,
+        gender: dbUser.gender ?? "unknown",
+        avatarPath,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        activityVisibility: currentProfileSettings.activityVisibility,
+        introductionVisibility: currentProfileSettings.introductionVisibility,
+        nicknameChanged: false,
+        bioChanged: false,
+        introductionChanged: false,
+        avatarChanged,
+        emailChanged: false,
+        phoneChanged: false,
+        contentAdjusted: false,
+      }, {
+        request,
+        pathname: requestUrl.pathname,
+        searchParams: requestUrl.searchParams,
+        throwOnError: true,
+      })
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: currentUser.id },
+          data: {
+            avatarPath: avatarPath || null,
+          },
+        })
+
+        if (avatarRequiresPointCost && avatarCostDelta.finalDelta !== 0) {
+          await applyPointDelta({
+            tx,
+            userId: currentUser.id,
+            beforeBalance: dbUser.points,
+            prepared: avatarCostDelta,
+            pointName,
+            reason: "修改头像",
+          })
+        }
+
+        return tx.user.findUniqueOrThrow({
+          where: { id: currentUser.id },
+          select: {
+            id: true,
+            username: true,
+            nickname: true,
+            bio: true,
+            gender: true,
+            avatarPath: true,
+            email: true,
+            emailVerifiedAt: true,
+            phone: true,
+            phoneVerifiedAt: true,
+            signature: true,
+            points: true,
+          },
+        })
+      })
+
+      logRouteWriteSuccess({
+        scope: "profile-update",
+        action: "update-avatar",
+      }, {
+        userId: currentUser.id,
+        targetId: String(currentUser.id),
+        extra: {
+          avatarChanged,
+          avatarRequiresPointCost,
+        },
+      })
+
+      revalidateUserProfileMutation({
+        userId: currentUser.id,
+        username: updated.username,
+      })
+
+      const updatedProfileSettings = resolveUserProfileSettings(updated.signature)
+      const updatedProfile = mapAddonUserProfileRecord({
+        ...updated,
+        introduction: updatedProfileSettings.introduction,
+        activityVisibility: updatedProfileSettings.activityVisibility,
+        introductionVisibility: updatedProfileSettings.introductionVisibility,
+      })
+
+      await executeAddonActionHook("user.update.after", {
+        userId: currentUser.id,
+        username: updated.username,
+        nicknameChanged: false,
+        bioChanged: false,
+        introductionChanged: false,
+        avatarChanged,
+        emailChanged: false,
+        phoneChanged: false,
+        contentAdjusted: false,
+        profile: updatedProfile,
+      }, {
+        request,
+        pathname: requestUrl.pathname,
+        searchParams: requestUrl.searchParams,
+      })
+
+      const message = avatarPointCost > 0
+        ? `头像已保存，相关${pointName}已结算`
+        : "头像已保存"
+
+      return apiSuccess(toProfileUpdateResponse(updatedProfile, avatarPointCost), message)
+    }
+
   const profileIntroductionEditPermission = settings.userProfileIntroductionEnabled
     ? await resolveUserProfileIntroductionPermission({
         action: "edit",

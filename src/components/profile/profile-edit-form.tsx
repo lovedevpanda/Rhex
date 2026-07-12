@@ -320,7 +320,7 @@ export function ProfileEditForm({
         throw new Error("头像上传成功，但未返回文件地址")
       }
 
-      const profileResult = await updateProfile({ avatarPath: uploadedPath })
+      const profileResult = await updateAvatarProfile(uploadedPath)
       const nextAvatarPath = profileResult.data?.avatarPath ?? uploadedPath
       setSavedAvatarPath(nextAvatarPath)
       setPendingAvatarPath(nextAvatarPath)
@@ -374,6 +374,29 @@ export function ProfileEditForm({
 
     if (!response.ok) {
       throw new Error(result.message ?? "保存失败")
+    }
+
+    refreshAfterProfileMutation()
+
+    return result
+  }
+
+  async function updateAvatarProfile(avatarPath: string) {
+    const response = await fetch("/api/profile/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        updateScope: "avatar",
+        avatarPath,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message ?? "头像保存失败")
     }
 
     refreshAfterProfileMutation()
@@ -501,7 +524,7 @@ export function ProfileEditForm({
     setAvatarSaving(true)
 
     try {
-      const result = await updateProfile({ avatarPath: "" })
+      const result = await updateAvatarProfile("")
       const nextAvatarPath = result.data?.avatarPath ?? ""
       setSavedAvatarPath(nextAvatarPath)
       setPendingAvatarPath(nextAvatarPath)

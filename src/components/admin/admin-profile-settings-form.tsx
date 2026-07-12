@@ -32,12 +32,22 @@ import {
   POST_LIST_LOAD_MODE_INFINITE,
   POST_LIST_LOAD_MODE_PAGINATION,
 } from "@/lib/post-list-load-mode"
-import type { BuiltInThemePreset, CustomThemeModeConfig, FontSizePreset } from "@/lib/theme"
+import type { BuiltInThemePreset, CustomThemeModeConfig, FontSizePreset, PostContentImageMode, ThemePreference } from "@/lib/theme"
 
 const themePresetKeys: BuiltInThemePreset[] = ["default", "sea", "jade", "amber", "graphite"]
 const fontSizePresetKeys: FontSizePreset[] = ["compact", "normal", "relaxed"]
 const themeModeKeys = ["light", "dark"] as const
 const themeColorKeys: Array<keyof CustomThemeModeConfig> = ["primary", "background", "card", "accent", "border"]
+const interfaceModeOptions: Array<{ value: ThemePreference; label: string }> = [
+  { value: "light", label: "白天模式" },
+  { value: "dark", label: "黑夜模式" },
+  { value: "system", label: "跟随系统" },
+]
+const postContentImageModeOptions: Array<{ value: PostContentImageMode; label: string }> = [
+  { value: "large", label: "大图模式" },
+  { value: "small", label: "小图模式" },
+  { value: "auto", label: "自动模式" },
+]
 const fontSizeFallbackLabels: Record<FontSizePreset, string> = {
   compact: "Small",
   normal: "Medium",
@@ -160,6 +170,28 @@ export function AdminProfileSettingsForm({
               )}
             options={fontSizePresetOptions}
             description={"\u79fb\u52a8\u7aef\u672a\u8bbe\u7f6e\u672c\u5730\u5b57\u53f7\u65f6\u4f7f\u7528\uff0c\u9002\u5408\u5355\u72ec\u8c03\u6574\u5c0f\u5c4f\u9605\u8bfb\u5bc6\u5ea6\u3002"}
+          />
+          <SettingsSelectField
+            label="默认界面模式"
+            value={draft.defaultPreference}
+            onChange={(value) =>
+              updateDraftField(
+                "defaultPreference",
+                value as typeof draft.defaultPreference,
+              )}
+            options={interfaceModeOptions}
+            description="新访客和未设置本地界面模式的用户默认使用这个模式。"
+          />
+          <SettingsSelectField
+            label="默认贴内图片模式"
+            value={draft.postContentImageMode}
+            onChange={(value) =>
+              updateDraftField(
+                "postContentImageMode",
+                value as typeof draft.postContentImageMode,
+              )}
+            options={postContentImageModeOptions}
+            description="自动模式会在图文混排时使用小图，纯图片内容使用大图。"
           />
         </div>
         <div className="rounded-2xl border border-border bg-muted/20 p-4">

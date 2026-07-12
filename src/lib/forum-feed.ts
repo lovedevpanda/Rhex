@@ -17,7 +17,7 @@ import { getPostStatusLabel, getPostTypeLabel, type LocalPostType } from "@/lib/
 import { getUserAvatarPath, getUserDisplayName } from "@/lib/user-display"
 import type { PostRewardPoolMode } from "@/lib/post-reward-pool-config"
 
-export type FeedSort = "latest" | "new" | "hot" | "weekly" | "following"
+export type FeedSort = "latest" | "new" | "hot" | "featured" | "weekly" | "following"
 
 const PUBLIC_FEED_CACHE_REVALIDATE_SECONDS = 30
 const PUBLIC_FEED_CACHE_MAX_PAGE = 3
@@ -77,12 +77,12 @@ async function readPublicFeedPage(
 ): Promise<ForumFeedPageResult> {
   const [anonymousMaskIdentity, globalPinnedPosts] = await Promise.all([
     getAnonymousMaskDisplayIdentity(),
-    findGlobalPinnedPosts({ homeVisibleOnly: true, viewer }),
+    sort === "featured" ? Promise.resolve([]) : findGlobalPinnedPosts({ homeVisibleOnly: true, viewer }),
   ])
   const pinnedPostIds = extractPinnedPostIds(globalPinnedPosts)
   const requestedPagination = resolvePagination({ page, pageSize }, Number.MAX_SAFE_INTEGER, [pageSize], pageSize)
   const [total, requestedNormalPosts] = await Promise.all([
-    countLatestFeedPosts(pinnedPostIds, viewer),
+    countLatestFeedPosts(pinnedPostIds, viewer, sort === "featured"),
     findLatestFeedPosts(requestedPagination.page, requestedPagination.pageSize, sort, pinnedPostIds, hotRecentWindowHours, viewer),
   ])
   const pagination = resolvePagination({ page, pageSize }, total, [pageSize], pageSize)

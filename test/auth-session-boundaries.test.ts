@@ -48,7 +48,5 @@ test("OAuth and passkey ceremony state is atomically single-use", async () => {
   assert.match(consumeFunction, /if \(!pointer\?\.nonce\) \{\s+return null\s+}/)
   assert.doesNotMatch(consumeFunction, /return parseSignedValue/)
   assert.match(source, /redis\.call\("get", KEYS\[1\]\)[\s\S]*redis\.call\("del", KEYS\[1\]\)/)
-
-
 })
 

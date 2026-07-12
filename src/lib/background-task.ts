@@ -19,10 +19,27 @@ export interface InteractionEffectHooks {
   }) => Promise<void>
 }
 
-const interactionEffectHooks: InteractionEffectHooks[] = []
+type GlobalInteractionEffectState = {
+  __bbsInteractionEffectHooks?: InteractionEffectHooks[]
+}
+
+const globalForInteractionEffects = globalThis as typeof globalThis & GlobalInteractionEffectState
+const interactionEffectHooks = globalForInteractionEffects.__bbsInteractionEffectHooks ??= []
 
 export function registerInteractionEffectHooks(hooks: InteractionEffectHooks) {
-  interactionEffectHooks.push(hooks)
+  if (!interactionEffectHooks.includes(hooks)) {
+    interactionEffectHooks.push(hooks)
+  }
+}
+
+async function ensureInteractionEffectHooksRegistered() {
+  if (interactionEffectHooks.length === 0) {
+    await import("@/lib/interaction-side-effects")
+  }
+
+  if (interactionEffectHooks.length === 0) {
+    throw new Error("Interaction effect hooks are not registered")
+  }
 }
 
 async function runPostLikeEffects(input: {
@@ -31,6 +48,8 @@ async function runPostLikeEffects(input: {
   targetUserId: number | null
   liked: boolean
 }) {
+  await ensureInteractionEffectHooksRegistered()
+
   for (const hooks of interactionEffectHooks) {
     await hooks.onPostLike?.(input)
   }
@@ -41,6 +60,8 @@ async function runPostFavoriteEffects(input: {
   userId: number
   favored: boolean
 }) {
+  await ensureInteractionEffectHooksRegistered()
+
   for (const hooks of interactionEffectHooks) {
     await hooks.onPostFavorite?.(input)
   }
@@ -51,6 +72,8 @@ async function runCommentCreateEffects(input: {
   userId: number
   commentId: string
 }) {
+  await ensureInteractionEffectHooksRegistered()
+
   for (const hooks of interactionEffectHooks) {
     await hooks.onCommentCreate?.(input)
   }

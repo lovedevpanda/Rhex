@@ -110,7 +110,7 @@ function BoardRulesPanel({
       </div>
       <MarkdownContent
         content={board.rulesMarkdown || DEFAULT_BOARD_RULES_MARKDOWN}
-        className="text-[11px] leading-6 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1"
+        className="text-[13px] leading-6 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1"
       />
     </section>
   )

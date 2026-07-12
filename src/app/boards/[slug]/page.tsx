@@ -21,6 +21,7 @@ import { buildAddonHookSearchParams, buildHookedPostStreamDisplayItems } from "@
 import { DEFAULT_TAXONOMY_POST_SORT, normalizeTaxonomyPostSort, type TaxonomyPostSort } from "@/lib/forum-taxonomy-sort"
 import { getHomeSidebarHotTopics, resolveSidebarUser } from "@/lib/home-sidebar"
 import { POST_LIST_LOAD_MODE_INFINITE } from "@/lib/post-list-load-mode"
+import { POST_LIST_DISPLAY_MODE_GALLERY } from "@/lib/post-list-display"
 import { DEFAULT_ALLOWED_POST_TYPES, normalizePostTypes } from "@/lib/post-types"
 import { readSearchParam } from "@/lib/search-params"
 import { buildMetadataKeywords } from "@/lib/seo"
@@ -74,8 +75,6 @@ function buildBoardManagementHref(board: { slug: string; zoneId?: string | null 
 
   return `/admin?${query.toString()}`
 }
-
-const boardHeroActionButtonClassName = "inline-flex h-9 w-28 items-center justify-center gap-1.5 rounded-full border border-border bg-background/85 px-0 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-foreground"
 
 export async function generateMetadata(props: PageProps<"/boards/[slug]">): Promise<Metadata> {
   const params = await props.params;
@@ -198,6 +197,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
     featuredHref: buildBoardPageHref(params.slug, 1, "featured"),
   }
   const boardPostsApiPath = buildBoardPostsApiPath(params.slug, currentSort)
+  const shouldShowRightSidebar = board.postListDisplayMode !== POST_LIST_DISPLAY_MODE_GALLERY
 
 
 
@@ -221,8 +221,8 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
                   icon={board.icon}
                   description={board.description}
                   summary={`当前共收录 ${board.count} 篇内容`}
-                  summaryActions={<RssSubscribeButton href={`/boards/${board.slug}/rss.xml`} label="RSS" className={boardHeroActionButtonClassName} />}
-                  detailAction={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} showLabel className={boardHeroActionButtonClassName} />}
+                  summaryActions={<RssSubscribeButton href={`/boards/${board.slug}/rss.xml`} label="RSS" />}
+                  detailAction={<BoardFollowButton boardId={board.id} initialFollowed={isFollowingBoard} showLabel className="border border-border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent" />}
                   alwaysOpen
                   hidePills
                   pills={[]}
@@ -279,7 +279,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
             </div>
             </main>
           )}
-          rightSidebar={(
+          rightSidebar={shouldShowRightSidebar ? (
             <aside className="mt-6 hidden pb-12 lg:block">
               <AddonSlotRenderer slot="board.sidebar.before" />
               <AddonSurfaceRenderer surface="board.sidebar" props={{ announcements, board, hotTopics, moderators: moderatorGroups.boardModerators, zoneModerators: moderatorGroups.zoneModerators, settings }}>
@@ -302,7 +302,7 @@ export default async function BoardPage(props: PageProps<"/boards/[slug]">) {
               </AddonSurfaceRenderer>
               <AddonSlotRenderer slot="board.sidebar.after" />
             </aside>
-          )}
+          ) : null}
         />
         </AddonSurfaceRenderer>
         <AddonSlotRenderer slot="board.page.after" />

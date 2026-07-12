@@ -63,6 +63,15 @@ type FeedDisplaySettings = Pick<
   | "markdownEmojiMap" | "postLinkDisplayMode"
 >
 
+function resolveGalleryCoverImage(coverImage: string | null | undefined, previewMedia: PostListPreviewMedia | null) {
+  const normalizedCoverImage = coverImage?.trim()
+  if (normalizedCoverImage) {
+    return normalizedCoverImage
+  }
+
+  return previewMedia?.type === "image" ? previewMedia.src : null
+}
+
 export function getFeedPinLabel(pinScope?: string | null) {
   if (pinScope === "GLOBAL") {
     return "全局置顶"
@@ -137,7 +146,7 @@ export function mapForumFeedItemsToDisplayItems(
       tipTotalPoints: item.tipTotalPoints,
       viewCount: item.viewCount,
       commentAccentColor: commentHeat.color,
-      coverImage: item.coverImage,
+      coverImage: resolveGalleryCoverImage(item.coverImage, previewMedia),
       previewMedia,
       excerpt: item.summary,
       contentMarkdown,

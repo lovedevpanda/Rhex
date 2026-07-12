@@ -3,7 +3,7 @@ import type { FeedSort } from "@/lib/forum-feed"
 export type HomeFeedSort = Exclude<FeedSort, "weekly"> | "universe"
 
 export function normalizeHomeFeedSort(sort?: string): HomeFeedSort {
-  if (sort === "new" || sort === "hot" || sort === "following" || sort === "universe") {
+  if (sort === "new" || sort === "hot" || sort === "featured" || sort === "following" || sort === "universe") {
     return sort
   }
 
@@ -32,7 +32,7 @@ export function buildHomeFeedHref(sort: HomeFeedSort, page = 1) {
     return `/${sort}`
   }
 
-  if (sort === "latest" || sort === "new" || sort === "hot") {
+  if (sort === "latest" || sort === "new" || sort === "hot" || sort === "featured") {
     return `/${sort}/page/${normalizedPage}`
   }
 

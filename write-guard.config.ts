@@ -134,15 +134,11 @@ const writeGuardConfig = {
     },
   },
   "invite-codes-purchase": {
-    description: "邀请码购买防重，避免连点重复扣积分。",
+    description: "邀请码购买短冷却，避免连点重复扣积分；批量购买由购买数量参数承载。",
     scope: "invite-codes-purchase",
     cooldownMs: 1_500,
     cooldownMessage: "购买操作过于频繁，请稍后再试",
     releaseOnError: true,
-    dedupe: {
-      windowMs: 10_000,
-      parts: ["userId"],
-    },
   },
   "messages-delete": {
     description: "私信会话删除去重，避免短时间重复删除同一会话。",

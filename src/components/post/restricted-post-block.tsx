@@ -6,9 +6,9 @@ import { MarkdownContentClient as MarkdownContent } from "@/components/markdown-
 import { PurchaseUnlockButton } from "@/components/post/purchase-unlock-button"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
 import { addPostReplyCreatedListener } from "@/lib/post-discussion-events"
+import type { PostContentImageMode } from "@/lib/theme"
 
 interface RestrictedPostBlockProps {
-
   type: "AUTHOR_ONLY" | "LOGIN_UNLOCK" | "REPLY_UNLOCK" | "PURCHASE_UNLOCK"
   postId: string
   blockId: string
@@ -23,17 +23,17 @@ interface RestrictedPostBlockProps {
   userReplyCount?: number
   isOwnerOrAdmin?: boolean
   markdownEmojiMap?: MarkdownEmojiItem[]
+  imageDisplayMode?: PostContentImageMode
 }
 
-function UnlockedContentFrame({ title, content, html, summary, markdownEmojiMap }: { title: string; content: string; html?: string; summary?: string; markdownEmojiMap?: MarkdownEmojiItem[] }) {
-
+function UnlockedContentFrame({ title, content, html, summary, markdownEmojiMap, imageDisplayMode = "auto" }: { title: string; content: string; html?: string; summary?: string; markdownEmojiMap?: MarkdownEmojiItem[]; imageDisplayMode?: PostContentImageMode }) {
   return (
     <div className="rounded-xl border border-border bg-secondary/35 p-5">
       <div className="mb-3 space-y-1">
         <div className="text-sm font-medium text-foreground">{title}</div>
         {summary ? <div className="text-xs text-muted-foreground">{summary}</div> : null}
       </div>
-      <MarkdownContent content={content} html={html} markdownEmojiMap={markdownEmojiMap} collapseLongCodeBlocks />
+      <MarkdownContent content={content} html={html} markdownEmojiMap={markdownEmojiMap} imageDisplayMode={imageDisplayMode} collapseLongCodeBlocks />
     </div>
   )
 }
@@ -42,8 +42,7 @@ export function RestrictedPostBlock(props: RestrictedPostBlockProps) {
   return <RestrictedPostBlockContent key={`${props.blockId}:${props.userReplyCount ?? 0}`} {...props} />
 }
 
-function RestrictedPostBlockContent({ type, postId, blockId, text, html, visible, currentUserId, pointName, replyThreshold, price, purchaseCount = 0, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap }: RestrictedPostBlockProps) {
-
+function RestrictedPostBlockContent({ type, postId, blockId, text, html, visible, currentUserId, pointName, replyThreshold, price, purchaseCount = 0, userReplyCount = 0, isOwnerOrAdmin = false, markdownEmojiMap, imageDisplayMode = "auto" }: RestrictedPostBlockProps) {
   const [scrolling, setScrolling] = useState(false)
   const [localUserReplyCount, setLocalUserReplyCount] = useState(userReplyCount)
 
@@ -81,6 +80,7 @@ function RestrictedPostBlockContent({ type, postId, blockId, text, html, visible
           html={html}
           summary={type === "PURCHASE_UNLOCK" ? `已有 ${purchaseCount} 人购买` : undefined}
           markdownEmojiMap={markdownEmojiMap}
+          imageDisplayMode={imageDisplayMode}
         />
     )
 

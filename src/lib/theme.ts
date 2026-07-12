@@ -1,4 +1,5 @@
 export const THEME_STORAGE_KEY = "rhex-theme"
+export const THEME_PREFERENCE_EXPLICIT_STORAGE_KEY = "rhex-theme-explicit"
 export const THEME_PRESET_STORAGE_KEY = "rhex-theme-preset"
 export const FONT_SIZE_PRESET_STORAGE_KEY = "rhex-font-size-preset"
 export const CUSTOM_THEME_STORAGE_KEY = "rhex-custom-theme"
@@ -290,10 +291,12 @@ export interface EditableThemePresetDefinition {
 }
 
 export interface ThemeCustomizationSettings {
+  defaultPreference: ThemePreference
   defaultThemePreset: BuiltInThemePreset
   defaultFontSizePreset: FontSizePreset
   defaultMobileThemePreset: BuiltInThemePreset
   defaultMobileFontSizePreset: FontSizePreset
+  postContentImageMode: PostContentImageMode
   fontSizePresets: Record<FontSizePreset, FontSizePresetDefinition>
   themePresets: Record<BuiltInThemePreset, EditableThemePresetDefinition>
 }
@@ -301,6 +304,7 @@ export interface ThemeCustomizationSettings {
 export interface ThemeRuntimeSettings extends ThemeDefaultSettings {
   mobilePreset: BuiltInThemePreset
   mobileFontSizePreset: FontSizePreset
+  postContentImageMode: PostContentImageMode
   customization: ThemeCustomizationSettings
   fontSizePresets: Record<FontSizePreset, FontSizePresetDefinition>
   themePresets: Record<BuiltInThemePreset, ThemePresetDefinition>
@@ -727,6 +731,13 @@ function writeThemeSetting(storageKey: string, value: string) {
 
 export function setStoredThemePreference(preference: ThemePreference) {
   writeThemeSetting(THEME_STORAGE_KEY, preference)
+  try {
+    window.localStorage.setItem(THEME_PREFERENCE_EXPLICIT_STORAGE_KEY, "1")
+  } catch {
+    // Ignore storage write failures and still keep the cookie/snapshot path available.
+  }
+  writeThemeCookie(THEME_PREFERENCE_EXPLICIT_STORAGE_KEY, "1")
+  notifyThemeSettingsChanged()
 }
 
 export function writeStoredThemePreferenceCookie(preference: ThemePreference) {
@@ -773,6 +784,7 @@ export const DEFAULT_THEME_LOCAL_SETTINGS_SNAPSHOT: ThemeLocalSettingsSnapshot =
 }
 
 export interface ThemeDefaultSettings {
+  preference: ThemePreference
   preset: BuiltInThemePreset
   fontSizePreset: FontSizePreset
   mobilePreset?: BuiltInThemePreset
@@ -780,11 +792,14 @@ export interface ThemeDefaultSettings {
 }
 
 export const DEFAULT_THEME_DEFAULT_SETTINGS: ThemeDefaultSettings = {
+  preference: "light",
   preset: "default",
   fontSizePreset: "normal",
   mobilePreset: "default",
   mobileFontSizePreset: "normal",
 }
+
+export type PostContentImageMode = "large" | "small" | "auto"
 
 const THEME_PRESET_SOURCE_CONFIGS = {
   default: {
@@ -880,10 +895,12 @@ const THEME_PRESET_SOURCE_CONFIGS = {
 } as const satisfies Record<BuiltInThemePreset, EditableThemePresetDefinition>
 
 export const DEFAULT_THEME_CUSTOMIZATION_SETTINGS: ThemeCustomizationSettings = {
+  defaultPreference: DEFAULT_THEME_DEFAULT_SETTINGS.preference,
   defaultThemePreset: DEFAULT_THEME_DEFAULT_SETTINGS.preset,
   defaultFontSizePreset: DEFAULT_THEME_DEFAULT_SETTINGS.fontSizePreset,
   defaultMobileThemePreset: DEFAULT_THEME_DEFAULT_SETTINGS.mobilePreset ?? DEFAULT_THEME_DEFAULT_SETTINGS.preset,
   defaultMobileFontSizePreset: DEFAULT_THEME_DEFAULT_SETTINGS.mobileFontSizePreset ?? DEFAULT_THEME_DEFAULT_SETTINGS.fontSizePreset,
+  postContentImageMode: "auto",
   fontSizePresets: FONT_SIZE_PRESETS,
   themePresets: THEME_PRESET_SOURCE_CONFIGS,
 }
@@ -956,8 +973,20 @@ export function resolveThemeCustomizationSettings(value: unknown): ThemeCustomiz
   const defaultFontSizePreset = resolveStoredFontSizePreset(
     typeof candidate.defaultFontSizePreset === "string" ? candidate.defaultFontSizePreset : null,
   )
+  const defaultPreference = resolveStoredThemePreference(
+    typeof candidate.defaultPreference === "string"
+      ? candidate.defaultPreference
+      : typeof candidate.defaultThemePreference === "string"
+        ? candidate.defaultThemePreference
+        : null,
+    DEFAULT_THEME_DEFAULT_SETTINGS.preference,
+  )
+  const postContentImageMode = candidate.postContentImageMode === "large" || candidate.postContentImageMode === "small"
+    ? candidate.postContentImageMode
+    : "auto"
 
   return {
+    defaultPreference,
     defaultThemePreset,
     defaultFontSizePreset,
     defaultMobileThemePreset: resolveBuiltInThemePreset(
@@ -968,6 +997,7 @@ export function resolveThemeCustomizationSettings(value: unknown): ThemeCustomiz
       typeof candidate.defaultMobileFontSizePreset === "string" ? candidate.defaultMobileFontSizePreset : null,
       defaultFontSizePreset,
     ),
+    postContentImageMode,
     fontSizePresets: {
       compact: normalizeFontSizePresetDefinition(rawFontSizePresets.compact, DEFAULT_THEME_CUSTOMIZATION_SETTINGS.fontSizePresets.compact),
       normal: normalizeFontSizePresetDefinition(rawFontSizePresets.normal, DEFAULT_THEME_CUSTOMIZATION_SETTINGS.fontSizePresets.normal),
@@ -1003,10 +1033,12 @@ export function buildThemePresetDefinition(input: EditableThemePresetDefinition)
 
 export function buildThemeRuntimeSettings(settings: ThemeCustomizationSettings): ThemeRuntimeSettings {
   return {
+    preference: settings.defaultPreference,
     preset: settings.defaultThemePreset,
     fontSizePreset: settings.defaultFontSizePreset,
     mobilePreset: settings.defaultMobileThemePreset,
     mobileFontSizePreset: settings.defaultMobileFontSizePreset,
+    postContentImageMode: settings.postContentImageMode,
     customization: settings,
     fontSizePresets: settings.fontSizePresets,
     themePresets: {
@@ -1031,6 +1063,7 @@ function resolveThemeRuntimeSettings(settings?: ThemeRuntimeSettings | ThemeCust
   if (settings && "preset" in settings && "fontSizePreset" in settings) {
     return buildThemeRuntimeSettings(resolveThemeCustomizationSettings({
       ...DEFAULT_THEME_CUSTOMIZATION_SETTINGS,
+      defaultPreference: settings.preference,
       defaultThemePreset: settings.preset,
       defaultFontSizePreset: settings.fontSizePreset,
       defaultMobileThemePreset: settings.mobilePreset ?? settings.preset,
@@ -1048,6 +1081,7 @@ export function getThemeDefaultsFromRuntime(
   const useMobileDefaults = options.device === "mobile"
 
   return {
+    preference: settings.preference,
     preset: useMobileDefaults ? settings.mobilePreset : settings.preset,
     fontSizePreset: useMobileDefaults ? settings.mobileFontSizePreset : settings.fontSizePreset,
     mobilePreset: settings.mobilePreset,
@@ -1075,21 +1109,31 @@ export function readThemeLocalSettingsSnapshotFromStorage(settings: ThemeRuntime
     device: resolveThemeDefaultDeviceFromViewport(),
   })
 
-  const preferenceFromCookie = readThemeCookieValue(THEME_STORAGE_KEY)
+  const preferenceExplicitFromCookie = readThemeCookieValue(THEME_PREFERENCE_EXPLICIT_STORAGE_KEY) === "1"
+  const preferenceFromCookie = preferenceExplicitFromCookie ? readThemeCookieValue(THEME_STORAGE_KEY) : null
   const presetFromCookie = readThemeCookieValue(THEME_PRESET_STORAGE_KEY)
   const fontSizePresetFromCookie = readThemeCookieValue(FONT_SIZE_PRESET_STORAGE_KEY)
 
-  syncThemeSettingFromCookie(THEME_STORAGE_KEY, preferenceFromCookie)
   syncThemeSettingFromCookie(THEME_PRESET_STORAGE_KEY, presetFromCookie)
   syncThemeSettingFromCookie(FONT_SIZE_PRESET_STORAGE_KEY, fontSizePresetFromCookie)
 
-  const preference = (() => {
+  const preferenceFromStorage = (() => {
     try {
-      return window.localStorage.getItem(THEME_STORAGE_KEY) ?? preferenceFromCookie
+      return window.localStorage.getItem(THEME_STORAGE_KEY)
     } catch {
-      return preferenceFromCookie
+      return null
     }
   })()
+  const preferenceExplicitFromStorage = (() => {
+    try {
+      return window.localStorage.getItem(THEME_PREFERENCE_EXPLICIT_STORAGE_KEY) === "1"
+    } catch {
+      return false
+    }
+  })()
+  const preference = preferenceExplicitFromStorage || preferenceExplicitFromCookie
+    ? preferenceFromStorage ?? preferenceFromCookie
+    : null
   const preset = (() => {
     try {
       return window.localStorage.getItem(THEME_PRESET_STORAGE_KEY) ?? presetFromCookie
@@ -1106,7 +1150,7 @@ export function readThemeLocalSettingsSnapshotFromStorage(settings: ThemeRuntime
   })()
 
   return {
-    preference: resolveStoredThemePreference(preference),
+    preference: resolveStoredThemePreference(preference, deviceDefaults.preference),
     preset: resolveStoredThemePreset(preset, deviceDefaults.preset),
     fontSizePreset: resolveStoredFontSizePreset(fontSizePreset, deviceDefaults.fontSizePreset),
     customThemeConfig: readStoredCustomThemeConfig(),
@@ -1150,6 +1194,7 @@ export function subscribeThemeSettings(onStoreChange: () => void) {
   const handleStorage = (event: StorageEvent) => {
     if (
       event.key === THEME_STORAGE_KEY
+      || event.key === THEME_PREFERENCE_EXPLICIT_STORAGE_KEY
       || event.key === THEME_PRESET_STORAGE_KEY
       || event.key === FONT_SIZE_PRESET_STORAGE_KEY
       || event.key === CUSTOM_THEME_STORAGE_KEY
@@ -1195,12 +1240,12 @@ export function getThemePresetDisplayMeta(
   return resolveThemeRuntimeSettings(settings).themePresets[preset]
 }
 
-export function resolveStoredThemePreference(value: string | null | undefined): ThemePreference {
+export function resolveStoredThemePreference(value: string | null | undefined, fallback: ThemePreference = "light"): ThemePreference {
   if (value === "dark" || value === "light" || value === "system") {
     return value
   }
 
-  return "light"
+  return fallback
 }
 
 export function resolveStoredThemePreset(
@@ -1244,10 +1289,11 @@ export function resolveThemeDocumentPropsFromCookieString(
 ): ThemeDocumentProps {
   const runtime = resolveThemeRuntimeSettings(settings)
   const deviceDefaults = getThemeDefaultsFromRuntime(runtime, { device: options.device })
-  const themePreferenceCookie = readCookieValue(cookieString ?? "", THEME_STORAGE_KEY)
+  const themePreferenceExplicitCookie = readCookieValue(cookieString ?? "", THEME_PREFERENCE_EXPLICIT_STORAGE_KEY) === "1"
+  const themePreferenceCookie = themePreferenceExplicitCookie ? readCookieValue(cookieString ?? "", THEME_STORAGE_KEY) : null
   const themePresetCookie = readCookieValue(cookieString ?? "", THEME_PRESET_STORAGE_KEY)
   const fontSizePresetCookie = readCookieValue(cookieString ?? "", FONT_SIZE_PRESET_STORAGE_KEY)
-  const resolvedPreference = resolveStoredThemePreference(themePreferenceCookie)
+  const resolvedPreference = resolveStoredThemePreference(themePreferenceCookie, deviceDefaults.preference)
   const resolvedPreset = resolveStoredThemePreset(themePresetCookie, deviceDefaults.preset)
   const resolvedFontSizePreset = resolveStoredFontSizePreset(fontSizePresetCookie, deviceDefaults.fontSizePreset)
   const requiresBootGuard = resolvedPreference === "system"

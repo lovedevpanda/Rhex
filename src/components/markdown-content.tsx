@@ -1,6 +1,7 @@
 ﻿import { MarkdownContentClient } from "@/components/markdown-content-client"
 import { isImageOnlyMarkdownHtml, renderMarkdown } from "@/lib/markdown/render"
 import type { MarkdownEmojiItem } from "@/lib/markdown-emoji"
+import type { PostContentImageMode } from "@/lib/theme"
 
 interface MarkdownContentProps {
   content: string
@@ -9,11 +10,12 @@ interface MarkdownContentProps {
   emptyText?: string
   markdownEmojiMap?: MarkdownEmojiItem[]
   expandImagesWhenImageOnly?: boolean
+  imageDisplayMode?: PostContentImageMode
   imageOnly?: boolean
   collapseLongCodeBlocks?: boolean
 }
 
-export function MarkdownContent({ content, html, className, emptyText, markdownEmojiMap = [], expandImagesWhenImageOnly = false, imageOnly, collapseLongCodeBlocks = false }: MarkdownContentProps) {
+export function MarkdownContent({ content, html, className, emptyText, markdownEmojiMap = [], expandImagesWhenImageOnly = false, imageDisplayMode = "auto", imageOnly, collapseLongCodeBlocks = false }: MarkdownContentProps) {
   const normalized = content.replace(/\r\n/g, "\n").trim()
   const resolvedHtml = typeof html === "string" ? html : (normalized ? renderMarkdown(normalized, markdownEmojiMap) : "")
   const resolvedImageOnly = expandImagesWhenImageOnly
@@ -28,6 +30,7 @@ export function MarkdownContent({ content, html, className, emptyText, markdownE
       emptyText={emptyText}
       markdownEmojiMap={markdownEmojiMap}
       expandImagesWhenImageOnly={expandImagesWhenImageOnly}
+      imageDisplayMode={imageDisplayMode}
       imageOnly={resolvedImageOnly}
       collapseLongCodeBlocks={collapseLongCodeBlocks}
     />

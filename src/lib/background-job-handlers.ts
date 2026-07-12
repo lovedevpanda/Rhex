@@ -9,6 +9,10 @@ export async function registerDefaultBackgroundJobHandlers() {
     return
   }
 
+  // Interaction hooks must be attached before workers can consume their jobs.
+  await import("@/lib/background-task")
+  await import("@/lib/interaction-side-effects")
+
   await Promise.all([
     import("@/lib/account-security"),
     import("@/lib/ai/capabilities/auto-categorize"),
@@ -16,10 +20,8 @@ export async function registerDefaultBackgroundJobHandlers() {
     import("@/lib/admin-attachment-background-jobs"),
     import("@/addons-host/runtime/background-jobs"),
     import("@/lib/rss-harvest"),
-    import("@/lib/background-task"),
     import("@/lib/check-in-streak-service"),
     import("@/lib/follow-notifications"),
-    import("@/lib/interaction-side-effects"),
     import("@/lib/level-system"),
     import("@/lib/notification-writes"),
     import("@/lib/outbound-delivery"),

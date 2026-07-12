@@ -623,7 +623,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                           >
                             {(displayPost.contentBlocks ?? []).map((block) => (
                               block.type === "PUBLIC"
-                                ? <MarkdownContent key={block.id} content={block.text} html={normalizedRenderedContentBlockHtmlById.get(block.id)} markdownEmojiMap={settings.markdownEmojiMap} expandImagesWhenImageOnly imageOnly={isImageOnlyMarkdown(block.text, settings.markdownEmojiMap)} collapseLongCodeBlocks />
+                                ? <MarkdownContent key={block.id} content={block.text} html={normalizedRenderedContentBlockHtmlById.get(block.id)} markdownEmojiMap={settings.markdownEmojiMap} expandImagesWhenImageOnly imageDisplayMode={settings.theme.postContentImageMode} imageOnly={isImageOnlyMarkdown(block.text, settings.markdownEmojiMap)} collapseLongCodeBlocks />
 
                                 : (
                                   <RestrictedPostBlock
@@ -642,6 +642,7 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
                                     userReplyCount={userReplyCount}
                                     isOwnerOrAdmin={isOwnerOrManager}
                                     markdownEmojiMap={settings.markdownEmojiMap}
+                                    imageDisplayMode={settings.theme.postContentImageMode}
 
                                   />
                                 )
@@ -851,4 +852,3 @@ export default async function PostPage(props: PageProps<"/posts/[slug]">) {
     </div>
   )
 }
-

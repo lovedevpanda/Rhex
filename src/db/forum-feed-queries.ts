@@ -4,7 +4,7 @@ import { buildHomeVisiblePostWhere } from "@/db/home-feed-visibility"
 import { buildPostListVisibilityWhere, type PostListVisibilityViewer } from "@/db/post-list-visibility"
 import type { Prisma } from "@/db/types"
 
-export type FeedQuerySort = "latest" | "new" | "hot" | "weekly" | "following"
+export type FeedQuerySort = "latest" | "new" | "hot" | "featured" | "weekly" | "following"
 
 type FollowFeedFilters = {
   boardIds?: string[]
@@ -90,6 +90,7 @@ function buildFeedWhere(
   excludedPostIds: string[] = [],
   filters?: FollowFeedFilters,
   viewer?: PostListVisibilityViewer | null,
+  featuredOnly = false,
 ): Prisma.PostWhereInput {
   const followClauses: Prisma.PostWhereInput[] = []
 
@@ -128,6 +129,7 @@ function buildFeedWhere(
       buildPostListVisibilityWhere(viewer),
     ],
     id: excludedPostIds.length > 0 ? { notIn: excludedPostIds } : undefined,
+    isFeatured: featuredOnly ? true : undefined,
     OR: followClauses.length > 0 ? followClauses : undefined,
   }
 }
@@ -241,7 +243,7 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
   const normalizedPageSize = Math.min(Math.max(1, pageSize), 50)
 
   return prisma.post.findMany({
-    where: buildFeedWhere(excludedPostIds, undefined, viewer),
+    where: buildFeedWhere(excludedPostIds, undefined, viewer, sort === "featured"),
     include: feedPostInclude,
     orderBy: getFeedOrderBy(sort),
     skip: (page - 1) * normalizedPageSize,
@@ -249,9 +251,9 @@ export function findLatestFeedPosts(page: number, pageSize: number, sort: FeedQu
   })
 }
 
-export function countLatestFeedPosts(excludedPostIds: string[] = [], viewer?: PostListVisibilityViewer | null) {
+export function countLatestFeedPosts(excludedPostIds: string[] = [], viewer?: PostListVisibilityViewer | null, featuredOnly = false) {
   return prisma.post.count({
-    where: buildFeedWhere(excludedPostIds, undefined, viewer),
+    where: buildFeedWhere(excludedPostIds, undefined, viewer, featuredOnly),
   })
 }
 

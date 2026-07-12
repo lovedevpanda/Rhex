@@ -155,7 +155,7 @@ export async function SiteFooter() {
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >Rhex {packageJson.version}</Link></span>
+                >Rhex Plus {packageJson.version}</Link></span>
                 </>
               ) : null}
             </div>

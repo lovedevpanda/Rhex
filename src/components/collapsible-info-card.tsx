@@ -64,22 +64,22 @@ export function CollapsibleInfoCard({
   return (
     <>
       {showTopBar ? (
-        <div className="px-3 pt-2 pb-1">
-          <div className="flex flex-col gap-1.5 border-b border-border/80 pb-1.5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+        <div className="border-b py-2 lg:px-4 lg:py-3">
+          <div className="flex items-center justify-between gap-1 lg:gap-2">
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:gap-2">
               {visiblePills.map((pill) => (
                 <Link
                   key={pill.id}
                   href={pill.href}
-                  className={pill.active ? "inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors" : "inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"}
+                  className={pill.active ? "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-accent px-3 py-1.5 text-[13px] font-medium text-foreground sm:px-4 sm:py-2 sm:text-sm lg:gap-2" : "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 sm:px-4 sm:py-2 sm:text-sm lg:gap-2"}
                 >
-                  <LevelIcon icon={pill.icon} className="h-3 w-3 text-[12px] leading-none" svgClassName="[&>svg]:block" />
+                  <LevelIcon icon={pill.icon} className="h-3.5 w-3.5 text-sm leading-none sm:h-4 sm:w-4" svgClassName="[&>svg]:block" />
                   <span>{pill.label}</span>
                 </Link>
               ))}
             </div>
 
-            <div className="flex shrink-0 items-center justify-end gap-1 lg:pl-3">
+            <div className="flex shrink-0 items-center justify-end gap-1">
               {shouldCollapsePills ? (
                 <button
                   type="button"

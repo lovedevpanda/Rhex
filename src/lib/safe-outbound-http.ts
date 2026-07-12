@@ -62,6 +62,13 @@ export function isPublicOutboundIp(address: string) {
   return false
 }
 
+function normalizeUrlHostname(hostname: string) {
+  const normalized = hostname.trim().toLowerCase()
+  return normalized.startsWith("[") && normalized.endsWith("]")
+    ? normalized.slice(1, -1)
+    : normalized
+}
+
 function parseOutboundUrl(input: string | URL) {
   const url = new URL(input)
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -72,7 +79,7 @@ function parseOutboundUrl(input: string | URL) {
     throw new Error("出网地址不允许包含账号密码")
   }
 
-  const hostname = url.hostname.trim().toLowerCase()
+  const hostname = normalizeUrlHostname(url.hostname)
   if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
     throw new Error("禁止访问本地或局域网地址")
   }
@@ -86,7 +93,7 @@ function parseOutboundUrl(input: string | URL) {
  */
 export async function resolveSafeOutboundTarget(input: string | URL): Promise<SafeOutboundTarget> {
   const url = parseOutboundUrl(input)
-  const hostname = url.hostname
+  const hostname = normalizeUrlHostname(url.hostname)
   const ipFamily = isIP(hostname)
 
   if (ipFamily === 4 || ipFamily === 6) {

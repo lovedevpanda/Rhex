@@ -236,6 +236,17 @@ async function createUserFromIdentity(input: {
 
     if (inviter) {
       await incrementUserInviteCount(inviter.id, tx)
+      await createSystemNotification({
+        client: tx,
+        userId: inviter.id,
+        relatedType: "USER",
+        relatedId: String(createdUser.id),
+        url: `/users/${createdUser.username}`,
+        title: "邀请注册成功",
+        content: inviteCodeRecord
+          ? `你分享的邀请码 ${inviteCodeRecord.code} 已被用户 ${createdUser.username} 注册使用。`
+          : `用户 ${createdUser.username} 已通过你的邀请注册。`,
+      })
     }
 
     await createUserLoginLogEntry(createdUser.id, loginIp, userAgent, tx)

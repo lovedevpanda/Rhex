@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import type { ChangeEvent, ClipboardEvent, KeyboardEvent } from "react"
+import type { ChangeEvent, ClipboardEvent, KeyboardEvent as ReactKeyboardEvent } from "react"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { ChevronLeft, ChevronUp, ImageIcon, MessageSquareMore, Paperclip, Send, SmilePlus, Trash2 } from "lucide-react"
 
@@ -181,6 +181,8 @@ function MessageThreadPanelContent({
   const threadRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const emojiButtonRef = useRef<HTMLButtonElement | null>(null)
+  const emojiPanelRef = useRef<HTMLDivElement | null>(null)
   const shouldStickToBottomRef = useRef(true)
   const markdownEmojiMap = useMarkdownEmojiMap()
   const [draft, setDraft] = useState("")
@@ -212,6 +214,39 @@ function MessageThreadPanelContent({
 
     container.scrollTop = container.scrollHeight
   }, [conversation?.messages])
+
+  useEffect(() => {
+    if (!showEmojiPanel) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (emojiButtonRef.current?.contains(target) || emojiPanelRef.current?.contains(target)) {
+        return
+      }
+
+      setShowEmojiPanel(false)
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowEmojiPanel(false)
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [showEmojiPanel])
 
   function insertEmoji(emoji: string) {
     const element = textareaRef.current
@@ -421,7 +456,7 @@ function MessageThreadPanelContent({
     await onLoadHistory()
   }
 
-  function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleDraftKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return
     }
@@ -581,6 +616,7 @@ function MessageThreadPanelContent({
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
             <div className="relative flex items-center gap-2 text-xs text-muted-foreground">
               <button
+                ref={emojiButtonRef}
                 type="button"
                 aria-label="表情"
                 title="表情"
@@ -591,7 +627,7 @@ function MessageThreadPanelContent({
                 <span className="hidden sm:inline">表情</span>
               </button>
               {showEmojiPanel ? (
-                <div className="absolute bottom-[calc(100%+12px)] left-0 z-20 max-h-[min(340px,calc(100vh-160px))] w-[min(440px,calc(100vw-32px))] overflow-hidden rounded-[14px] border border-border bg-background p-0 shadow-2xl">
+                <div ref={emojiPanelRef} className="absolute bottom-[calc(100%+12px)] left-0 z-20 max-h-[min(340px,calc(100vh-160px))] w-[min(440px,calc(100vw-32px))] overflow-hidden rounded-[14px] border border-border bg-background p-0 shadow-2xl">
                   <EmojiPicker
                     items={emojiPickerItems}
                     columns={8}
