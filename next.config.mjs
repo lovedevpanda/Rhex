@@ -19,7 +19,6 @@ const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.trim() || process.env.GITHU
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  allowedDevOrigins: ["192.168.50.207", "*.yuminga.com", "localhost"],
   assetPrefix,
   ...(deploymentId ? {
     deploymentId,
