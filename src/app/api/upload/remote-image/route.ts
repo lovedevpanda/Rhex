@@ -8,7 +8,7 @@ import { getSiteSettings } from "@/lib/site-settings"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { normalizeMarkdownMediaUrl } from "@/lib/markdown/media"
 import { prepareUploadedFile, saveUploadedFile } from "@/lib/upload"
-import { isAllowedUploadMimeType, normalizeUploadFolder } from "@/lib/upload-rules"
+import { getSafeUntrustedImageExtensions, isAllowedUploadMimeType, isSafeUntrustedImageMimeType, normalizeUploadFolder } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
 import { safeOutboundFetch } from "@/lib/safe-outbound-http"
@@ -184,10 +184,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 
   const folder = normalizeUploadFolder(body.folder)
   const settings = await getSiteSettings()
-  const allowedExtensions = Array.from(new Set([
-    ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
-    ...(folder === "icon" ? ["svg"] : []),
-  ]))
+  const allowedExtensions = getSafeUntrustedImageExtensions(settings.uploadAllowedImageTypes)
   const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
   const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
   const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
@@ -201,7 +198,8 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
     settings,
   })
 
-  if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
+  if (!isSafeUntrustedImageMimeType(preparedFile.detectedMime)
+    || !isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
     apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
   }
 

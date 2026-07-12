@@ -75,6 +75,21 @@ export function getPrimaryUploadExtensionForMimeType(mimeType: string) {
   return getUploadExtensionsForMimeType(mimeType)[0] ?? null
 }
 
+const UNSAFE_UNTRUSTED_IMAGE_EXTENSIONS = new Set(["svg"])
+const UNSAFE_UNTRUSTED_IMAGE_MIME_TYPES = new Set(["image/svg+xml"])
+
+export function getSafeUntrustedImageExtensions(extensions: readonly string[]) {
+  return Array.from(new Set(
+    extensions
+      .map((item) => item.trim().toLowerCase().replace(/^\./, ""))
+      .filter((item) => item && !UNSAFE_UNTRUSTED_IMAGE_EXTENSIONS.has(item)),
+  ))
+}
+
+export function isSafeUntrustedImageMimeType(mimeType: string) {
+  return !UNSAFE_UNTRUSTED_IMAGE_MIME_TYPES.has(mimeType.trim().toLowerCase())
+}
+
 export function isAllowedUploadMimeType(mimeType: string, allowedExtensions: readonly string[]) {
   const normalizedAllowedExtensions = new Set(
     allowedExtensions.map((item) => item.trim().toLowerCase()).filter(Boolean),

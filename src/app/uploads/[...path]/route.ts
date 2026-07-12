@@ -33,11 +33,14 @@ async function resolveUploadFilePath(pathSegments: readonly string[]) {
 }
 
 function buildUploadHeaders(fileName: string, fileSize: number, lastModified: Date) {
+  const contentType = getUploadMimeType(fileName)
+
   return {
-    "Content-Type": getUploadMimeType(fileName),
+    "Content-Type": contentType,
     "Content-Length": String(fileSize),
     "Cache-Control": "public, max-age=31536000, immutable",
     "Last-Modified": lastModified.toUTCString(),
+    ...(contentType === "image/svg+xml" ? { "Content-Security-Policy": "sandbox" } : {}),
   }
 }
 

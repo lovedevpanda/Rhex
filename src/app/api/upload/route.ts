@@ -2,7 +2,7 @@ import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
 import { prepareUploadedFile, saveUploadedFile } from "@/lib/upload"
-import { isAllowedUploadMimeType, normalizeUploadExtension, normalizeUploadFolder } from "@/lib/upload-rules"
+import { getSafeUntrustedImageExtensions, isAllowedUploadMimeType, isSafeUntrustedImageMimeType, normalizeUploadExtension, normalizeUploadFolder } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
 import { createUploadWithinDailyQuota, withUserUploadRateLimit } from "@/lib/user-upload-quota"
@@ -38,10 +38,7 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       }
 
       const extension = normalizeUploadExtension(file.name)
-      const allowedExtensions = Array.from(new Set([
-        ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
-        ...(folder === "icon" ? ["svg"] : []),
-      ]))
+      const allowedExtensions = getSafeUntrustedImageExtensions(settings.uploadAllowedImageTypes)
       const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
       const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
       const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
@@ -63,7 +60,8 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
         settings,
       })
 
-      if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
+      if (!isSafeUntrustedImageMimeType(preparedFile.detectedMime)
+        || !isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
         apiError(400, `仅支持上传 ${allowedExtensions.join(" / ")} 格式的图片`)
       }
 

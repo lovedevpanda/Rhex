@@ -2,7 +2,7 @@ import { apiError, apiSuccess, createUserRouteHandler } from "@/lib/api-route"
 import { buildMessageFileProxyUrl, buildMessageFileToken, buildMessageImageMarkdown, MESSAGE_FILE_UPLOAD_FOLDER, MESSAGE_IMAGE_UPLOAD_FOLDER } from "@/lib/message-media"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { getSiteSettings } from "@/lib/site-settings"
-import { isAllowedUploadMimeType, normalizeUploadExtension } from "@/lib/upload-rules"
+import { getSafeUntrustedImageExtensions, isAllowedUploadMimeType, isSafeUntrustedImageMimeType, normalizeUploadExtension } from "@/lib/upload-rules"
 import { prepareBinaryUploadedFile, prepareUploadedFile, saveUploadedFile } from "@/lib/upload"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
@@ -49,7 +49,7 @@ export const POST = createUserRouteHandler<MessageUploadResponse>(async ({ reque
       }
 
       const extension = normalizeUploadExtension(file.name)
-      const allowedImageExtensions = settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean)
+      const allowedImageExtensions = getSafeUntrustedImageExtensions(settings.uploadAllowedImageTypes)
       const allowedFileExtensions = settings.attachmentAllowedExtensions.map((item) => item.trim().toLowerCase()).filter(Boolean)
       const isImageUpload = file.type.startsWith("image/") || (!!extension && allowedImageExtensions.includes(extension))
 
@@ -72,7 +72,8 @@ export const POST = createUserRouteHandler<MessageUploadResponse>(async ({ reque
           settings,
         })
 
-        if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedImageExtensions)) {
+        if (!isSafeUntrustedImageMimeType(preparedFile.detectedMime)
+          || !isAllowedUploadMimeType(preparedFile.detectedMime, allowedImageExtensions)) {
           apiError(400, `仅支持上传 ${allowedImageExtensions.join(" / ")} 格式的图片`)
         }
 

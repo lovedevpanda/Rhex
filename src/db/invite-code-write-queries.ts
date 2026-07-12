@@ -1,7 +1,20 @@
 import { prisma } from "@/db/client"
+import { Prisma as PrismaClient } from "@/db/types"
+import type { Prisma } from "@/db/types"
 
 import { apiError } from "@/lib/api-route"
 import { applyPointDelta, prepareScopedPointDelta } from "@/lib/point-center"
+
+async function lockInviteCodePurchaseUser(tx: Prisma.TransactionClient, userId: number) {
+  const rows = await tx.$queryRaw<Array<{ id: number; points: number; username: string }>>(PrismaClient.sql`
+    SELECT "id", "points", "username"
+    FROM "User"
+    WHERE "id" = ${userId}
+    FOR UPDATE
+  `)
+
+  return rows[0] ?? null
+}
 
 export async function purchaseInviteCodeTransaction(params: {
   userId: number
@@ -20,7 +33,7 @@ export async function purchaseInviteCodeTransaction(params: {
   })
 
   return prisma.$transaction(async (tx) => {
-    const latestUser = await tx.user.findUnique({ where: { id: params.userId }, select: { id: true, points: true, username: true } })
+    const latestUser = await lockInviteCodePurchaseUser(tx, params.userId)
 
     if (!latestUser) {
       apiError(404, "用户不存在")
