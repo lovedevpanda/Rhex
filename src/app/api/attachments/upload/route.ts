@@ -60,7 +60,17 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
         apiError(400, `附件大小不能超过 ${settings.attachmentMaxFileSizeMb}MB`)
       }
 
-      const preparedFile = await prepareBinaryUploadedFile(file)
+      const preparedFile = await prepareBinaryUploadedFile(file, {
+        folder: "attachments",
+        maxFileSizeBytes: maxSizeBytes,
+        settings,
+        request,
+        actor: {
+          id: currentUser.id,
+          username: currentUser.username,
+          kind: "user",
+        },
+      })
       const requestUrl = new URL(request.url)
       const hookCtx = { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams }
       await executeAddonActionHook("upload.file.before", {

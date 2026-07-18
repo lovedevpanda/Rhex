@@ -69,7 +69,14 @@ export const POST = createUserRouteHandler<MessageUploadResponse>(async ({ reque
 
         const preparedFile = await prepareUploadedFile(file, {
           folder: MESSAGE_IMAGE_UPLOAD_FOLDER,
+          maxFileSizeBytes: maxSizeBytes,
           settings,
+          request,
+          actor: {
+            id: currentUser.id,
+            username: currentUser.username,
+            kind: "user",
+          },
         })
 
         if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedImageExtensions)) {

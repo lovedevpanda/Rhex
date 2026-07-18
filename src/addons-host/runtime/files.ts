@@ -188,6 +188,7 @@ export async function saveAddonFile(
 
   const preparedFile = await prepareUploadedFile(file, {
     folder,
+    maxFileSizeBytes: maxSizeMb * 1024 * 1024,
     settings,
   })
   ensureAllowedExtension(file.name, preparedFile.detectedMime, allowedExtensions)

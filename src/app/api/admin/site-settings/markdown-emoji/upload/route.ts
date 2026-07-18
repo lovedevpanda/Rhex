@@ -59,7 +59,15 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
 
     const preparedFile = await prepareUploadedFile(file, {
       folder: MARKDOWN_EMOJI_UPLOAD_FOLDER,
+      maxFileSizeBytes: maxSizeBytes,
       settings,
+      request,
+      actor: {
+        id: adminUser.id,
+        username: adminUser.username,
+        role: adminUser.role,
+        kind: "admin",
+      },
     })
 
     if (!isAllowedUploadMimeType(preparedFile.detectedMime, MARKDOWN_EMOJI_UPLOAD_IMAGE_EXTENSIONS)) {

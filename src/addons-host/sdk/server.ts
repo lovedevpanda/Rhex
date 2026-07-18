@@ -166,6 +166,7 @@ export type {
   AddonUploadPreparedFile,
   AddonUploadProviderRuntimeHooks,
   AddonUploadProviderSaveResult,
+  AddonUploadProviderTransformResult,
 } from "@/addons-host/upload-types"
 export type {
   AddonHomeFeedProviderMetadata,
