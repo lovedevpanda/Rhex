@@ -55,8 +55,10 @@ FROM base AS production-dependencies
 
 COPY package.json pnpm-lock.yaml .npmrc ./
 
-# tsx is a production dependency because the worker executes TypeScript directly.
-RUN pnpm install --prod --frozen-lockfile
+# setup:prod and worker execute these binaries directly at runtime.
+RUN pnpm install --prod --frozen-lockfile \
+  && test -x node_modules/.bin/cross-env \
+  && test -x node_modules/.bin/tsx
 
 FROM base AS runner
 

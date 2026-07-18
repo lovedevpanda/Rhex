@@ -86,6 +86,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      cross-env:
+        specifier: ^7.0.3
+        version: 7.0.3
       fast-xml-parser:
         specifier: ^5.8.0
         version: 5.8.0
@@ -225,9 +228,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.14)
-      cross-env:
-        specifier: ^7.0.3
-        version: 7.0.3
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
