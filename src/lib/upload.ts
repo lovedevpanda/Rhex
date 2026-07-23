@@ -13,7 +13,10 @@ import { normalizeUploadProvider } from "@/lib/upload-provider"
 import { buildUploadStoragePath } from "@/lib/upload-path"
 import { getPrimaryUploadExtensionForMimeType, getUploadMimeType } from "@/lib/upload-rules"
 import { applyTextWatermarkToBuffer } from "@/lib/watermark-lib.server"
-import { saveWithAddonUploadProvider } from "@/lib/addon-upload-providers"
+import {
+  saveWithAddonUploadProvider,
+  transformWithAddonUploadProviders,
+} from "@/lib/addon-upload-providers"
 import type { AddonUploadActor } from "@/addons-host/upload-types"
 import { resolveWatermarkLogoBuffer } from "@/lib/watermark-logo.server"
 
@@ -37,6 +40,12 @@ export interface PreparedUploadFile {
 export interface SaveUploadedFileOptions {
   request?: Request
   actor?: AddonUploadActor | null
+}
+
+export interface PrepareUploadedFileOptions extends SaveUploadedFileOptions {
+  folder?: string
+  maxFileSizeBytes?: number
+  settings?: WatermarkUploadSettings
 }
 
 type UploadSettings = Awaited<ReturnType<typeof getServerSiteSettings>>
@@ -244,10 +253,25 @@ async function computeFileHash(file: File) {
 /**
  * 单次读取整文件，复用同一块 Buffer 完成哈希计算、类型检测和后续写盘。
  */
-export async function prepareUploadedFile(file: File, options?: {
-  folder?: string
-  settings?: WatermarkUploadSettings
-}): Promise<PreparedUploadFile> {
+function prepareImageBuffer(buffer: Buffer): PreparedUploadFile {
+  const detectedMime = detectMimeTypeFromBytes(buffer.subarray(0, 12)) ?? detectSvgMimeType(buffer)
+
+  if (!detectedMime || !IMAGE_MIME_TYPES.has(detectedMime)) {
+    throw new Error("图片处理插件返回了不受支持的图片格式")
+  }
+
+  return {
+    buffer,
+    fileHash: createHash("sha256").update(buffer).digest("hex"),
+    detectedMime,
+    fileSize: buffer.byteLength,
+  }
+}
+
+export async function prepareUploadedFile(
+  file: File,
+  options?: PrepareUploadedFileOptions,
+): Promise<PreparedUploadFile> {
   const sourceBuffer = await readFileStreamToBuffer(file)
   const detectedMime = detectMimeTypeFromBytes(sourceBuffer.subarray(0, 12)) ?? detectSvgMimeType(sourceBuffer)
 
@@ -262,11 +286,28 @@ export async function prepareUploadedFile(file: File, options?: {
     settings: options?.settings,
   })
 
+  const preparedFile = prepareImageBuffer(buffer)
+  const transformedFile = await transformWithAddonUploadProviders({
+    request: options?.request,
+    actor: options?.actor,
+    file,
+    preparedFile,
+    folder: options?.folder || "avatars",
+    normalizeTransformedFile: ({ buffer: transformedBuffer }) => (
+      prepareImageBuffer(Buffer.from(transformedBuffer))
+    ),
+  })
+
+  if (
+    options?.maxFileSizeBytes
+    && transformedFile.fileSize > options.maxFileSizeBytes
+  ) {
+    throw new Error("图片处理后的文件大小超过站点上传限制")
+  }
+
   return {
-    buffer,
-    fileHash: createHash("sha256").update(buffer).digest("hex"),
-    detectedMime,
-    fileSize: buffer.byteLength,
+    ...transformedFile,
+    buffer: transformedFile.buffer ? Buffer.from(transformedFile.buffer) : null,
   }
 }
 
@@ -312,7 +353,18 @@ async function saveToLocal(
   }
 }
 
-export async function prepareBinaryUploadedFile(file: File): Promise<PreparedUploadFile> {
+export async function prepareBinaryUploadedFile(
+  file: File,
+  options?: PrepareUploadedFileOptions,
+): Promise<PreparedUploadFile> {
+  const headerBuffer = Buffer.from(await file.slice(0, 4096).arrayBuffer())
+  const detectedImageMime = detectMimeTypeFromBytes(headerBuffer.subarray(0, 12))
+    ?? detectSvgMimeType(headerBuffer)
+
+  if (detectedImageMime && IMAGE_MIME_TYPES.has(detectedImageMime)) {
+    return prepareUploadedFile(file, options)
+  }
+
   return {
     buffer: null,
     fileHash: await computeFileHash(file),

@@ -6,6 +6,7 @@ import type {
   AddonUploadActor,
   AddonUploadPreparedFile,
   AddonUploadProviderRuntimeHooks,
+  AddonUploadProviderTransformResult,
 } from "@/addons-host/upload-types"
 import {
   invokeAddonProviderRuntime,
@@ -19,6 +20,73 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeOptionalString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback
+}
+
+function normalizeTransformBuffer(value: unknown) {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const buffer = value.buffer
+  if (buffer instanceof Uint8Array && buffer.byteLength > 0) {
+    return buffer
+  }
+
+  return null
+}
+
+export async function transformWithAddonUploadProviders(input: {
+  request?: Request
+  actor?: AddonUploadActor | null
+  file: File
+  preparedFile: AddonUploadPreparedFile
+  folder: string
+  normalizeTransformedFile: (
+    result: AddonUploadProviderTransformResult,
+  ) => AddonUploadPreparedFile | Promise<AddonUploadPreparedFile>
+}): Promise<AddonUploadPreparedFile> {
+  const providers = await listAddonProviderRuntimeItems<AddonUploadProviderRuntimeHooks>(
+    "upload",
+    input.request ? { request: input.request } : undefined,
+  )
+  let preparedFile = input.preparedFile
+
+  for (const item of providers) {
+    const runtime = item.runtime
+    if (typeof runtime?.transformFile !== "function") {
+      continue
+    }
+
+    const output = await invokeAddonProviderRuntime(
+      item,
+      "transformFile",
+      () => ({
+        addon: item.addon,
+        provider: item.provider,
+        context: item.context,
+        request: input.request,
+        actor: input.actor,
+        file: input.file,
+        preparedFile,
+        folder: input.folder,
+      }),
+    )
+
+    if (typeof output === "undefined" || output === null) {
+      continue
+    }
+
+    const buffer = normalizeTransformBuffer(output)
+    if (!buffer) {
+      throw new Error(
+        `addon upload provider "${item.provider.code}" returned an invalid transform result`,
+      )
+    }
+
+    preparedFile = await input.normalizeTransformedFile({ buffer })
+  }
+
+  return preparedFile
 }
 
 function resolveFallbackFileName(urlPath: string, folder: string, preparedFile: AddonUploadPreparedFile, originalName: string) {

@@ -44,7 +44,18 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
     apiError(400, `水印图片不能超过 ${maxSizeMb}MB`)
   }
 
-  const preparedFile = await prepareUploadedFile(file)
+  const preparedFile = await prepareUploadedFile(file, {
+    folder: WATERMARK_LOGO_FOLDER,
+    maxFileSizeBytes: maxSizeBytes,
+    settings,
+    request,
+    actor: {
+      id: adminUser.id,
+      username: adminUser.username,
+      role: adminUser.role,
+      kind: "admin",
+    },
+  })
 
   if (!isAllowedUploadMimeType(preparedFile.detectedMime, WATERMARK_LOGO_EXTENSIONS)) {
     apiError(400, `仅支持上传 ${WATERMARK_LOGO_EXTENSIONS.join(" / ")} 格式的水印图片`)
