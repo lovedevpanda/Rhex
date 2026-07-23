@@ -74,3 +74,16 @@ test("redeem code claiming is conditional and category limits are serialized", a
     "the same user/category must be locked before its redeemed-code count is read",
   )
 })
+
+test("daily upload quota uses PostgreSQL's two-integer advisory lock signature", async () => {
+  const source = await readSource("src/lib/user-upload-quota.ts")
+
+  assert.match(
+    source,
+    /pg_advisory_xact_lock\(\s*\$\{input\.userId\}::integer,\s*\$\{getUtcDayLockKey\(now\)\}::integer\s*\)/,
+  )
+  assert.doesNotMatch(
+    source,
+    /pg_advisory_xact_lock\(\$\{input\.userId\},\s*\$\{getUtcDayLockKey\(now\)\}\)/,
+  )
+})

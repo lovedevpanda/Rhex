@@ -121,7 +121,10 @@ export async function createUploadWithinDailyQuota(input: {
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(${input.userId}, ${getUtcDayLockKey(now)})
+        SELECT pg_advisory_xact_lock(
+          ${input.userId}::integer,
+          ${getUtcDayLockKey(now)}::integer
+        )
       `
 
       const existing = await tx.upload.findUnique({
