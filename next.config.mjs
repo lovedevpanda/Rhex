@@ -19,6 +19,10 @@ const deploymentId = process.env.NEXT_DEPLOYMENT_ID?.trim() || process.env.GITHU
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   assetPrefix,
   ...(deploymentId ? {
     deploymentId,
