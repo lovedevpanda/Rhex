@@ -8,7 +8,7 @@ import { PageNumberPagination } from "@/components/page-number-pagination"
 import { Button } from "@/components/ui/rbutton"
 import { showConfirm } from "@/components/ui/alert-dialog"
 import { toast } from "@/components/ui/toast"
-import { formatCompactNumber, formatNumber } from "@/lib/formatters"
+import { formatCompactNumber, formatDateTime, formatNumber } from "@/lib/formatters"
 
 type FavoriteCollectionManageData = {
   collections: Array<{
@@ -262,7 +262,7 @@ export function FavoriteCollectionManager({ initialData }: { initialData: Favori
                     {item.description ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.description}</p> : null}
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                       <span title={`${formatNumber(item.postCount)} 帖`}>帖子 {formatCompactNumber(item.postCount)}</span>
-                      <span>更新于 {new Date(item.updatedAt).toLocaleString()}</span>
+                      <span>更新于 {formatDateTime(item.updatedAt)}</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

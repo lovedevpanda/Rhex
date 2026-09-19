@@ -110,15 +110,28 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
         cache: "no-store",
         credentials: "same-origin",
       })
-      if (!response.ok) {
+
+      /**
+       * 只有 401（确实未登录）才清空用户。
+       *
+       * 这个 refresh 挂在 visibilitychange / pageshow 上：切走再切回来就会调一次。
+       * 原来任何非 2xx（5xx、429）以及网络异常都会把用户置为 null，
+       * 于是顶栏头像变成"未登录"、通知和私信入口消失 —— 用户会以为被登出了，
+       * 直到下一次刷新成功才恢复。瞬时故障不该改变登录态。
+       */
+      if (response.status === 401) {
         setCurrentUserPayload({ user: null, surface: null })
+        return
+      }
+
+      if (!response.ok) {
         return
       }
 
       const result = await response.json() as ApiSuccessPayload<CurrentUserPayload>
       setCurrentUserPayload(normalizePayload(result.data))
     } catch {
-      setCurrentUserPayload({ user: null, surface: null })
+      // 网络异常同样保留现有登录态，不做清空
     } finally {
       setLoading(false)
     }

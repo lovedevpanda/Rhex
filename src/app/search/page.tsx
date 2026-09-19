@@ -149,7 +149,13 @@ export default async function SearchPage(props: PageProps<"/search">) {
               >
                 <section className="overflow-hidden rounded-2xl border border-border bg-card">
                   <div className="flex flex-col gap-4 p-5 sm:p-6">
-                    <SearchForm defaultValue={keyword} search={settings.search} />
+                    {/*
+                      key 绑定关键词：SearchForm 内部用 useState(defaultValue) 管输入框，
+                      而 Next 的软导航会复用同一个组件实例 —— 不换 key 的话，
+                      从顶部导航栏搜新词时 URL 和结果都变了，页面里这个输入框
+                      还会显示旧关键词（再按回车就用旧词重搜）。
+                    */}
+                    <SearchForm key={keyword} defaultValue={keyword} search={settings.search} />
                   </div>
                   <SearchScopeTabs activeScope={activeScope} buildHref={buildScopeHref} disabled={!settings.search.enabled} />
                 </section>
