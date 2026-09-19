@@ -51,7 +51,10 @@ export async function GET(request: Request, props: OAuthProviderRouteProps) {
       ? "connect"
       : "login"
   const redirectTo = requestUrl.searchParams.get("redirectTo")?.trim()
-  const safeConnectRedirectTo = redirectTo?.startsWith("/") ? redirectTo : "/settings?tab=profile&profileTab=accounts"
+  // 两者都必须走 normalizeAuthRedirectTarget：它显式拒绝以 "//" 开头的协议相对 URL。
+  // 之前 connect 分支只判断 startsWith("/")，而 "//evil.com" 也以 "/" 开头，
+  // 于是未登录即可用它把用户 302 到站外（开放重定向）。
+  const safeConnectRedirectTo = normalizeAuthRedirectTarget(redirectTo, "/settings?tab=profile&profileTab=accounts")
   const safeLoginRedirectTo = normalizeAuthRedirectTarget(redirectTo)
 
   if (!isExternalAuthProvider(params.provider)) {
