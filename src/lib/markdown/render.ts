@@ -988,10 +988,56 @@ function sanitizeMarkdownHtmlFragment(input: string, placeholders: EscapedHtmlPl
   return output
 }
 
+/**
+ * 判断某一行是否是**markdown-it 认可的**围栏起始/结束行。
+ *
+ * 这里必须与 markdown-it 的 fence 规则逐条对齐，否则会出安全漏洞：
+ * 净化器一旦误判"这行在围栏内"，就会整行跳过净化，而 markdown-it 若认为它不是
+ * 围栏，就会把该行的 HTML 原样输出（`html: true`）—— 攻击者只要构造出
+ * "净化器认、markdown-it 不认"的写法即可注入可执行 HTML。
+ *
+ * 对照 `node_modules/markdown-it/lib/rules_block/fence.mjs`：
+ *   - 缩进 >= 4 空格不是围栏（会被当成缩进代码块）
+ *   - 围栏字符可为 ``` 或 ~~~，长度 >= 3
+ *   - info string 里含反引号时，反引号围栏不成立
+ *   - 结束围栏必须同字符、长度 >= 起始长度、且后面只有空白
+ *
+ * 返回 null 表示这一行不是围栏行。
+ */
+function parseFenceLine(line: string): { marker: string; length: number; isClosingShape: boolean } | null {
+  // ① 缩进 >= 4 空格：markdown-it 不当作围栏
+  const leading = line.match(/^[ \t]*/)?.[0] ?? ""
+  if (leading.replace(/\t/g, "    ").length >= 4) {
+    return null
+  }
+
+  const rest = line.slice(leading.length)
+  const match = rest.match(/^(`{3,}|~{3,})(.*)$/)
+  if (!match) {
+    return null
+  }
+
+  const marker = match[1]!
+  const info = match[2] ?? ""
+
+  // ② 反引号围栏的 info string 不能含反引号
+  if (marker.startsWith("`") && info.includes("`")) {
+    return null
+  }
+
+  return {
+    marker: marker[0]!,
+    length: marker.length,
+    // 结束围栏后面只能有空白
+    isClosingShape: info.trim() === "",
+  }
+}
+
 function sanitizeMarkdownInlineHtml(input: string, placeholders: EscapedHtmlPlaceholder[]) {
   const output: string[] = []
   const markdownBuffer: string[] = []
-  let inFence = false
+  // 当前所处围栏的字符与长度；null 表示不在围栏内
+  let openFence: { marker: string; length: number } | null = null
 
   function flushMarkdownBuffer() {
     if (markdownBuffer.length === 0) {
@@ -1003,19 +1049,26 @@ function sanitizeMarkdownInlineHtml(input: string, placeholders: EscapedHtmlPlac
   }
 
   for (const line of input.split("\n")) {
-    if (/^\s*(?:```|~~~)/.test(line)) {
-      if (!inFence) {
-        flushMarkdownBuffer()
-        inFence = true
-      } else {
-        inFence = false
-      }
+    const fence = parseFenceLine(line)
 
+    if (openFence) {
+      // 围栏内：原样放行（这是合法的代码块内容，不净化）
       output.push(line)
+
+      if (
+        fence
+        && fence.marker === openFence.marker
+        && fence.length >= openFence.length
+        && fence.isClosingShape
+      ) {
+        openFence = null
+      }
       continue
     }
 
-    if (inFence) {
+    if (fence) {
+      flushMarkdownBuffer()
+      openFence = { marker: fence.marker, length: fence.length }
       output.push(line)
       continue
     }
