@@ -398,7 +398,12 @@ export async function createRegisterFlow(options: RegisterFlowOptions): Promise<
     }
 
     if (inviteCodeRecord) {
-      await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
+      // 条件更新：并发下若被抢先用掉，这里为 false —— 必须抛错让整个事务回滚，
+      // 否则一码开两号，邀请人也会拿到两份邀请奖励
+      const claimed = await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
+      if (!claimed) {
+        apiError(409, "邀请码已被使用")
+      }
     }
 
     if (inviter) {

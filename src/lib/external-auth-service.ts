@@ -231,7 +231,11 @@ async function createUserFromIdentity(input: {
     }
 
     if (inviteCodeRecord) {
-      await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
+      // 条件更新：并发抢用同一邀请码时回滚，避免一码两号 + 双发邀请奖励
+      const claimed = await markInviteCodeAsUsed(inviteCodeRecord.id, createdUser.id, tx)
+      if (!claimed) {
+        apiError(409, "邀请码已被使用")
+      }
     }
 
     if (inviter) {
