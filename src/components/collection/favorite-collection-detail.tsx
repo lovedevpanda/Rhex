@@ -9,7 +9,7 @@ import { PageNumberPagination } from "@/components/page-number-pagination"
 import { Button } from "@/components/ui/rbutton"
 import { showConfirm } from "@/components/ui/alert-dialog"
 import { toast } from "@/components/ui/toast"
-import { formatCompactNumber, formatNumber } from "@/lib/formatters"
+import { formatCompactNumber, formatDateTime, formatNumber } from "@/lib/formatters"
 import type { SitePostItem } from "@/lib/posts"
 
 interface FavoriteCollectionDetailProps {
@@ -237,7 +237,7 @@ export function FavoriteCollectionDetail({
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                   <span>创建者 {data.ownerName}</span>
                   <span title={`${formatNumber(data.postCount)} 帖`}>帖子 {formatCompactNumber(data.postCount)}</span>
-                  <span>更新于 {new Date(data.updatedAt).toLocaleString()}</span>
+                  <span>更新于 {formatDateTime(data.updatedAt)}</span>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -281,7 +281,7 @@ export function FavoriteCollectionDetail({
                           </Link>
                           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                             <span>投稿人 {submission.submittedByName}</span>
-                            <span>{new Date(submission.submittedAt).toLocaleString()}</span>
+                            <span>{formatDateTime(submission.submittedAt)}</span>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">

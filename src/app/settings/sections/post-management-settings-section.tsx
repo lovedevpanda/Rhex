@@ -147,7 +147,10 @@ function FavoritesPanel({
 }
 
 function CollectionsPanel({ favoriteCollections }: { favoriteCollections: SettingsPageData["favoriteCollections"] }) {
-  return <FavoriteCollectionManager initialData={favoriteCollections} />
+  // 同 FavoriteCollectionDetail：组件内部用 useState(initialData) 存服务端数据，
+  // 而分页是软导航 -> 不换 key 就永远停在第 1 页。只绑主分页，页内操作不重置。
+  const pageKey = favoriteCollections?.pagination.page ?? 1
+  return <FavoriteCollectionManager key={`collections-page-${pageKey}`} initialData={favoriteCollections} />
 }
 
 function MyLikesPanel({
