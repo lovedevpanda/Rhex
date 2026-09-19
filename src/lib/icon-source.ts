@@ -25,7 +25,31 @@ export function isImageSource(value: string | null | undefined) {
   )
 }
 
-const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|iframe|object|embed|audio|video|image|animate(?:color|motion|transform)?|set)\b|\s(?:on[a-z]+|style|src)\s*=|\s(?:xlink:)?href\s*=\s*(?!(?:["']#|#))|(?:javascript|vbscript)\s*:|@import|url\s*\(\s*(?!["']?\s*#)|&#/i
+const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|iframe|object|embed|audio|video|image|animate(?:color|motion|transform)?|set)\b|(?:^|[\s/])(?:on[a-z]+|style|src|xlink:href|href)\s*=|\s(?:xlink:)?href\s*=\s*(?!(?:["']#|#))|(?:javascript|vbscript)\s*:|@import|url\s*\(\s*(?!["']?\s*#)|&#/i
+
+/**
+ * 归一化 SVG 标记后再做安全检查。
+ *
+ * ## 为什么需要这一步
+ *
+ * HTML 解析器把 `/` 也当作属性分隔符：`<svg/onload=alert(1)>` 里的 `onload`
+ * 是一个真实的事件处理器。而检查用的正则要求 `on*=` 前面是空白，于是这类写法
+ * 会被放行 —— 已实测：`<svg/onload=...>`、`<svg id=x/onload=...>`、
+ * `<svg\t/onload=...>`、`<a xlink:href="#x" /onclick=...>` 全部通过检查，
+ * 而这些标记会被 `LevelIcon` 用 dangerouslySetInnerHTML 内联进页面，等于全站 XSS。
+ *
+ * 与其在正则里逐个补"解析器的等价写法"（黑名单永远补不完），不如**先把它们
+ * 收敛成统一形式**再检查：
+ *   - 标签名后的 `/`（含空白后）改成空格，消掉 `<svg/onload=` 这种粘写
+ *   - 属性名前的 `/` 改成空格，消掉 `/onclick=` 这种粘写
+ *
+ * 归一化只影响"分隔符的写法"，不改变标记语义，所以合法图标不受影响。
+ */
+export function normalizeSvgMarkupForInspection(markup: string) {
+  return markup
+    .replace(/<\/?\s*([a-zA-Z][a-zA-Z0-9:-]*)\s*\//g, "<$1 ")
+    .replace(/\//g, " ")
+}
 
 export function stripSvgDocumentPrefix(value: string) {
   return value.trim().replace(SVG_PREFIX_PATTERN, "")
@@ -39,7 +63,12 @@ export function stripSvgDocumentPrefix(value: string) {
 export function sanitizeInlineSvgMarkup(value: string) {
   const markup = stripSvgDocumentPrefix(value)
 
-  if (!isSvgMarkup(markup) || UNSAFE_SVG_CONTENT_PATTERN.test(markup)) {
+  if (!isSvgMarkup(markup)) {
+    return null
+  }
+
+  // 归一化后再检查：把 `/` 分隔的属性写法收敛成空白，避免黑白名单判定被粘写绕过
+  if (UNSAFE_SVG_CONTENT_PATTERN.test(normalizeSvgMarkupForInspection(markup))) {
     return null
   }
 
