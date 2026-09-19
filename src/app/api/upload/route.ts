@@ -38,10 +38,19 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
       }
 
       const extension = normalizeUploadExtension(file.name)
-      const allowedExtensions = Array.from(new Set([
-        ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
-        ...(folder === "icon" ? ["svg"] : []),
-      ]))
+      // SVG 是**管理员能力**，不对普通用户开放。
+      //
+      // 这个路由只要求登录，而 folder 由客户端表单决定、`icon` 在白名单内，
+      // 原先 `folder === "icon"` 时额外放开 svg —— 于任何登录用户都能把
+      // `<svg onload=...>` 传成 /uploads/icon/<hash>.svg，再由无鉴权的
+      // /uploads 路由以 image/svg+xml 返回。把该链接贴进帖子，受害者一点就在
+      // 站点同源下执行脚本（同源 fetch 可冒用其身份）。
+      //
+      // 站点图标本来就有管理员专用入口 api/admin/site-settings/icon-upload，
+      // 因此这里直接不放行 svg，不需要新增权限判断。
+      const allowedExtensions = Array.from(new Set(
+        settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
+      ))
       const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
       const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
       const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
