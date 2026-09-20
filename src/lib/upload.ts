@@ -47,6 +47,18 @@ export interface PrepareUploadedFileOptions extends SaveUploadedFileOptions {
   folder?: string
   maxFileSizeBytes?: number
   settings?: WatermarkUploadSettings
+  /**
+   * 是否允许 SVG 内容（默认 false）。
+   *
+   * SVG 是**可执行文档**：`<svg onload=...>` 在浏览器里当脚本跑。所有上传产物都放在
+   * 公开静态目录（/uploads）并由无鉴权路由以 `image/svg+xml` 返回，所以任何允许
+   * 普通用户上传 SVG 的入口，都等于给了他们一个同源 XSS 的 URL。
+   *
+   * 因此默认拒绝；只有确实需要矢量图标的管理员入口（站点图标、markdown 表情）
+   * 才显式打开。判断放在这里而不是各路由的扩展名白名单里，是为了让「检测到的真实
+   * 类型」也被覆盖 —— 只查原文件名时，传 `x.zip` 而内容是 SVG 就能绕过。
+   */
+  allowSvg?: boolean
 }
 
 type UploadSettings = Awaited<ReturnType<typeof getServerSiteSettings>>
@@ -254,11 +266,16 @@ async function computeFileHash(file: File) {
 /**
  * 单次读取整文件，复用同一块 Buffer 完成哈希计算、类型检测和后续写盘。
  */
-function prepareImageBuffer(buffer: Buffer): PreparedUploadFile {
+function prepareImageBuffer(buffer: Buffer, options?: PrepareUploadedFileOptions): PreparedUploadFile {
   const detectedMime = detectMimeTypeFromBytes(buffer.subarray(0, 12)) ?? detectSvgMimeType(buffer)
 
   if (!detectedMime || !IMAGE_MIME_TYPES.has(detectedMime)) {
     throw new Error("图片处理插件返回了不受支持的图片格式")
+  }
+
+  // 与 prepareUploadedFile 同一道闸：SVG 默认拒绝（详见 allowSvg 说明）
+  if (detectedMime === "image/svg+xml" && !options?.allowSvg) {
+    throw new Error("当前入口不支持 SVGF 格式")
   }
 
   return {
@@ -280,6 +297,11 @@ export async function prepareUploadedFile(
     throw new Error("仅支持上传常见图片格式文件")
   }
 
+  // SVG 是可执行文档，默认拒绝（详见 PrepareUploadedFileOptions.allowSvg）
+  if (detectedMime === "image/svg+xml" && !options?.allowSvg) {
+    throw new Error("当前入口不支持 SVG 格式")
+  }
+
   const buffer = await applyImageWatermarkToBuffer({
     buffer: sourceBuffer,
     detectedMime,
@@ -287,7 +309,7 @@ export async function prepareUploadedFile(
     settings: options?.settings,
   })
 
-  const preparedFile = prepareImageBuffer(buffer)
+  const preparedFile = prepareImageBuffer(buffer, options)
   const transformedFile = await transformWithAddonUploadProviders({
     request: options?.request,
     actor: options?.actor,
@@ -295,7 +317,7 @@ export async function prepareUploadedFile(
     preparedFile,
     folder: options?.folder || "avatars",
     normalizeTransformedFile: ({ buffer: transformedBuffer }) => (
-      prepareImageBuffer(Buffer.from(transformedBuffer))
+      prepareImageBuffer(Buffer.from(transformedBuffer), options)
     ),
   })
 
@@ -361,6 +383,13 @@ export async function prepareBinaryUploadedFile(
   const headerBuffer = Buffer.from(await file.slice(0, 4096).arrayBuffer())
   const detectedImageMime = detectMimeTypeFromBytes(headerBuffer.subarray(0, 12))
     ?? detectSvgMimeType(headerBuffer)
+
+  // 附件/私信这类「按原文件名放行多种扩展名」的入口走这里。
+  // 内容其实是 SVG 时必须拒绝，否则传 x.zip（内容为 <svg onload=...>）会落到
+  // 公开目录并被无鉴权路由以 image/svg+xml 返回 —— 同源 XSS。
+  if (detectedImageMime === "image/svg+xml" && !options?.allowSvg) {
+    throw new Error("当前入口不支持 SVG 格式")
+  }
 
   if (detectedImageMime && IMAGE_MIME_TYPES.has(detectedImageMime)) {
     return prepareUploadedFile(file, options)

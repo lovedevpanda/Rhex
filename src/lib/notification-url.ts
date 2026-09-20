@@ -71,7 +71,17 @@ export function normalizeNotificationUrl(
 
   try {
     const parsed = new URL(value, `${NOTIFICATION_URL_BASE}/`)
-    return parsed.origin === NOTIFICATION_URL_BASE ? formatPathUrl(parsed) : null
+    if (parsed.origin !== NOTIFICATION_URL_BASE) {
+      return null
+    }
+
+    // 同 auth-redirect：URL 解析会折叠 `/..//` -> `//`，只看输入前缀挡不住，
+    // 必须检查解析后的 pathname，否则通知链接能把用户送到站外。
+    if (parsed.pathname.startsWith("//")) {
+      return null
+    }
+
+    return formatPathUrl(parsed)
   } catch {
     return null
   }

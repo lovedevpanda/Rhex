@@ -23,6 +23,21 @@ export function normalizeAuthRedirectTarget(value: unknown, fallback = AUTH_REDI
     return fallback
   }
 
+  /**
+   * 归一化之后再断言一次 —— 只查输入前缀是不够的。
+   *
+   * WHATWG URL 解析会先折叠路径里的 `.` / `..`：
+   *   new URL("/..//evil.com", "https://local.invalid").pathname === "//evil.com"
+   * 而 origin 校验照样通过（仍是 local.invalid），于是返回值成了协议相对 URL。
+   * 调用方（例如 src/app/login/page.tsx 的 redirect()）把它写进 Location 头时，
+   * 浏览器解析成 https://evil.com/ —— 开放重定向。
+   *
+   * 等价绕过：`/.//evil.com`、`/a/..//evil.com`、`/..///evil.com`。
+   */
+  if (pathname.startsWith("//")) {
+    return fallback
+  }
+
   return `${pathname}${url.search}${url.hash}` || fallback
 }
 

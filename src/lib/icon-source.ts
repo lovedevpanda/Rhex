@@ -25,7 +25,16 @@ export function isImageSource(value: string | null | undefined) {
   )
 }
 
-const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|iframe|object|embed|audio|video|image|animate(?:color|motion|transform)?|set)\b|(?:^|[\s/])(?:on[a-z]+|style|src|xlink:href|href)\s*=|\s(?:xlink:)?href\s*=\s*(?!(?:["']#|#))|(?:javascript|vbscript)\s*:|@import|url\s*\(\s*(?!["']?\s*#)|&#/i
+/**
+ * 危险结构黑名单。
+ *
+ * 第二分支的 `(?:^|[\s/])` 前缀是为了覆盖「`/` 当属性分隔符」的写法，
+ * 归一步骤(见 normalizeSvgMarkupForInspection)已把它收敛成空白，这里保留双保险。
+ *
+ * href 不在第二分支里：合法的图标会用 `<use href="#icon">` 或 `fill="url(#g)"`
+ * 引用同文档片段，一刀切会误杀。第三分支只放行 `#fragment` 形式的引用。
+ */
+const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|iframe|object|embed|audio|video|image|animate(?:color|motion|transform)?|set)\b|(?:^|[\s/])(?:on[a-z]+|style|src)\s*=|\s(?:xlink:)?href\s*=\s*(?!(?:["']#|#))|(?:javascript|vbscript)\s*:|@import|url\s*\(\s*(?!["']?\s*#)|&#/i
 
 /**
  * 归一化 SVG 标记后再做安全检查。
@@ -38,17 +47,27 @@ const UNSAFE_SVG_CONTENT_PATTERN = /<\s*\/?\s*(?:script|style|foreignobject|ifra
  * `<svg\t/onload=...>`、`<a xlink:href="#x" /onclick=...>` 全部通过检查，
  * 而这些标记会被 `LevelIcon` 用 dangerouslySetInnerHTML 内联进页面，等于全站 XSS。
  *
- * 与其在正则里逐个补"解析器的等价写法"（黑名单永远补不完），不如**先把它们
- * 收敛成统一形式**再检查：
- *   - 标签名后的 `/`（含空白后）改成空格，消掉 `<svg/onload=` 这种粘写
- *   - 属性名前的 `/` 改成空格，消掉 `/onclick=` 这种粘写
+ * 与其在正则里逐个补"解析器的等价写法"（黑名单永远补不完），不如**先收敛再检查**：
+ * 把「标签名后」与「属性名前」的 `/` 换成空格。
  *
- * 归一化只影响"分隔符的写法"，不改变标记语义，所以合法图标不受影响。
+ * 关键点：必须**跳过引号内的内容**。`href="#a/b"` 里的 `/` 不是分隔符，
+ * 一并替换会让合法图标被误判 —— 早期版本就把所有 `<use href="#icon">` 拒掉了。
  */
 export function normalizeSvgMarkupForInspection(markup: string) {
-  return markup
+  // 引号内的字符串先摘出来存好，用不含 `/` 的占位符代替，处理完再还原
+  const literals: string[] = []
+  const withPlaceholders = markup.replace(/"[^"]*"|'[^']*'/g, (literal) => {
+    literals.push(literal)
+    return `\u0000${literals.length - 1}\u0000`
+  })
+
+  const normalized = withPlaceholders
+    // 标签名后紧跟的 "/"（如 <svg/onload=\>）不是自闭合语义，改成空格
     .replace(/<\/?\s*([a-zA-Z][a-zA-Z0-9:-]*)\s*\//g, "<$1 ")
+    // 其余位于引号外的 "/" 一律视为属性分隔符
     .replace(/\//g, " ")
+
+  return normalized.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => literals[Number(index)] ?? "")
 }
 
 export function stripSvgDocumentPrefix(value: string) {
