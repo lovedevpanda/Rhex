@@ -3,7 +3,7 @@ import { resolvePostAttachmentUploadPermission } from "@/lib/post-attachments"
 import { logRouteWriteSuccess } from "@/lib/route-metadata"
 import { prepareBinaryUploadedFile, saveUploadedFile } from "@/lib/upload"
 import { getSiteSettings } from "@/lib/site-settings"
-import { normalizeUploadExtension } from "@/lib/upload-rules"
+import { normalizeUploadExtension, isAllowedUploadMimeType } from "@/lib/upload-rules"
 import { createRequestWriteGuardOptions } from "@/lib/write-guard-policies"
 import { withRequestWriteGuard } from "@/lib/write-guard"
 import { createUploadWithinDailyQuota, withUserUploadRateLimit } from "@/lib/user-upload-quota"
@@ -71,6 +71,22 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
           kind: "user",
         },
       })
+
+      /**
+       * 交叉校验「检测到的真实类型」与扩展名白名单。
+       *
+       * 上面 `allowedExtensions.includes(extension)` 只看的是**原文件名**，
+       * 而 prepareBinaryUploadedFile 会按内容头判定类型、并由 detectedMime 反推
+       * 落盘扩展名。两者不一致时就有洞：文件名写 `x.zip`、内容却是
+       * `<svg onload=...>`，SVG 内容会被识别为 image/svg+xml，最终落成
+       * `attachments-<hash>.svg`，再由无鉴权的 /uploads 路由以 image/svg+xml 返回，
+       * 打开即同源执行脚本。
+       *
+       * /api/upload 与 /api/messages/upload 本来就有这一层校验，附件这条漏了。
+       */
+      if (!isAllowedUploadMimeType(preparedFile.detectedMime, allowedExtensions)) {
+        apiError(400, "文件内容与扩展名不匹配，请上传真实的附件格式")
+      }
       const requestUrl = new URL(request.url)
       const hookCtx = { request, pathname: requestUrl.pathname, searchParams: requestUrl.searchParams }
       await executeAddonActionHook("upload.file.before", {

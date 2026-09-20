@@ -62,6 +62,8 @@ export const POST = createAdminRouteHandler(async ({ request, adminUser }) => {
       maxFileSizeBytes: maxSizeBytes,
       settings,
       request,
+      // 管理员入口：表情图标支持 SVG（仅此路由与站点图标上传放行）
+      allowSvg: true,
       actor: {
         id: adminUser.id,
         username: adminUser.username,

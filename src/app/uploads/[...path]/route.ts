@@ -6,7 +6,7 @@ import { notFound } from "next/navigation"
 
 import { getSiteSettings } from "@/lib/site-settings"
 import { buildUploadStoragePath } from "@/lib/upload-path"
-import { getUploadMimeType, isSafeUploadPathSegments } from "@/lib/upload-rules"
+import { getUploadMimeType, isPrivateUploadFolder, isSafeUploadPathSegments } from "@/lib/upload-rules"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,10 +41,26 @@ function buildUploadHeaders(fileName: string, fileSize: number, lastModified: Da
   }
 }
 
-async function readUploadResponse(pathSegments: readonly string[]) {
+/**
+ * 公开静态读取的准入判断。
+ *
+ * 这个路由**没有任何鉴权**（设计如此：头像、帖子图等本来就要公开）。
+ * 但私有目录（私信附件）必须挡掉 —— 否则带 ACL 的
+ * `/api/messages/files/...` 代理形同虚设，猜到文件名即可无鉴权下载。
+ * 用 404 而不是 403，避免暴露"这个目录存在"。
+ */
+function assertPubliclyReadable(pathSegments: readonly string[]) {
   if (!isSafeUploadPathSegments(pathSegments)) {
     notFound()
   }
+
+  if (isPrivateUploadFolder(pathSegments[0]!)) {
+    notFound()
+  }
+}
+
+async function readUploadResponse(pathSegments: readonly string[]) {
+  assertPubliclyReadable(pathSegments)
 
   const resolvedFilePath = await resolveUploadFilePath(pathSegments)
 
@@ -72,9 +88,7 @@ export async function GET(_request: Request, props: UploadRouteProps) {
 
 export async function HEAD(_request: Request, props: UploadRouteProps) {
   const params = await props.params
-  if (!isSafeUploadPathSegments(params.path)) {
-    notFound()
-  }
+  assertPubliclyReadable(params.path)
 
   const resolvedFilePath = await resolveUploadFilePath(params.path)
 

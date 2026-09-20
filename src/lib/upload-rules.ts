@@ -63,6 +63,24 @@ export function isSafeUploadPathSegments(value: readonly string[]) {
     && value.every((segment) => segment !== "." && segment !== ".." && isSafeUploadSegment(segment))
 }
 
+/**
+ * 不允许被公开 `/uploads/<folder>/<file>` 直接读取的目录。
+ *
+ * `message-files`（私信附件）在代码里被当作私有资源：有专门的
+ * `/api/messages/files/<uploadId>/<filename>` 代理做聊天参与者校验，
+ * 并且用 404 而不是 403 防探测。但同一份文件也以**可预测的名字**
+ * （内容 sha256 前 16 位）落在公开静态目录里，任何人猜到文件名即可无鉴权下载，
+ * 绕过整条 ACL。因此公开路由直接拒绝这个目录，读取一律走带鉴权的代理。
+ */
+export const PRIVATE_UPLOAD_FOLDERS = ["message-files"] as const
+
+const PRIVATE_UPLOAD_FOLDER_SET = new Set<string>(PRIVATE_UPLOAD_FOLDERS)
+
+/** 该目录下的文件是否必须经鉴权代理读取 */
+export function isPrivateUploadFolder(folder: string) {
+  return PRIVATE_UPLOAD_FOLDER_SET.has(folder)
+}
+
 export function getUploadMimeType(fileName: string) {
   return MIME_TYPE_BY_EXTENSION[normalizeUploadExtension(fileName)] ?? "application/octet-stream"
 }

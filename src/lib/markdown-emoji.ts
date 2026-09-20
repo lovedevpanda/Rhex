@@ -1,4 +1,4 @@
-import { isImageSource, isSvgMarkup, stripSvgDocumentPrefix } from "@/lib/icon-source"
+import { isImageSource, isSvgMarkup, sanitizeInlineSvgMarkup } from "@/lib/icon-source"
 
 export interface MarkdownEmojiItem {
   shortcode: string
@@ -75,10 +75,6 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;")
-}
-
-function buildSvgMarkup(svg: string) {
-  return stripSvgDocumentPrefix(svg)
 }
 
 function buildMarkdownEmojiDisplaySizeAttributes(displaySize: MarkdownEmojiItem["displaySize"]) {
@@ -161,7 +157,13 @@ export function renderMarkdownEmojiHtml(shortcode: string, items: MarkdownEmojiI
   const displaySizeAttributes = buildMarkdownEmojiDisplaySizeAttributes(matched.displaySize)
 
   if (isSvgMarkup(matched.icon)) {
-    return `<span class="md-emoji md-emoji-svg"${displaySizeAttributes} data-shortcode="${matched.shortcode}" title="${title}" aria-label="${title}"><span class="md-emoji-icon">${buildSvgMarkup(matched.icon)}</span></span>`
+    // 必须走净化器：原先只 stripSvgDocumentPrefix（仅剥 xml/注释/doctype），
+    // 等于把后台填的任意 SVG 原样内联进页面 —— 一个 `<svg onload=...>` 就能让
+    // 全站所有渲染 markdown 的页面执行脚本。净化不通过则回退成纯文本显示。
+    const safeSvg = sanitizeInlineSvgMarkup(matched.icon)
+    if (safeSvg) {
+      return `<span class="md-emoji md-emoji-svg"${displaySizeAttributes} data-shortcode="${matched.shortcode}" title="${title}" aria-label="${title}"><span class="md-emoji-icon">${safeSvg}</span></span>`
+    }
   }
 
   if (isImageSource(matched.icon)) {

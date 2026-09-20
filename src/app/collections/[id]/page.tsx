@@ -80,7 +80,15 @@ export default async function FavoriteCollectionDetailPage(props: {
           boards={boards}
           main={(
             <div className="mt-6 pb-12">
+              {/*
+                key 绑定主分页：FavoriteCollectionDetail 内部用 useState(initialData)
+                保存服务端数据，而分页是 <Link> 软导航 —— Next 会复用同一个组件实例，
+                state 不会跟着新的 props 更新，于是 URL 与数据都到第 2 页了、列表还停在第 1 页。
+                换 key 强制重挂载，让新数据生效。
+                只绑 page 不绑 pendingPage：后者是页内操作，不该重置本地状态。
+              */}
               <FavoriteCollectionDetail
+                key={`collection-page-${data.pagination.page}`}
                 initialData={data}
                 postLinkDisplayMode={settings.postLinkDisplayMode}
                 heroBefore={<AddonSlotRenderer slot="collection.hero.before" />}

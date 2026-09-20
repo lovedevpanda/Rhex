@@ -44,10 +44,16 @@ export async function GET(request: Request, props: OAuthProviderRouteProps) {
 
   const oauthState = await consumeOAuthFlowState(params.provider)
   const loginRedirectTarget = normalizeAuthRedirectTarget(oauthState?.redirectTo)
+  // connect 分支同样要净化：state 虽然签名，但它携带的是 start 阶段存进来的用户输入。
+  // 纵深防御 —— 即使 start 侧校验被改坏，这里也不会把用户送到站外。
+  const connectRedirectTarget = normalizeAuthRedirectTarget(
+    oauthState?.redirectTo,
+    "/settings?tab=profile&profileTab=accounts",
+  )
   const fallbackTarget = oauthState?.mode === "register"
     ? "/register"
     : oauthState?.mode === "connect"
-      ? oauthState.redirectTo || "/settings?tab=profile&profileTab=accounts"
+      ? connectRedirectTarget
       : "/login"
   const searchParams = new URL(request.url).searchParams
   const code = searchParams.get("code")?.trim()

@@ -184,10 +184,11 @@ export const POST = createUserRouteHandler(async ({ request, currentUser }) => {
 
   const folder = normalizeUploadFolder(body.folder)
   const settings = await getSiteSettings()
-  const allowedExtensions = Array.from(new Set([
-    ...settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
-    ...(folder === "icon" ? ["svg"] : []),
-  ]))
+  // 同 api/upload：SVG 是管理员能力（见 api/admin/site-settings/icon-upload），
+  // 不对普通用户开放。远程抓取的 SVG 同样会在同源下执行脚本。
+  const allowedExtensions = Array.from(new Set(
+    settings.uploadAllowedImageTypes.map((item) => item.trim().toLowerCase()).filter(Boolean),
+  ))
   const maxSizeMb = folder === "avatars" ? settings.uploadAvatarMaxFileSizeMb : settings.uploadMaxFileSizeMb
   const normalizedMaxSizeMb = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb : 5
   const maxSizeBytes = normalizedMaxSizeMb * 1024 * 1024
