@@ -117,12 +117,8 @@ export const POST = createRouteHandler(async ({ request }) => {
 
       const effectiveStatus = resolveEffectiveUserStatus(user)
 
-      if (effectiveStatus === "BANNED") {
-        apiError(403, "该账号已被拉黑，无法登录")
-      }
-
-      if (effectiveStatus === "INACTIVE") {
-        apiError(403, "该账号未激活，无法登录")
+      if (effectiveStatus === "BANNED" || effectiveStatus === "INACTIVE") {
+        apiError(401, "手机号或验证码错误")
       }
 
       if (!user.phoneVerifiedAt) {
@@ -224,12 +220,9 @@ export const POST = createRouteHandler(async ({ request }) => {
 
     const effectiveStatus = resolveEffectiveUserStatus(user)
 
-    if (effectiveStatus === "BANNED") {
-      apiError(403, "该账号已被拉黑，无法登录")
-    }
-
-    if (effectiveStatus === "INACTIVE") {
-      apiError(403, "该账号未激活，无法登录")
+    if (effectiveStatus === "BANNED" || effectiveStatus === "INACTIVE") {
+      // 与“账号不存在 / 密码错误”保持一致的返回，避免通过差异化响应枚举账号是否存在。
+      apiError(401, "邮箱/用户名/手机号或密码错误")
     }
 
     const isValid = await compare(password, user.passwordHash)

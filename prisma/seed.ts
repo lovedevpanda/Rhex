@@ -7,6 +7,7 @@ import {
   UserRole,
   UserStatus,
 } from "@prisma/client"
+import { randomBytes } from "node:crypto"
 import { hashSync } from "bcryptjs"
 
 import { getBuiltinCustomPageSeeds } from "../src/lib/builtin-custom-pages"
@@ -15,9 +16,15 @@ const prisma = new PrismaClient()
 
 const APP_VERSION = "1.0.0"
 const DEFAULT_ADMIN_USERNAME = process.env.SEED_ADMIN_USERNAME?.trim() || "admin"
-const DEFAULT_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD?.trim() || "ChangeMe_123456"
 const DEFAULT_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim() || undefined
 const DEFAULT_ADMIN_NICKNAME = process.env.SEED_ADMIN_NICKNAME?.trim() || "站长"
+
+// 不再使用任何公开的硬编码默认密码。若未通过环境变量 SEED_ADMIN_PASSWORD 指定，
+// 则自动生成一个强随机密码并打印到控制台，避免种子管理员账号以广为人知的
+// 凭据暴露（审计发现 V6）。
+const SEED_ADMIN_PASSWORD_FROM_ENV = process.env.SEED_ADMIN_PASSWORD?.trim() || ""
+const DEFAULT_ADMIN_PASSWORD = SEED_ADMIN_PASSWORD_FROM_ENV || randomBytes(12).toString("base64url")
+const ADMIN_PASSWORD_AUTO_GENERATED = SEED_ADMIN_PASSWORD_FROM_ENV.length === 0
 
 
 const defaultLevelDefinitions = [
@@ -466,6 +473,12 @@ async function main() {
   console.log(`Seed completed for forum v${APP_VERSION}.`)
   console.log(`Admin username: ${DEFAULT_ADMIN_USERNAME}`)
   console.log(`Admin password: ${DEFAULT_ADMIN_PASSWORD}`)
+  if (ADMIN_PASSWORD_AUTO_GENERATED) {
+    console.warn("===================================================================")
+    console.warn("安全提醒：未设置环境变量 SEED_ADMIN_PASSWORD，已自动生成随机初始密码。")
+    console.warn("请尽快以该账号登录并在后台修改密码，避免凭据泄露。")
+    console.warn("===================================================================")
+  }
   console.log("Initial posts/comments/messages: disabled")
 
 }

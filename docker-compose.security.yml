@@ -1,0 +1,66 @@
+# =============================================================================
+# Rhex 安全加固版 · 使用 CI 预构建镜像（非本机构建）
+# -----------------------------------------------------------------------------
+# 适用场景：服务器内存较小（构建不动），但已有宿主机 PostgreSQL / Redis，
+# 由 GitHub Actions 构建镜像后在此拉取运行。
+#
+# 前提：
+#   1. 已在 GitHub Actions 成功构建并推送镜像（workflow: Publish Security-Hardened Image）
+#   2. 宿主机 PostgreSQL 监听 127.0.0.1:5432、Redis 监听 127.0.0.1:6379
+#   3. 当前目录的 .env 已配置 DATABASE_URL / REDIS_URL / SESSION_SECRET 等
+#   4. 宿主机 3000 端口未被占用（旧 systemd 服务如存在请先停掉）
+#
+# 用法：
+#   export RHEX_IMAGE=ghcr.io/<你的GitHub用户名>/rhex:security-hardening
+#   # 若镜像是私有的，先登录（PAT 需要 read:packages 权限）：
+#   #   echo <PAT> | docker login ghcr.io -u <你的GitHub用户名> --password-stdin
+#   docker compose -f docker-compose.security.yml pull
+#   docker compose -f docker-compose.security.yml up -d
+#   docker compose -f docker-compose.security.yml logs -f web
+#
+# 说明：
+#   - 使用 host 网络，容器内的 127.0.0.1 即宿主机回环，可直接复用宿主机的
+#     PostgreSQL / Redis；同时 Web 只监听 127.0.0.1:3000，由 Nginx 反代。
+#   - 镜像以 node(uid 1000) 运行；宿主机的 uploads / addons 需属于 uid 1000：
+#       chown -R 1000:1000 uploads addons
+# =============================================================================
+
+x-app: &app
+  image: ${RHEX_IMAGE:-ghcr.io/OWNER/rhex:security-hardening}
+  network_mode: host
+  env_file:
+    - .env
+  environment:
+    HOSTNAME: 127.0.0.1
+    PORT: "3000"
+    NODE_ENV: production
+  volumes:
+    - ./uploads:/app/uploads
+    - ./addons:/app/addons
+  restart: unless-stopped
+
+services:
+  # 一次性初始化：prisma generate / db push / 按需 seed；已初始化会自动跳过
+  setup:
+    <<: *app
+    restart: "no"
+    command: ["pnpm", "run", "setup:prod"]
+
+  web:
+    <<: *app
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    command: ["pnpm", "run", "start"]
+
+  worker:
+    <<: *app
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      HOSTNAME: 127.0.0.1
+      PORT: "3000"
+      NODE_ENV: production
+      INTERNAL_REVALIDATION_ORIGIN: http://127.0.0.1:3000
+    command: ["pnpm", "run", "worker"]
