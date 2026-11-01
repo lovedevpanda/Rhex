@@ -256,12 +256,12 @@ pnpm run setup
 pnpm run dev
 ```
 
-默认种子管理员账号通常是：
+默认种子管理员账号：
 
-- 用户名：`admin`
-- 密码：`ChangeMe_123456`
+- 用户名：`admin`（可通过环境变量 `SEED_ADMIN_USERNAME` 修改）
+- 密码：由环境变量 `SEED_ADMIN_PASSWORD` 指定。**未设置时不会使用任何公开默认密码**，seed 会自动生成随机密码并打印在控制台。
 
-首次登录后请立即修改密码。
+部署时请务必通过环境变量设置 `SEED_ADMIN_PASSWORD`，并在首次登录后立即修改密码。
 
 ## 常用脚本
 

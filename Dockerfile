@@ -89,6 +89,11 @@ COPY --from=builder /app/write-guard.config.ts ./write-guard.config.ts
 
 RUN chmod +x ./scripts/docker-entrypoint.sh
 
+# Run as the unprivileged `node` user instead of root to limit the blast radius
+# of a hypothetical RCE / file-write vulnerability in the application.
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 3000
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]

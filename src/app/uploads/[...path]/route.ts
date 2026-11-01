@@ -6,7 +6,7 @@ import { notFound } from "next/navigation"
 
 import { getSiteSettings } from "@/lib/site-settings"
 import { buildUploadStoragePath } from "@/lib/upload-path"
-import { getUploadMimeType, isSafeUploadPathSegments } from "@/lib/upload-rules"
+import { getUploadMimeType, isSafeUploadPathSegments, normalizeUploadExtension } from "@/lib/upload-rules"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,12 +33,24 @@ async function resolveUploadFilePath(pathSegments: readonly string[]) {
 }
 
 function buildUploadHeaders(fileName: string, fileSize: number, lastModified: Date) {
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": getUploadMimeType(fileName),
     "Content-Length": String(fileSize),
     "Cache-Control": "public, max-age=31536000, immutable",
     "Last-Modified": lastModified.toUTCString(),
   }
+
+  // 用户上传的 SVG 绝不能在执行上下文中被渲染为顶层文档（存储型 XSS）。
+  // 通过 Content-Disposition 促使用户代理下载，并以严格 CSP 禁用脚本执行。
+  // 上传时已在 src/lib/upload.ts 对 SVG 内容做消毒处理（纵深防御）。
+  if (normalizeUploadExtension(fileName) === "svg") {
+    const safeFileName = fileName.replace(/["\\\r\n]+/g, "_")
+    headers["Content-Disposition"] = `attachment; filename="${safeFileName}"`
+    headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'; style-src 'none'; img-src 'self' data:; sandbox"
+    headers["X-Content-Type-Options"] = "nosniff"
+  }
+
+  return headers
 }
 
 async function readUploadResponse(pathSegments: readonly string[]) {

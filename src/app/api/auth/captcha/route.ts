@@ -1,3 +1,4 @@
+import { randomInt as cryptoRandomInt } from "node:crypto"
 import { NextResponse } from "next/server"
 
 import { apiError, createRouteHandler } from "@/lib/api-route"
@@ -22,11 +23,12 @@ const CAPTCHA_FONTS = [
 ]
 
 function randomText(length: number) {
-  return Array.from({ length }, () => CAPTCHA_CHARS[Math.floor(Math.random() * CAPTCHA_CHARS.length)]).join("")
+  return Array.from({ length }, () => CAPTCHA_CHARS[randomInt(0, CAPTCHA_CHARS.length - 1)]).join("")
 }
 
 function randomInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
+  // crypto.randomInt is exclusive of the upper bound, so add 1 to include `max`.
+  return cryptoRandomInt(min, max + 1)
 }
 
 function randomColor(alpha = 1) {
@@ -43,7 +45,7 @@ function buildSvg(text: string) {
   const dots = Array.from({ length: 32 }, () => {
     const cx = randomInt(6, width - 6)
     const cy = randomInt(6, height - 6)
-    const radius = Math.random() > 0.7 ? 1.6 : 1.1
+    const radius = randomInt(0, 9) > 6 ? 1.6 : 1.1
     return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${randomColor(0.24)}" />`
   }).join("")
 

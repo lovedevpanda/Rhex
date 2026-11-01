@@ -135,6 +135,28 @@ function detectSvgMimeType(buffer: Buffer): string | null {
   return null
 }
 
+/**
+ * 对上传的 SVG 做最小化的安全清洗，作为纵深防御（详见审计发现 V4）：
+ * 移除 <script>、<foreignObject>、事件处理器属性（on*）、javascript: URI 以及
+ * 外部实体声明（XXE）。正则清洗并非万无一失，彻底防护应结合基于解析器的消毒
+ * （如 isomorphic-dompurify），本函数用于拦截最常见的存储型 XSS 向量。
+ * 与 uploads 路由下发的 Content-Disposition + 严格 CSP 配合使用。
+ */
+function sanitizeSvgBuffer(buffer: Buffer): Buffer {
+  let svg = buffer.toString("utf8")
+  svg = svg.replace(/<!--[\s\S]*?-->/g, "")
+  svg = svg.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+  svg = svg.replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject>/gi, "")
+  svg = svg.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+  svg = svg.replace(
+    /(xlink:href|href|src)\s*=\s*("javascript:[^"]*"|'javascript:[^']*')/gi,
+    "$1=\"#\"",
+  )
+  svg = svg.replace(/<!DOCTYPE[^>]*>/gi, "")
+  svg = svg.replace(/<\?xml-stylesheet[^>]*\?>/gi, "")
+  return Buffer.from(svg, "utf8")
+}
+
 function shouldApplyImageWatermark(params: {
   detectedMime: string
   folder?: string
@@ -261,11 +283,13 @@ function prepareImageBuffer(buffer: Buffer): PreparedUploadFile {
     throw new Error("图片处理插件返回了不受支持的图片格式")
   }
 
+  const safeBuffer = detectedMime === "image/svg+xml" ? sanitizeSvgBuffer(buffer) : buffer
+
   return {
-    buffer,
-    fileHash: createHash("sha256").update(buffer).digest("hex"),
+    buffer: safeBuffer,
+    fileHash: createHash("sha256").update(safeBuffer).digest("hex"),
     detectedMime,
-    fileSize: buffer.byteLength,
+    fileSize: safeBuffer.byteLength,
   }
 }
 
