@@ -107,7 +107,7 @@ function validateAddonZipArchive(zip: AdmZip, archiveBytes: number, limits: Addo
     isDirectory: entry.isDirectory,
     compressedSize: entry.header.compressedSize,
     uncompressedSize: entry.header.size,
-    encrypted: entry.header.encripted,
+    encrypted: entry.header.encrypted,
   })), limits)
 
   // A duplicate or file-vs-directory target makes archive contents

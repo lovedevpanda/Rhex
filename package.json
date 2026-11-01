@@ -37,7 +37,7 @@
     ],
     "overrides": {
       "defu": "^6.1.7",
-      "dompurify": "^3.4.3",
+      "dompurify": "3.4.17",
       "effect": "^3.21.2",
       "fast-uri": "^3.1.2",
       "fast-xml-builder": "^1.2.0",
@@ -51,7 +51,8 @@
       "qs": "6.15.2",
       "form-data": "4.0.6",
       "undici": "7.28.0",
-      "@babel/core": "7.29.6"
+      "@babel/core": "7.29.6",
+      "sharp": "0.35.5"
     }
   },
   "dependencies": {
@@ -64,10 +65,10 @@
     "@prisma/client": "^6.19.2",
     "@radix-ui/react-select": "^2.2.6",
     "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.2",
     "@tanstack/react-table": "^8.21.3",
     "@traptitech/markdown-it-katex": "^3.6.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.1",
     "alipay-sdk": "^4.14.0",
     "arctic": "^3.7.0",
     "bcryptjs": "^3.0.3",
@@ -85,7 +86,7 @@
     "jieba-wasm": "^2.4.0",
     "katex": "^0.16.40",
     "lucide-react": "^0.469.0",
-    "markdown-it": "^14.3.0",
+    "markdown-it": "^15.0.3",
     "markdown-it-abbr": "^2.0.0",
     "markdown-it-attrs": "^4.3.1",
     "markdown-it-container": "^4.0.0",
@@ -100,7 +101,7 @@
     "motion": "^12.38.0",
     "next": "^16.2.6",
     "next-themes": "^0.4.6",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^10.1.4",
     "pinyin-pro": "^3.28.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",
